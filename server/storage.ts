@@ -1,37 +1,32 @@
-import { type User, type InsertUser } from "@shared/schema";
-import { randomUUID } from "crypto";
+import { AnalyticsEvent } from "@shared/schema";
 
-// modify the interface with any CRUD methods
-// you might need
+// This app doesn't require user storage, only analytics tracking
+// All data is ephemeral and stored client-side
 
 export interface IStorage {
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  // Placeholder for future storage needs
+  logAnalyticsEvent(event: AnalyticsEvent): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
-  private users: Map<string, User>;
+  private analyticsLog: AnalyticsEvent[];
 
   constructor() {
-    this.users = new Map();
+    this.analyticsLog = [];
   }
 
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+  async logAnalyticsEvent(event: AnalyticsEvent): Promise<void> {
+    this.analyticsLog.push(event);
+    // In production, this would send to an analytics service
+    console.log('[Analytics Storage]', event);
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
-  }
-
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
+  // Optional: Get analytics summary for debugging
+  getAnalyticsSummary() {
+    return {
+      totalEvents: this.analyticsLog.length,
+      recentEvents: this.analyticsLog.slice(-10)
+    };
   }
 }
 
