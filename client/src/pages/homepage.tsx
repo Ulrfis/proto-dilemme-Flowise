@@ -11,7 +11,7 @@ export default function Homepage() {
   const [showChat, setShowChat] = useState(false);
   
   // Get Flowise config from environment variables
-  const chatflowId = import.meta.env.VITE_FLOWISE_CHATFLOW_ID || 'default-chatflow-id';
+  const chatflowId = import.meta.env.VITE_FLOWISE_CHATFLOW_ID || import.meta.env.FLOWISE_CHATFLOW_ID;
   
   const {
     messages,

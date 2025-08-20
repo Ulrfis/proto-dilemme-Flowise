@@ -25,8 +25,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { chatflowId } = req.params;
       const { question, chatId } = req.body;
 
-      const flowiseHost = process.env.FLOWISE_HOST || process.env.VITE_FLOWISE_HOST || "http://localhost:3000";
-      const flowiseApiKey = process.env.FLOWISE_API_KEY || process.env.VITE_FLOWISE_API_KEY;
+      // Use the configured chatflow ID or the one from URL params
+      const actualChatflowId = process.env.FLOWISE_CHATFLOW_ID || chatflowId;
+      const flowiseHost = process.env.FLOWISE_HOST;
+      const flowiseApiKey = process.env.FLOWISE_API_KEY;
+
+      // Validate configuration
+      if (!flowiseHost) {
+        throw new Error("FLOWISE_HOST environment variable is required");
+      }
+
+      if (!actualChatflowId) {
+        throw new Error("FLOWISE_CHATFLOW_ID environment variable is required");
+      }
+
+      console.log(`[Flowise] Connecting to: ${flowiseHost}`);
+      console.log(`[Flowise] Using chatflow: ${actualChatflowId}`);
 
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
@@ -36,26 +50,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
         headers["Authorization"] = `Bearer ${flowiseApiKey}`;
       }
 
-      const response = await fetch(`${flowiseHost}/api/v1/prediction/${chatflowId}`, {
+      const requestBody = {
+        question,
+        chatId: chatId || `session_${Date.now()}`,
+        returnSourceDocuments: true,
+      };
+
+      console.log(`[Flowise] Request body:`, requestBody);
+
+      const response = await fetch(`${flowiseHost}/api/v1/prediction/${actualChatflowId}`, {
         method: "POST",
         headers,
-        body: JSON.stringify({
-          question,
-          chatId,
-          returnSourceDocuments: true,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
+      const responseText = await response.text();
+      console.log(`[Flowise] Response status: ${response.status}`);
+      console.log(`[Flowise] Response text:`, responseText);
+
       if (!response.ok) {
-        throw new Error(`Flowise API error: ${response.status} ${response.statusText}`);
+        throw new Error(`Flowise API error: ${response.status} ${response.statusText} - ${responseText}`);
       }
 
-      const data = await response.json();
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error("Failed to parse Flowise response:", parseError);
+        throw new Error("Invalid JSON response from Flowise");
+      }
+
       res.json(data);
     } catch (error) {
       console.error("Flowise proxy error:", error);
       res.status(500).json({ 
-        error: "Erreur de communication avec l'assistant Peter. Veuillez réessayer." 
+        error: "Erreur de communication avec l'assistant Peter. Veuillez réessayer.",
+        details: error instanceof Error ? error.message : String(error)
       });
     }
   });
