@@ -1,0 +1,180 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: hsl(249 10% 98%);
+  --foreground: hsl(210 25% 7.8431%);
+  --card: hsl(180 6.6667% 97.0588%);
+  --card-foreground: hsl(210 25% 7.8431%);
+  --popover: hsl(0 0% 100%);
+  --popover-foreground: hsl(210 25% 7.8431%);
+  --primary: hsl(219 80% 56%);
+  --primary-foreground: hsl(0 0% 100%);
+  --secondary: hsl(159 61% 41%);
+  --secondary-foreground: hsl(0 0% 100%);
+  --muted: hsl(240 1.9608% 90%);
+  --muted-foreground: hsl(210 25% 7.8431%);
+  --accent: hsl(211.5789 51.3514% 92.7451%);
+  --accent-foreground: hsl(219 80% 56%);
+  --destructive: hsl(0 84% 60%);
+  --destructive-foreground: hsl(0 0% 100%);
+  --border: hsl(201.4286 30.4348% 90.9804%);
+  --input: hsl(200 23.0769% 97.4510%);
+  --ring: hsl(219 80% 56%);
+  --chart-1: hsl(219 80% 56%);
+  --chart-2: hsl(159 61% 41%);
+  --chart-3: hsl(42.0290 92.8251% 56.2745%);
+  --chart-4: hsl(147.1429 78.5047% 41.9608%);
+  --chart-5: hsl(341.4894 75.2000% 50.9804%);
+  --sidebar: hsl(180 6.6667% 97.0588%);
+  --sidebar-foreground: hsl(210 25% 7.8431%);
+  --sidebar-primary: hsl(219 80% 56%);
+  --sidebar-primary-foreground: hsl(0 0% 100%);
+  --sidebar-accent: hsl(211.5789 51.3514% 92.7451%);
+  --sidebar-accent-foreground: hsl(219 80% 56%);
+  --sidebar-border: hsl(205.0000 25.0000% 90.5882%);
+  --sidebar-ring: hsl(219 80% 56%);
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-serif: Georgia, serif;
+  --font-mono: 'Fira Code', monospace;
+  --radius: 0.5rem;
+  --shadow-2xs: 0px 1px 2px 0px hsl(219 80% 56% / 0.05);
+  --shadow-xs: 0px 1px 2px 0px hsl(219 80% 56% / 0.1);
+  --shadow-sm: 0px 1px 3px 0px hsl(219 80% 56% / 0.1), 0px 1px 2px -1px hsl(219 80% 56% / 0.1);
+  --shadow: 0px 1px 3px 0px hsl(219 80% 56% / 0.1), 0px 1px 2px -1px hsl(219 80% 56% / 0.1);
+  --shadow-md: 0px 4px 6px -1px hsl(219 80% 56% / 0.1), 0px 2px 4px -2px hsl(219 80% 56% / 0.1);
+  --shadow-lg: 0px 10px 15px -3px hsl(219 80% 56% / 0.1), 0px 4px 6px -4px hsl(219 80% 56% / 0.1);
+  --shadow-xl: 0px 20px 25px -5px hsl(219 80% 56% / 0.1), 0px 8px 10px -6px hsl(219 80% 56% / 0.1);
+  --shadow-2xl: 0px 25px 50px -12px hsl(219 80% 56% / 0.25);
+  --tracking-normal: 0em;
+  --spacing: 0.25rem;
+}
+
+.dark {
+  --background: hsl(0 0% 0%);
+  --foreground: hsl(200 6.6667% 91.1765%);
+  --card: hsl(228 9.8039% 10%);
+  --card-foreground: hsl(0 0% 85.0980%);
+  --popover: hsl(0 0% 0%);
+  --popover-foreground: hsl(200 6.6667% 91.1765%);
+  --primary: hsl(219 80% 56%);
+  --primary-foreground: hsl(0 0% 100%);
+  --secondary: hsl(159 61% 41%);
+  --secondary-foreground: hsl(0 0% 100%);
+  --muted: hsl(0 0% 9.4118%);
+  --muted-foreground: hsl(210 3.3898% 46.2745%);
+  --accent: hsl(205.7143 70% 7.8431%);
+  --accent-foreground: hsl(219 80% 56%);
+  --destructive: hsl(0 84% 60%);
+  --destructive-foreground: hsl(0 0% 100%);
+  --border: hsl(210 5.2632% 14.9020%);
+  --input: hsl(207.6923 27.6596% 18.4314%);
+  --ring: hsl(219 80% 56%);
+  --chart-1: hsl(219 80% 56%);
+  --chart-2: hsl(159 61% 41%);
+  --chart-3: hsl(42.0290 92.8251% 56.2745%);
+  --chart-4: hsl(147.1429 78.5047% 41.9608%);
+  --chart-5: hsl(341.4894 75.2000% 50.9804%);
+  --sidebar: hsl(228 9.8039% 10%);
+  --sidebar-foreground: hsl(0 0% 85.0980%);
+  --sidebar-primary: hsl(219 80% 56%);
+  --sidebar-primary-foreground: hsl(0 0% 100%);
+  --sidebar-accent: hsl(205.7143 70% 7.8431%);
+  --sidebar-accent-foreground: hsl(219 80% 56%);
+  --sidebar-border: hsl(205.7143 15.7895% 26.0784%);
+  --sidebar-ring: hsl(219 80% 56%);
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-serif: Georgia, serif;
+  --font-mono: 'Fira Code', monospace;
+  --radius: 0.5rem;
+  --shadow-2xs: 0px 1px 2px 0px hsl(219 80% 56% / 0.05);
+  --shadow-xs: 0px 1px 2px 0px hsl(219 80% 56% / 0.1);
+  --shadow-sm: 0px 1px 3px 0px hsl(219 80% 56% / 0.1), 0px 1px 2px -1px hsl(219 80% 56% / 0.1);
+  --shadow: 0px 1px 3px 0px hsl(219 80% 56% / 0.1), 0px 1px 2px -1px hsl(219 80% 56% / 0.1);
+  --shadow-md: 0px 4px 6px -1px hsl(219 80% 56% / 0.1), 0px 2px 4px -2px hsl(219 80% 56% / 0.1);
+  --shadow-lg: 0px 10px 15px -3px hsl(219 80% 56% / 0.1), 0px 4px 6px -4px hsl(219 80% 56% / 0.1);
+  --shadow-xl: 0px 20px 25px -5px hsl(219 80% 56% / 0.1), 0px 8px 10px -6px hsl(219 80% 56% / 0.1);
+  --shadow-2xl: 0px 25px 50px -12px hsl(219 80% 56% / 0.25);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* High contrast mode support */
+  @media (prefers-contrast: high) {
+    :root {
+      --foreground: hsl(0 0% 0%);
+      --muted-foreground: hsl(0 0% 0%);
+      --border: hsl(0 0% 0%);
+    }
+    
+    .dark {
+      --foreground: hsl(0 0% 100%);
+      --muted-foreground: hsl(0 0% 100%);
+      --border: hsl(0 0% 100%);
+    }
+  }
+
+  /* Focus states for accessibility */
+  .focus-ring {
+    @apply focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2;
+  }
+
+  /* Custom chat container sizing */
+  .chat-container {
+    height: calc(100vh - 120px);
+    min-height: 500px;
+  }
+  
+  .chat-messages {
+    height: calc(100% - 80px);
+  }
+  
+  .tab-content {
+    height: calc(100vh - 160px);
+    min-height: 400px;
+  }
+
+  /* Desktop-only validation styles */
+  @media (max-width: 1023px) {
+    .desktop-only-notice {
+      display: block !important;
+    }
+    .main-content {
+      display: none !important;
+    }
+  }
+
+  /* Smooth scrolling for chat messages */
+  .chat-messages {
+    scroll-behavior: smooth;
+  }
+
+  /* Custom scrollbar for webkit browsers */
+  .chat-messages::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  .chat-messages::-webkit-scrollbar-track {
+    background: hsl(var(--muted));
+  }
+  
+  .chat-messages::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 3px;
+  }
+  
+  .chat-messages::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground));
+  }
+}
