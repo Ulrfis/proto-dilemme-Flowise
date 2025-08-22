@@ -30,7 +30,7 @@ export function useFlowise(chatflowId: string) {
       
       const peterMessage: ChatMessage = {
         id: `peter_${Date.now()}`,
-        content: cleanText,
+        content: response.text, // Keep original text for markdown link processing
         sender: 'peter',
         timestamp: new Date().toISOString(),
         metadata: {
