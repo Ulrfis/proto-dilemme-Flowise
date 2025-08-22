@@ -8,6 +8,7 @@ interface ChatMessageProps {
   onVideoClick?: (url: string) => void;
   onLinkClick?: (url: string) => void;
   onThumbsUp?: () => void;
+  onChoiceClick?: (choice: string) => void;
 }
 
 export function ChatMessage({ message, onVideoClick, onLinkClick, onThumbsUp }: ChatMessageProps) {
@@ -31,6 +32,10 @@ export function ChatMessage({ message, onVideoClick, onLinkClick, onThumbsUp }: 
   // Detect message type for Peter's messages
   const getMessageType = (content: string) => {
     if (!isPeter) return 'user';
+    
+    // Check if message has bullet points that should become buttons
+    const hasBulletPoints = content.includes('*   ') || content.includes('* ');
+    if (hasBulletPoints) return 'with-choices';
     
     // Check if message has links
     const hasLinks = content.includes('[') && content.includes('](');
@@ -81,6 +86,37 @@ export function ChatMessage({ message, onVideoClick, onLinkClick, onThumbsUp }: 
   };
 
   const extractedLinks = messageType === 'with-links' ? extractLinks(message.content) : [];
+
+  // Extract choices from bullet points
+  const extractChoices = (content: string) => {
+    const lines = content.split('\n');
+    const choices: string[] = [];
+    
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('*   ') || trimmed.startsWith('* ')) {
+        // Remove bullet point and clean up the choice text
+        const choice = trimmed.replace(/^\*\s+/, '').trim();
+        if (choice) {
+          choices.push(choice);
+        }
+      }
+    }
+    
+    return choices;
+  };
+
+  const extractedChoices = messageType === 'with-choices' ? extractChoices(message.content) : [];
+
+  // Format message content for choice messages (remove bullet points)
+  const formatChoiceContent = (content: string) => {
+    const lines = content.split('\n');
+    const filteredLines = lines.filter(line => {
+      const trimmed = line.trim();
+      return !(trimmed.startsWith('*   ') || trimmed.startsWith('* '));
+    });
+    return filteredLines.join('\n').trim();
+  };
 
   return (
     <div 
