@@ -11,12 +11,13 @@ A desktop-only French educational web app integrating Flowise chatbot "Peter" fo
 - Navigation: In-app webview for external links
 
 ## Key Features
-1. **Homepage with Peter Chat**: Flowise chatbot integration for educational conversations
-2. **À propos Page**: Static information about the app and learning objectives
-3. **Gumlet Video Player**: Integrated video player for educational content
-4. **In-App Webview**: External links open within the app instead of new tabs
-5. **Desktop-Only**: Optimized for classroom desktop/laptop use
-6. **French Language**: All content and UI in French
+1. **Split-Screen Interface**: Chat interface (1/3 width) with media panel (2/3 width)
+2. **Homepage with Peter Chat**: Flowise chatbot integration for educational conversations
+3. **À propos Page**: Static information about the app and learning objectives
+4. **Gumlet Video Player**: Integrated video player for educational content in dedicated panel
+5. **In-App Webview**: External links open within the app in dedicated article panel
+6. **Desktop-Only**: Optimized for classroom desktop/laptop use
+7. **French Language**: All content and UI in French
 
 ## Technical Requirements
 - Desktop viewport minimum 1024px width
@@ -38,6 +39,8 @@ A desktop-only French educational web app integrating Flowise chatbot "Peter" fo
 - Focus on simple chat integration with media embedding
 - Updated Peter's initial message to match specified 2025 futuristic tone
 - Flowise integration fully operational and tested
+- Implemented split-screen layout: chat (1/3) + media panel (2/3) always visible
+- Enhanced media panel with improved video player and webview components
 
 ## Development Guidelines
 Following fullstack_js blueprint with:

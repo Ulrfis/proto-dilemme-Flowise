@@ -33,15 +33,17 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
 
   if (!video) {
     return (
-      <div className="p-4">
-        <div className="text-center text-gray-500 py-8">
-          <div className="w-12 h-12 mx-auto text-gray-300 mb-3">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center text-gray-400 max-w-md">
+          <div className="w-20 h-20 mx-auto text-gray-300 mb-6">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" className="w-full h-full">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
             </svg>
           </div>
-          <p className="text-sm">
-            Les vidéos partagées par Peter<br />apparaîtront ici
+          <h4 className="text-lg font-medium text-gray-600 mb-2">Aucune vidéo sélectionnée</h4>
+          <p className="text-gray-500">
+            Les vidéos éducatives partagées par Peter dans la conversation apparaîtront ici.
+            Cliquez sur les boutons "📹 Voir la vidéo" pour les visionner.
           </p>
         </div>
       </div>
@@ -49,11 +51,11 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
   }
 
   return (
-    <div className="p-4">
-      <div className="aspect-video">
+    <div className="h-full flex flex-col">
+      <div className="flex-1 aspect-video min-h-[400px]">
         <iframe
           ref={iframeRef}
-          className="w-full h-full border-none rounded-lg"
+          className="w-full h-full border-none rounded-lg shadow-lg"
           allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen"
           title="Gumlet video player"
           data-testid="iframe-video-player"
@@ -61,14 +63,14 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
       </div>
       
       {(video.title || video.description) && (
-        <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+        <div className="mt-6 p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
           {video.title && (
-            <h4 className="font-medium text-gray-900" data-testid="text-video-title">
+            <h4 className="text-lg font-semibold text-gray-900 mb-2" data-testid="text-video-title">
               {video.title}
             </h4>
           )}
           {video.description && (
-            <p className="text-sm text-gray-600 mt-1" data-testid="text-video-description">
+            <p className="text-gray-600 leading-relaxed" data-testid="text-video-description">
               {video.description}
             </p>
           )}
