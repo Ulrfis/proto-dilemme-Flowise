@@ -130,21 +130,6 @@
     @apply focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2;
   }
 
-  /* Custom chat container sizing */
-  .chat-container {
-    height: calc(100vh - 120px);
-    min-height: 500px;
-  }
-  
-  .chat-messages {
-    height: calc(100% - 80px);
-  }
-  
-  .tab-content {
-    height: calc(100vh - 160px);
-    min-height: 400px;
-  }
-
   /* Desktop-only validation styles */
   @media (max-width: 1023px) {
     .desktop-only-notice {
@@ -155,26 +140,47 @@
     }
   }
 
-  /* Smooth scrolling for chat messages */
+  /* Chat interface specific styling */
   .chat-messages {
     scroll-behavior: smooth;
+    max-height: calc(100vh - 200px); /* Account for header + input */
+    overflow-y: auto;
+    overflow-x: hidden;
   }
 
   /* Custom scrollbar for webkit browsers */
   .chat-messages::-webkit-scrollbar {
-    width: 6px;
+    width: 8px;
   }
   
   .chat-messages::-webkit-scrollbar-track {
     background: hsl(var(--muted));
+    border-radius: 4px;
   }
   
   .chat-messages::-webkit-scrollbar-thumb {
     background: hsl(var(--border));
-    border-radius: 3px;
+    border-radius: 4px;
   }
   
   .chat-messages::-webkit-scrollbar-thumb:hover {
     background: hsl(var(--muted-foreground));
+  }
+
+  /* Ensure media panel stays fixed while chat scrolls */
+  .media-panel-container {
+    height: calc(100vh - 120px);
+    overflow: hidden;
+  }
+
+  /* Split layout containers */
+  .chat-container {
+    height: calc(100vh - 120px);
+    overflow: hidden;
+  }
+
+  .chat-sidebar {
+    height: 100%;
+    overflow: hidden;
   }
 }
