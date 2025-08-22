@@ -56,6 +56,11 @@ export default function Homepage() {
     analytics.trackLinkOpened(linkUrl);
   };
 
+  const handleThumbsUp = async () => {
+    // Send "OK" message to trigger next message from Peter
+    await sendMessage("OK");
+  };
+
   return (
     <main className="flex-1 flex overflow-hidden">
       {!showChat ? (
@@ -125,6 +130,7 @@ export default function Homepage() {
               onVideoClick={handleVideoClick}
               onLinkClick={handleLinkClick}
               onToggleMediaPanel={openMediaPanel}
+              onThumbsUp={handleThumbsUp}
               isLoading={isLoading}
               messageCount={messages.length}
             />
