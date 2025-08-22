@@ -76,16 +76,7 @@ export function useFlowise(chatflowId: string) {
   const initializeChat = useCallback(() => {
     const welcomeMessage: ChatMessage = {
       id: 'peter_welcome',
-      content: `Bonjour ! Je suis Peter, votre assistant pour explorer les dilemmes du plastique. 
-      Prêt(e) à découvrir ensemble comment naviguer dans les choix environnementaux du quotidien ?
-      
-      Vous pouvez me poser des questions sur :
-      • Les emballages alimentaires et leurs alternatives
-      • L'impact environnemental du plastique
-      • Les solutions pratiques pour réduire notre consommation
-      • Les enjeux économiques et sociaux des alternatives
-      
-      Par quoi souhaitez-vous commencer ?`,
+      content: `Salut, c'est toi l'enquêteur écologique avec qui je dois collaborer ? Ne sois pas surpris, en 2025, ils ont bien fait le taf lorsqu'ils ont enregistré mon fantôme digital, je suis plus vrai que nature ! Alors, à qui ai-je affaire, comment tu t'appelles ?`,
       sender: 'peter',
       timestamp: new Date().toISOString(),
     };
