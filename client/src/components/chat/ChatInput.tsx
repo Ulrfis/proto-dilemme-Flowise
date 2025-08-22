@@ -31,8 +31,12 @@ export function ChatInput({
       recognition.interimResults = true;
       recognition.lang = 'fr-FR';
       
+      // Store the message before starting recognition
+      let messageBeforeRecognition = '';
+      
       recognition.onstart = () => {
         setIsListening(true);
+        messageBeforeRecognition = message;
       };
       
       recognition.onresult = (event: any) => {
@@ -48,19 +52,21 @@ export function ChatInput({
           }
         }
         
-        // Update message with final transcript, keep interim for real-time feedback
-        if (finalTranscript) {
-          setMessage(prev => prev + finalTranscript);
-        } else if (interimTranscript) {
-          // Show interim results in a subtle way by updating the input
-          const currentMessage = message;
-          setMessage(currentMessage + interimTranscript);
-        }
+        // Update message with real-time transcription
+        const newMessage = messageBeforeRecognition + finalTranscript + interimTranscript;
+        setMessage(newMessage);
       };
       
       recognition.onerror = (event: any) => {
         console.error('Speech recognition error:', event.error);
         setIsListening(false);
+        
+        // Handle specific errors
+        if (event.error === 'not-allowed') {
+          alert('Microphone access denied. Please allow microphone access and try again.');
+        } else if (event.error === 'network') {
+          alert('Network error. Please check your internet connection.');
+        }
       };
       
       recognition.onend = () => {
@@ -77,13 +83,23 @@ export function ChatInput({
     };
   }, []);
 
-  const toggleSpeechRecognition = () => {
-    if (!recognitionRef.current) return;
+  const startSpeechRecognition = () => {
+    if (!recognitionRef.current || isListening) return;
     
-    if (isListening) {
-      recognitionRef.current.stop();
-    } else {
+    try {
       recognitionRef.current.start();
+    } catch (error) {
+      console.error('Failed to start speech recognition:', error);
+    }
+  };
+
+  const stopSpeechRecognition = () => {
+    if (!recognitionRef.current || !isListening) return;
+    
+    try {
+      recognitionRef.current.stop();
+    } catch (error) {
+      console.error('Failed to stop speech recognition:', error);
     }
   };
 
@@ -121,15 +137,19 @@ export function ChatInput({
             <Button
               type="button"
               size="sm"
-              onClick={toggleSpeechRecognition}
+              onMouseDown={startSpeechRecognition}
+              onMouseUp={stopSpeechRecognition}
+              onMouseLeave={stopSpeechRecognition}
+              onTouchStart={startSpeechRecognition}
+              onTouchEnd={stopSpeechRecognition}
               disabled={disabled}
               data-testid="button-speech-recognition"
-              className={`absolute right-10 top-1/2 transform -translate-y-1/2 h-8 w-8 p-0 ${
+              className={`absolute right-10 top-1/2 transform -translate-y-1/2 h-8 w-8 p-0 select-none ${
                 isListening 
                   ? "bg-red-500 hover:bg-red-600 text-white animate-pulse" 
                   : "bg-gray-100 hover:bg-gray-200 text-gray-600"
               }`}
-              aria-label={isListening ? "Arrêter l'enregistrement vocal" : "Commencer l'enregistrement vocal"}
+              aria-label={isListening ? "Relâchez pour arrêter l'enregistrement" : "Maintenez enfoncé pour parler"}
             >
               {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
             </Button>
@@ -152,7 +172,7 @@ export function ChatInput({
           <>
             {" • "}
             <span className={isListening ? "text-red-600 font-medium" : ""}>
-              {isListening ? "🎤 Écoute en cours..." : "🎤 Cliquez pour parler"}
+              {isListening ? "🎤 Écoute en cours... (relâchez pour arrêter)" : "🎤 Maintenez enfoncé pour parler"}
             </span>
           </>
         )}
