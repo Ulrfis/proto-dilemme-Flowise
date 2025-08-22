@@ -29,7 +29,18 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
         }
         
         if (videoId && !video.url.includes('/embed/')) {
-          embedUrl = `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1`;
+          // Clean YouTube embed with minimal distractions
+          embedUrl = `https://www.youtube.com/embed/${videoId}?` +
+            'rel=0&' +                    // Remove related videos at end
+            'modestbranding=1&' +         // Remove YouTube logo
+            'showinfo=0&' +               // Hide video title and uploader info
+            'controls=1&' +               // Keep video controls
+            'disablekb=0&' +              // Allow keyboard controls
+            'fs=1&' +                     // Allow fullscreen
+            'iv_load_policy=3&' +         // Hide annotations
+            'cc_load_policy=0&' +         // Don't force closed captions
+            'playsinline=1&' +            // Play inline on mobile
+            'widget_referrer=' + encodeURIComponent(window.location.origin);
         }
         
         console.log(`YouTube URL converted: "${video.url}" -> "${embedUrl}"`);
