@@ -31,10 +31,15 @@ export function ChatInput({
       recognition.interimResults = true;
       recognition.lang = 'fr-FR';
       
+      // Add these settings to improve reliability
+      recognition.maxAlternatives = 1;
+      
       // Store the message before starting recognition
       let messageBeforeRecognition = '';
+      let restartTimeout: NodeJS.Timeout | null = null;
       
       recognition.onstart = () => {
+        console.log('Speech recognition started');
         setIsListening(true);
         messageBeforeRecognition = message;
       };
@@ -58,24 +63,72 @@ export function ChatInput({
       };
       
       recognition.onerror = (event: any) => {
-        console.error('Speech recognition error:', event.error);
-        setIsListening(false);
+        console.warn('Speech recognition error:', event.error);
         
-        // Handle specific errors with better user experience
-        if (event.error === 'not-allowed') {
-          // Don't show alert immediately, user might have denied once
+        // Don't immediately stop listening for network errors - try to restart
+        if (event.error === 'network') {
+          // Network error - try to restart after a short delay if still listening
+          if (isListening) {
+            restartTimeout = setTimeout(() => {
+              try {
+                if (recognitionRef.current && isListening) {
+                  recognitionRef.current.start();
+                }
+              } catch (err) {
+                console.warn('Failed to restart speech recognition:', err);
+                setIsListening(false);
+              }
+            }, 1000);
+          }
+        } else if (event.error === 'not-allowed') {
           console.warn('Microphone access denied');
-        } else if (event.error === 'network') {
-          // Don't spam alerts for network errors, just log them
-          console.warn('Network error during speech recognition');
+          setIsListening(false);
+        } else if (event.error === 'no-speech') {
+          // No speech detected - this is normal, just restart
+          if (isListening) {
+            restartTimeout = setTimeout(() => {
+              try {
+                if (recognitionRef.current && isListening) {
+                  recognitionRef.current.start();
+                }
+              } catch (err) {
+                console.warn('Failed to restart speech recognition:', err);
+                setIsListening(false);
+              }
+            }, 500);
+          }
+        } else {
+          setIsListening(false);
         }
       };
       
       recognition.onend = () => {
-        setIsListening(false);
+        console.log('Speech recognition ended');
+        // Only restart if we're supposed to be listening
+        if (isListening) {
+          restartTimeout = setTimeout(() => {
+            try {
+              if (recognitionRef.current && isListening) {
+                recognitionRef.current.start();
+              }
+            } catch (err) {
+              console.warn('Failed to restart speech recognition:', err);
+              setIsListening(false);
+            }
+          }, 100);
+        } else {
+          setIsListening(false);
+        }
       };
       
       recognitionRef.current = recognition;
+      
+      // Cleanup function
+      return () => {
+        if (restartTimeout) {
+          clearTimeout(restartTimeout);
+        }
+      };
     }
     
     return () => {
@@ -83,25 +136,29 @@ export function ChatInput({
         recognitionRef.current.stop();
       }
     };
-  }, []);
+  }, [isListening, message]);
 
   const startSpeechRecognition = () => {
     if (!recognitionRef.current || isListening) return;
     
     try {
+      setIsListening(true);
       recognitionRef.current.start();
     } catch (error) {
       console.error('Failed to start speech recognition:', error);
+      setIsListening(false);
     }
   };
 
   const stopSpeechRecognition = () => {
-    if (!recognitionRef.current || !isListening) return;
+    if (!recognitionRef.current) return;
     
     try {
+      setIsListening(false);
       recognitionRef.current.stop();
     } catch (error) {
       console.error('Failed to stop speech recognition:', error);
+      setIsListening(false);
     }
   };
 
