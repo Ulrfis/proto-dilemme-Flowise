@@ -3,6 +3,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Send, Mic, MicOff } from "lucide-react";
 
+// Type declarations for speech recognition
+declare global {
+  interface Window {
+    SpeechRecognition: any;
+    webkitSpeechRecognition: any;
+  }
+}
+
 interface ChatInputProps {
   onSendMessage: (message: string) => void;
   disabled?: boolean;
@@ -18,25 +26,25 @@ export function ChatInput({
   const [isListening, setIsListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
   const recognitionRef = useRef<any>(null);
+  const messageBeforeRecognitionRef = useRef<string>("");
+  const isListeningRef = useRef<boolean>(false);
 
+  // Initialize speech recognition once
   useEffect(() => {
-    // Check if speech recognition is supported
     const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
       setSpeechSupported(true);
       
-      // Initialize speech recognition
       const recognition = new SpeechRecognition();
-      recognition.continuous = true;
+      recognition.continuous = false; // Change to false for better control
       recognition.interimResults = true;
       recognition.lang = 'fr-FR';
-      
-      // Store the message before starting recognition
-      let messageBeforeRecognition = '';
+      recognition.maxAlternatives = 1;
       
       recognition.onstart = () => {
+        console.log('Speech recognition started');
         setIsListening(true);
-        messageBeforeRecognition = message;
+        isListeningRef.current = true;
       };
       
       recognition.onresult = (event: any) => {
@@ -52,25 +60,24 @@ export function ChatInput({
           }
         }
         
-        // Update message with real-time transcription
-        const newMessage = messageBeforeRecognition + finalTranscript + interimTranscript;
+        // Update message with transcription
+        const newMessage = messageBeforeRecognitionRef.current + finalTranscript + interimTranscript;
         setMessage(newMessage);
       };
       
       recognition.onerror = (event: any) => {
         console.error('Speech recognition error:', event.error);
-        setIsListening(false);
-        
-        // Handle specific errors
         if (event.error === 'not-allowed') {
-          alert('Microphone access denied. Please allow microphone access and try again.');
-        } else if (event.error === 'network') {
-          alert('Network error. Please check your internet connection.');
+          alert('Accès au microphone refusé. Veuillez autoriser l\'accès au microphone dans les paramètres de votre navigateur.');
         }
+        setIsListening(false);
+        isListeningRef.current = false;
       };
       
       recognition.onend = () => {
+        console.log('Speech recognition ended');
         setIsListening(false);
+        isListeningRef.current = false;
       };
       
       recognitionRef.current = recognition;
@@ -78,28 +85,34 @@ export function ChatInput({
     
     return () => {
       if (recognitionRef.current) {
-        recognitionRef.current.stop();
+        recognitionRef.current.abort();
       }
     };
-  }, []);
+  }, []); // Remove dependencies to avoid recreation
 
   const startSpeechRecognition = () => {
-    if (!recognitionRef.current || isListening) return;
+    if (!recognitionRef.current || isListeningRef.current) return;
     
     try {
+      // Store current message before starting recognition
+      messageBeforeRecognitionRef.current = message;
       recognitionRef.current.start();
     } catch (error) {
       console.error('Failed to start speech recognition:', error);
+      setIsListening(false);
+      isListeningRef.current = false;
     }
   };
 
   const stopSpeechRecognition = () => {
-    if (!recognitionRef.current || !isListening) return;
+    if (!recognitionRef.current || !isListeningRef.current) return;
     
     try {
       recognitionRef.current.stop();
     } catch (error) {
       console.error('Failed to stop speech recognition:', error);
+      setIsListening(false);
+      isListeningRef.current = false;
     }
   };
 
@@ -147,7 +160,7 @@ export function ChatInput({
               className={`absolute right-10 top-1/2 transform -translate-y-1/2 h-8 w-8 p-0 select-none ${
                 isListening 
                   ? "bg-red-500 hover:bg-red-600 text-white animate-pulse" 
-                  : "bg-gray-100 hover:bg-gray-200 text-gray-600"
+                  : "bg-blue-500 hover:bg-blue-600 text-white"
               }`}
               aria-label={isListening ? "Relâchez pour arrêter l'enregistrement" : "Maintenez enfoncé pour parler"}
             >
