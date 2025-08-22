@@ -32,10 +32,12 @@ A desktop-only French educational web app integrating Flowise chatbot "Peter" fo
 - No audio components in first version (text-only conversations)
 
 ## Recent Changes
-- Initial project setup planned
+- Initial project setup completed
 - Removed branching conversation paths feature
 - Removed interactive scenario-driven conversations feature
 - Focus on simple chat integration with media embedding
+- Updated Peter's initial message to match specified 2025 futuristic tone
+- Flowise integration fully operational and tested
 
 ## Development Guidelines
 Following fullstack_js blueprint with:
