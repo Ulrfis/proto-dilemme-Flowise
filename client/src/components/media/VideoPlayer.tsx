@@ -1,5 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MediaItem } from "../../types/chat";
+import { GumletPlayer } from '@gumlet/react-embed-player';
 
 interface VideoPlayerProps {
   video: MediaItem | null;
@@ -7,30 +8,40 @@ interface VideoPlayerProps {
 
 export function VideoPlayer({ video }: VideoPlayerProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [playerType, setPlayerType] = useState<'youtube' | 'gumlet' | 'unknown'>('unknown');
+  const [videoData, setVideoData] = useState<{
+    embedUrl?: string;
+    gumletVideoId?: string;
+    youtubeVideoId?: string;
+  }>({});
 
   useEffect(() => {
-    if (video && iframeRef.current) {
+    if (video) {
       let embedUrl = video.url;
+      let type: 'youtube' | 'gumlet' | 'unknown' = 'unknown';
+      let gumletVideoId = '';
+      let youtubeVideoId = '';
       
       // Handle YouTube URLs
       if (video.url.includes('youtube.com') || video.url.includes('youtu.be')) {
-        let videoId = '';
+        type = 'youtube';
         
         if (video.url.includes('youtu.be/')) {
           // Short URL format: https://youtu.be/VIDEO_ID
-          videoId = video.url.split('youtu.be/')[1].split('?')[0].split('&')[0];
+          youtubeVideoId = video.url.split('youtu.be/')[1].split('?')[0].split('&')[0];
         } else if (video.url.includes('watch?v=')) {
           // Long URL format: https://www.youtube.com/watch?v=VIDEO_ID
           const urlParams = new URLSearchParams(video.url.split('?')[1]);
-          videoId = urlParams.get('v') || '';
+          youtubeVideoId = urlParams.get('v') || '';
         } else if (video.url.includes('/embed/')) {
-          // Already embed format, use as is
-          embedUrl = video.url;
+          // Already embed format, extract video ID
+          const embedMatch = video.url.match(/\/embed\/([^?&/]+)/);
+          youtubeVideoId = embedMatch ? embedMatch[1] : '';
         }
         
-        if (videoId && !video.url.includes('/embed/')) {
+        if (youtubeVideoId) {
           // Clean YouTube embed with minimal distractions
-          embedUrl = `https://www.youtube.com/embed/${videoId}?` +
+          embedUrl = `https://www.youtube.com/embed/${youtubeVideoId}?` +
             'rel=0&' +                    // Remove related videos at end
             'modestbranding=1&' +         // Remove YouTube logo
             'showinfo=0&' +               // Hide video title and uploader info
@@ -43,23 +54,36 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
             'widget_referrer=' + encodeURIComponent(window.location.origin);
         }
         
-        console.log(`YouTube URL converted: "${video.url}" -> "${embedUrl}"`);
+        console.log(`YouTube URL detected: "${video.url}" -> ID: "${youtubeVideoId}"`);
       }
       // Handle Gumlet URLs
       else if (video.url.includes('gumlet.io')) {
-        // If it's already an embed URL, use as is
+        type = 'gumlet';
+        
+        // Extract video ID from various Gumlet URL formats
         if (video.url.includes('/embed/')) {
-          embedUrl = video.url;
+          // Direct embed URL: https://play.gumlet.io/embed/VIDEO_ID
+          const embedMatch = video.url.match(/\/embed\/([^?&/]+)/);
+          gumletVideoId = embedMatch ? embedMatch[1] : '';
+        } else if (video.url.includes('play.gumlet.io/')) {
+          // Play URL: https://play.gumlet.io/VIDEO_ID or similar
+          const playMatch = video.url.match(/play\.gumlet\.io\/([^?&/]+)/);
+          gumletVideoId = playMatch ? playMatch[1] : '';
         } else {
-          // Extract asset ID and create embed URL
-          const assetIdMatch = video.url.match(/\/([^\/]+)(?:\?|$)/);
-          if (assetIdMatch) {
-            embedUrl = `https://play.gumlet.io/embed/${assetIdMatch[1]}`;
-          }
+          // Generic gumlet.io URL - try to extract ID from path
+          const pathMatch = video.url.match(/gumlet\.io\/[^\/]*\/([^?&/]+)/);
+          gumletVideoId = pathMatch ? pathMatch[1] : '';
         }
+        
+        console.log(`Gumlet URL detected: "${video.url}" -> ID: "${gumletVideoId}"`);
       }
       
-      iframeRef.current.src = embedUrl;
+      setPlayerType(type);
+      setVideoData({
+        embedUrl,
+        gumletVideoId,
+        youtubeVideoId
+      });
     }
   }, [video]);
 
@@ -82,20 +106,74 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
     );
   }
 
+  const renderPlayer = () => {
+    if (playerType === 'gumlet' && videoData.gumletVideoId) {
+      // Use Gumlet React Player
+      return (
+        <GumletPlayer
+          videoID={videoData.gumletVideoId}
+          title={video?.title || "Vidéo éducative Gumlet"}
+          style={{ 
+            height: "100%", 
+            width: "100%", 
+            borderRadius: "8px",
+            overflow: "hidden"
+          }}
+          schemaOrgVideoObject={{
+            "@context": "https://schema.org",
+            "@type": "VideoObject",
+            "name": video?.title || "Vidéo éducative",
+            "description": video?.description || "Contenu éducatif sur la pollution plastique",
+            "embedUrl": `https://play.gumlet.io/embed/${videoData.gumletVideoId}`
+          }}
+          autoplay={false}
+          preload={true}
+          muted={false}
+        />
+      );
+    } else if (playerType === 'youtube' && videoData.embedUrl) {
+      // Use YouTube iframe embed
+      return (
+        <iframe
+          key={videoData.youtubeVideoId} // Force re-render when video changes
+          src={videoData.embedUrl}
+          className="w-full h-full border-none rounded-lg shadow-lg"
+          allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen"
+          title={video?.title || "Lecteur vidéo YouTube éducatif"}
+          data-testid="iframe-youtube-player"
+          allowFullScreen
+        />
+      );
+    } else {
+      // Fallback for unknown video types
+      return (
+        <div className="w-full h-full flex items-center justify-center bg-gray-100 rounded-lg">
+          <div className="text-center text-gray-500 max-w-md p-6">
+            <div className="w-16 h-16 mx-auto mb-4 text-gray-400">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" className="w-full h-full">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <p className="text-sm font-medium text-gray-600 mb-2">Format vidéo non supporté</p>
+            <p className="text-xs text-gray-500">
+              URL: {video?.url}
+            </p>
+            <p className="text-xs text-gray-400 mt-2">
+              Formats supportés: YouTube, Gumlet
+            </p>
+          </div>
+        </div>
+      );
+    }
+  };
+
   return (
     <div className="h-full flex flex-col">
       <div className="flex-1 aspect-video min-h-[400px]">
-        <iframe
-          ref={iframeRef}
-          className="w-full h-full border-none rounded-lg shadow-lg"
-          allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen"
-          title={video.title || "Lecteur vidéo éducatif"}
-          data-testid="iframe-video-player"
-          allowFullScreen
-        />
+        {renderPlayer()}
       </div>
       
-      {(video.title || video.description) && (
+      {(video?.title || video?.description) && (
         <div className="mt-6 p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
           {video.title && (
             <h4 className="text-lg font-semibold text-gray-900 mb-2" data-testid="text-video-title">
@@ -107,6 +185,16 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
               {video.description}
             </p>
           )}
+        </div>
+      )}
+      
+      {/* Debug info in development */}
+      {import.meta.env.DEV && video && (
+        <div className="mt-2 p-2 bg-gray-50 rounded text-xs text-gray-500">
+          <div><strong>Type:</strong> {playerType}</div>
+          <div><strong>URL:</strong> {video.url}</div>
+          {videoData.gumletVideoId && <div><strong>Gumlet ID:</strong> {videoData.gumletVideoId}</div>}
+          {videoData.youtubeVideoId && <div><strong>YouTube ID:</strong> {videoData.youtubeVideoId}</div>}
         </div>
       )}
     </div>
