@@ -44,6 +44,7 @@ A desktop-only French educational web app integrating Flowise chatbot "Peter" fo
 - Added independent chat scrolling system - chat scrolls without affecting media panel
 - Implemented message type handling: information messages (thumbs up button), open questions, and messages with links (bold formatting)
 - Fixed URL cleaning to remove trailing punctuation from all links
+- YouTube video integration with clean embed player - no distracting overlays or related videos
 
 ## Development Guidelines
 Following fullstack_js blueprint with:
