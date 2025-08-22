@@ -13,6 +13,7 @@ interface ChatInterfaceProps {
   onLinkClick: (url: string) => void;
   onToggleMediaPanel: () => void;
   onThumbsUp: () => void;
+  onChoiceClick: (choice: string) => void;
   isLoading?: boolean;
   messageCount: number;
 }
@@ -24,6 +25,7 @@ export function ChatInterface({
   onLinkClick,
   onToggleMediaPanel,
   onThumbsUp,
+  onChoiceClick,
   isLoading = false,
   messageCount,
 }: ChatInterfaceProps) {
@@ -66,6 +68,7 @@ export function ChatInterface({
             onVideoClick={onVideoClick}
             onLinkClick={onLinkClick}
             onThumbsUp={onThumbsUp}
+            onChoiceClick={onChoiceClick}
           />
         ))}
         

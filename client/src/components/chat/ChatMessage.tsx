@@ -11,7 +11,7 @@ interface ChatMessageProps {
   onChoiceClick?: (choice: string) => void;
 }
 
-export function ChatMessage({ message, onVideoClick, onLinkClick, onThumbsUp }: ChatMessageProps) {
+export function ChatMessage({ message, onVideoClick, onLinkClick, onThumbsUp, onChoiceClick }: ChatMessageProps) {
   const isPeter = message.sender === 'peter';
 
   const handleMediaClick = (url: string, type: 'video' | 'link') => {
@@ -143,7 +143,11 @@ export function ChatMessage({ message, onVideoClick, onLinkClick, onThumbsUp }: 
           "rounded-lg p-3",
           isPeter ? "bg-gray-100" : "bg-primary text-white"
         )}>
-          {messageType === 'with-links' ? (
+          {messageType === 'with-choices' ? (
+            <div className="text-sm leading-relaxed whitespace-pre-wrap">
+              {formatChoiceContent(message.content)}
+            </div>
+          ) : messageType === 'with-links' ? (
             <div className="text-sm leading-relaxed">
               {formatContent(message.content).split('\n').map((line, lineIndex) => {
                 // Find any link titles in this line
@@ -205,6 +209,20 @@ export function ChatMessage({ message, onVideoClick, onLinkClick, onThumbsUp }: 
         {/* Action buttons based on message type */}
         {isPeter && (
           <div className="mt-2 flex flex-wrap gap-2">
+            {/* Choice buttons for menu messages */}
+            {messageType === 'with-choices' && onChoiceClick && extractedChoices.map((choice, index) => (
+              <Button
+                key={index}
+                variant="outline"
+                size="sm"
+                onClick={() => onChoiceClick(choice)}
+                data-testid={`button-choice-${index}`}
+                className="bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100 text-left"
+              >
+                {choice}
+              </Button>
+            ))}
+            
             {/* Thumbs up button for information messages */}
             {messageType === 'information' && onThumbsUp && (
               <Button

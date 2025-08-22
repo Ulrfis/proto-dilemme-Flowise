@@ -69,6 +69,11 @@ export default function Homepage() {
     await sendMessage("OK");
   };
 
+  const handleChoiceClick = async (choice: string) => {
+    // Send the selected choice as a message to Peter
+    await sendMessage(choice);
+  };
+
   return (
     <main className="flex-1 flex overflow-hidden">
       {!showChat ? (
@@ -139,6 +144,7 @@ export default function Homepage() {
               onLinkClick={handleLinkClick}
               onToggleMediaPanel={openMediaPanel}
               onThumbsUp={handleThumbsUp}
+              onChoiceClick={handleChoiceClick}
               isLoading={isLoading}
               messageCount={messages.length}
             />
