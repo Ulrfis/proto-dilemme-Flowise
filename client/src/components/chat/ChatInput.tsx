@@ -61,11 +61,13 @@ export function ChatInput({
         console.error('Speech recognition error:', event.error);
         setIsListening(false);
         
-        // Handle specific errors
+        // Handle specific errors with better user experience
         if (event.error === 'not-allowed') {
-          alert('Microphone access denied. Please allow microphone access and try again.');
+          // Don't show alert immediately, user might have denied once
+          console.warn('Microphone access denied');
         } else if (event.error === 'network') {
-          alert('Network error. Please check your internet connection.');
+          // Don't spam alerts for network errors, just log them
+          console.warn('Network error during speech recognition');
         }
       };
       
