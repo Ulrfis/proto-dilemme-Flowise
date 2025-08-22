@@ -4,7 +4,8 @@ class Analytics {
   private sessionId: string;
 
   constructor() {
-    this.sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Generate cryptographically secure session ID
+    this.sessionId = `session_${Date.now()}_${crypto.randomUUID().replace(/-/g, '')}`;
   }
 
   async track(event: string, data?: Record<string, any>) {
@@ -51,8 +52,8 @@ class Analytics {
 
   trackSessionReset() {
     this.track("session_reset");
-    // Generate new session ID
-    this.sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Generate new secure session ID
+    this.sessionId = `session_${Date.now()}_${crypto.randomUUID().replace(/-/g, '')}`;
   }
 
   trackSessionComplete() {

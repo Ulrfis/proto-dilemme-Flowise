@@ -6,7 +6,8 @@ export class FlowiseClient {
 
   constructor(chatflowId: string) {
     this.chatflowId = chatflowId;
-    this.sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Generate cryptographically secure session ID
+    this.sessionId = `session_${Date.now()}_${crypto.randomUUID().replace(/-/g, '')}`;
   }
 
   async sendMessage(message: string): Promise<FlowiseResponse> {
@@ -35,7 +36,8 @@ export class FlowiseClient {
   }
 
   resetSession() {
-    this.sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Generate cryptographically secure session ID
+    this.sessionId = `session_${Date.now()}_${crypto.randomUUID().replace(/-/g, '')}`;
   }
 
   getSessionId() {
@@ -61,7 +63,6 @@ export function extractMediaFromText(text: string): {
     let cleanUrl = match.replace(/[.,;:!?)\]}\s]+$/, '').trim();
     cleanUrl = cleanUrl.replace(/\)+\.?\s*$/, '');
     cleanUrl = cleanUrl.replace(/\.$/, '');
-    console.log(`Video URL cleaned: "${match}" -> "${cleanUrl}"`);
     videos.push(cleanUrl);
     return `[Vidéo disponible dans le panneau média]`;
   });
@@ -72,7 +73,6 @@ export function extractMediaFromText(text: string): {
     let cleanUrl = match.replace(/[.,;:!?)\]}\s]+$/, '').trim();
     cleanUrl = cleanUrl.replace(/\)+\.?\s*$/, '');
     cleanUrl = cleanUrl.replace(/\.$/, '');
-    console.log(`Link URL cleaned: "${match}" -> "${cleanUrl}"`);
     if (!videos.includes(cleanUrl)) {
       allLinks.push(cleanUrl);
       return `[Lien disponible dans le panneau média]`;

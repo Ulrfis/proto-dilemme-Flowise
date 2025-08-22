@@ -56,7 +56,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         returnSourceDocuments: true,
       };
 
-      console.log(`[Flowise] Request body:`, requestBody);
+      // Only log non-sensitive request info
+      console.log(`[Flowise] Request to chatflow: ${actualChatflowId}, chatId: ${requestBody.chatId}`);
 
       const response = await fetch(`${flowiseHost}/api/v1/prediction/${actualChatflowId}`, {
         method: "POST",
@@ -66,7 +67,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const responseText = await response.text();
       console.log(`[Flowise] Response status: ${response.status}`);
-      console.log(`[Flowise] Response text:`, responseText);
+      // Log response status only, not content for privacy
+      console.log(`[Flowise] Response received: ${response.status}, length: ${responseText.length} chars`);
 
       if (!response.ok) {
         throw new Error(`Flowise API error: ${response.status} ${response.statusText} - ${responseText}`);
