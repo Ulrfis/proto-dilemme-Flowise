@@ -127,12 +127,18 @@ export function ChatMessage({ message, onVideoClick, onLinkClick, onThumbsUp }: 
                         parts.push(processedLine.substring(lastIndex, titleIndex));
                       }
                       
+                      // Determine if this is a video or regular link
+                      const isVideo = link.url.includes('youtube.com') || 
+                                     link.url.includes('youtu.be') || 
+                                     link.url.includes('gumlet.io') ||
+                                     link.url.includes('vimeo.com');
+                      
                       // Add the clickable link title
                       parts.push(
                         <span 
                           key={`link-${lineIndex}-${linkIndex}`}
                           className="font-bold cursor-pointer text-blue-600 hover:text-blue-800 underline"
-                          onClick={() => handleMediaClick(link.url, 'link')}
+                          onClick={() => handleMediaClick(link.url, isVideo ? 'video' : 'link')}
                         >
                           {link.title}
                         </span>
