@@ -41,9 +41,8 @@ export default function Homepage() {
   };
 
   const handleResetSession = () => {
-    resetSession();
-    setShowChat(false);
-    closeMediaPanel();
+    // Refresh the browser to completely reset the session
+    window.location.reload();
   };
 
   const handleVideoClick = (videoUrl: string) => {
