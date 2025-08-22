@@ -57,16 +57,22 @@ export function extractMediaFromText(text: string): {
   
   // Extract videos first
   let cleanText = text.replace(videoRegex, (match) => {
-    // Clean up URL by removing trailing punctuation
-    const cleanUrl = match.replace(/[.,;:!?)\]]+$/, '');
+    // Comprehensive URL cleaning
+    let cleanUrl = match.replace(/[.,;:!?)\]}\s]+$/, '').trim();
+    cleanUrl = cleanUrl.replace(/\)+\.?\s*$/, '');
+    cleanUrl = cleanUrl.replace(/\.$/, '');
+    console.log(`Video URL cleaned: "${match}" -> "${cleanUrl}"`);
     videos.push(cleanUrl);
     return `[Vidéo disponible dans le panneau média]`;
   });
   
   // Extract remaining links
   cleanText = cleanText.replace(linkRegex, (match) => {
-    // Clean up URL by removing trailing punctuation
-    const cleanUrl = match.replace(/[.,;:!?)\]]+$/, '');
+    // Comprehensive URL cleaning
+    let cleanUrl = match.replace(/[.,;:!?)\]}\s]+$/, '').trim();
+    cleanUrl = cleanUrl.replace(/\)+\.?\s*$/, '');
+    cleanUrl = cleanUrl.replace(/\.$/, '');
+    console.log(`Link URL cleaned: "${match}" -> "${cleanUrl}"`);
     if (!videos.includes(cleanUrl)) {
       allLinks.push(cleanUrl);
       return `[Lien disponible dans le panneau média]`;

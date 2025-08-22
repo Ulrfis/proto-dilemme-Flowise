@@ -14,10 +14,17 @@ export function ChatMessage({ message, onVideoClick, onLinkClick, onThumbsUp }: 
   const isPeter = message.sender === 'peter';
 
   const handleMediaClick = (url: string, type: 'video' | 'link') => {
+    // Comprehensive URL cleaning
+    let cleanUrl = url.replace(/[.,;:!?)\]}\s]+$/, '').trim();
+    cleanUrl = cleanUrl.replace(/\)+\.?\s*$/, ''); // Remove trailing parentheses and dots
+    cleanUrl = cleanUrl.replace(/\.$/, ''); // Remove final period
+    
+    console.log(`handleMediaClick: "${url}" -> "${cleanUrl}"`);
+    
     if (type === 'video' && onVideoClick) {
-      onVideoClick(url);
+      onVideoClick(cleanUrl);
     } else if (type === 'link' && onLinkClick) {
-      onLinkClick(url);
+      onLinkClick(cleanUrl);
     }
   };
 
@@ -55,8 +62,14 @@ export function ChatMessage({ message, onVideoClick, onLinkClick, onThumbsUp }: 
     while ((match = linkRegex.exec(content)) !== null) {
       let url = match[2];
       
-      // Clean up URL by removing trailing punctuation
-      url = url.replace(/[.,;:!?)\]]+$/, '');
+      // Clean up URL by removing trailing punctuation (more comprehensive)
+      url = url.replace(/[.,;:!?)\]}\s]+$/, '').trim();
+      
+      // Additional cleaning for common issues
+      url = url.replace(/\)+\.?\s*$/, ''); // Remove trailing parentheses and dots
+      url = url.replace(/\.$/, ''); // Remove final period if still present
+      
+      console.log(`Extracted link: "${match[1]}" -> "${url}" (original: "${match[2]}")`);
       
       links.push({
         title: match[1],
