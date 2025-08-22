@@ -57,14 +57,18 @@ export function extractMediaFromText(text: string): {
   
   // Extract videos first
   let cleanText = text.replace(videoRegex, (match) => {
-    videos.push(match);
+    // Clean up URL by removing trailing punctuation
+    const cleanUrl = match.replace(/[.,;:!?)\]]+$/, '');
+    videos.push(cleanUrl);
     return `[Vidéo disponible dans le panneau média]`;
   });
   
   // Extract remaining links
   cleanText = cleanText.replace(linkRegex, (match) => {
-    if (!videos.includes(match)) {
-      allLinks.push(match);
+    // Clean up URL by removing trailing punctuation
+    const cleanUrl = match.replace(/[.,;:!?)\]]+$/, '');
+    if (!videos.includes(cleanUrl)) {
+      allLinks.push(cleanUrl);
       return `[Lien disponible dans le panneau média]`;
     }
     return match;

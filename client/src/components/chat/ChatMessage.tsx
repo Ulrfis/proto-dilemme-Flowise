@@ -53,9 +53,14 @@ export function ChatMessage({ message, onVideoClick, onLinkClick, onThumbsUp }: 
     let match;
     
     while ((match = linkRegex.exec(content)) !== null) {
+      let url = match[2];
+      
+      // Clean up URL by removing trailing punctuation
+      url = url.replace(/[.,;:!?)\]]+$/, '');
+      
       links.push({
         title: match[1],
-        url: match[2]
+        url: url
       });
     }
     
