@@ -47,7 +47,15 @@ export default function Homepage() {
   };
 
   const handleVideoClick = (videoUrl: string) => {
-    showVideo(videoUrl, "Vidéo éducative", "Ressource partagée par Peter");
+    // Determine video source for better title
+    let title = "Vidéo éducative";
+    if (videoUrl.includes('youtube.com') || videoUrl.includes('youtu.be')) {
+      title = "Vidéo YouTube";
+    } else if (videoUrl.includes('gumlet.io')) {
+      title = "Vidéo Gumlet";
+    }
+    
+    showVideo(videoUrl, title, "Ressource partagée par Peter");
     analytics.trackVideoOpened(videoUrl);
   };
 

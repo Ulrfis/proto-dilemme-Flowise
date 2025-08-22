@@ -10,11 +10,32 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
 
   useEffect(() => {
     if (video && iframeRef.current) {
-      // Extract Gumlet asset ID or use full URL
       let embedUrl = video.url;
       
+      // Handle YouTube URLs
+      if (video.url.includes('youtube.com') || video.url.includes('youtu.be')) {
+        let videoId = '';
+        
+        if (video.url.includes('youtu.be/')) {
+          // Short URL format: https://youtu.be/VIDEO_ID
+          videoId = video.url.split('youtu.be/')[1].split('?')[0].split('&')[0];
+        } else if (video.url.includes('watch?v=')) {
+          // Long URL format: https://www.youtube.com/watch?v=VIDEO_ID
+          const urlParams = new URLSearchParams(video.url.split('?')[1]);
+          videoId = urlParams.get('v') || '';
+        } else if (video.url.includes('/embed/')) {
+          // Already embed format, use as is
+          embedUrl = video.url;
+        }
+        
+        if (videoId && !video.url.includes('/embed/')) {
+          embedUrl = `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1`;
+        }
+        
+        console.log(`YouTube URL converted: "${video.url}" -> "${embedUrl}"`);
+      }
       // Handle Gumlet URLs
-      if (video.url.includes('gumlet.io')) {
+      else if (video.url.includes('gumlet.io')) {
         // If it's already an embed URL, use as is
         if (video.url.includes('/embed/')) {
           embedUrl = video.url;
@@ -57,8 +78,9 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
           ref={iframeRef}
           className="w-full h-full border-none rounded-lg shadow-lg"
           allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen"
-          title="Gumlet video player"
+          title={video.title || "Lecteur vidéo éducatif"}
           data-testid="iframe-video-player"
+          allowFullScreen
         />
       </div>
       

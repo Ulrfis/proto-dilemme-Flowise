@@ -49,7 +49,7 @@ export function extractMediaFromText(text: string): {
   videos: string[]; 
   links: string[]; 
 } {
-  const videoRegex = /(https?:\/\/[^\s]+(?:gumlet\.io|youtube\.com|youtu\.be|vimeo\.com)[^\s]*)/gi;
+  const videoRegex = /(https?:\/\/[^\s]+(?:gumlet\.io|youtube\.com\/watch|youtu\.be|vimeo\.com)[^\s]*)/gi;
   const linkRegex = /(https?:\/\/[^\s]+)/gi;
   
   const videos: string[] = [];
