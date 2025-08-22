@@ -41,6 +41,9 @@ A desktop-only French educational web app integrating Flowise chatbot "Peter" fo
 - Flowise integration fully operational and tested
 - Implemented split-screen layout: chat (1/3) + media panel (2/3) always visible
 - Enhanced media panel with improved video player and webview components
+- Added independent chat scrolling system - chat scrolls without affecting media panel
+- Implemented message type handling: information messages (thumbs up button), open questions, and messages with links (bold formatting)
+- Fixed URL cleaning to remove trailing punctuation from all links
 
 ## Development Guidelines
 Following fullstack_js blueprint with:
