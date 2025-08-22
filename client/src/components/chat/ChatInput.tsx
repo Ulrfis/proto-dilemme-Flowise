@@ -60,7 +60,7 @@ export function ChatInput({
       </form>
       <div className="mt-2 text-xs text-gray-500">
         Appuyez sur Entrée pour envoyer • 
-        <span className="text-green-600 ml-1">Conversation sécurisée et privée</span>
+        <span className="text-amber-600 ml-1">Conversation éducative anonyme</span>
       </div>
     </div>
   );
