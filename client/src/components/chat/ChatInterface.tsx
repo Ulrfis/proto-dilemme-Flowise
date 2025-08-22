@@ -1,8 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { Button } from "@/components/ui/button";
-import { PanelsRightBottom, Loader2 } from "lucide-react";
+import { PanelsRightBottom, Loader2, Copy, Check } from "lucide-react";
 import { ChatMessage as ChatMessageType } from "../../types/chat";
 import { cn } from "@/lib/utils";
 
@@ -30,6 +30,7 @@ export function ChatInterface({
   messageCount,
 }: ChatInterfaceProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [copied, setCopied] = useState(false);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -38,6 +39,43 @@ export function ChatInterface({
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  const copyConversationToClipboard = async () => {
+    try {
+      // Format conversation for clipboard
+      const conversationText = messages.map(message => {
+        const sender = message.sender === 'peter' ? 'Peter' : 'Utilisateur';
+        return `${sender}: ${message.content}`;
+      }).join('\n\n');
+
+      // Add header with timestamp
+      const timestamp = new Date().toLocaleString('fr-FR');
+      const fullText = `Conversation Dilemme Plastique - ${timestamp}\n${'='.repeat(50)}\n\n${conversationText}`;
+
+      // Copy to clipboard
+      await navigator.clipboard.writeText(fullText);
+      
+      // Show success feedback
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy conversation:', error);
+      // Fallback for older browsers
+      const textArea = document.createElement('textarea');
+      const conversationText = messages.map(message => {
+        const sender = message.sender === 'peter' ? 'Peter' : 'Utilisateur';
+        return `${sender}: ${message.content}`;
+      }).join('\n\n');
+      const timestamp = new Date().toLocaleString('fr-FR');
+      textArea.value = `Conversation Dilemme Plastique - ${timestamp}\n${'='.repeat(50)}\n\n${conversationText}`;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
 
   return (
     <div className="h-full flex flex-col">
@@ -94,6 +132,31 @@ export function ChatInterface({
           disabled={isLoading}
           placeholder="Tapez votre message..."
         />
+        
+        {/* Copy Conversation Button */}
+        <div className="px-4 pb-4 flex justify-center">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={copyConversationToClipboard}
+            disabled={messages.length === 0}
+            data-testid="button-copy-conversation"
+            className="text-gray-500 hover:text-gray-700 flex items-center space-x-2"
+            title="Copier toute la conversation dans le presse-papiers"
+          >
+            {copied ? (
+              <>
+                <Check className="w-4 h-4" />
+                <span className="text-xs">Copié!</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-4 h-4" />
+                <span className="text-xs">Copier la conversation</span>
+              </>
+            )}
+          </Button>
+        </div>
       </div>
     </div>
   );
