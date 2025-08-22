@@ -118,7 +118,7 @@ export default function Homepage() {
         /* Chat Interface - Split Layout */
         <>
           {/* Left Side - Chat (1/3 width) */}
-          <div className="w-1/3 flex flex-col bg-white border-r border-gray-200">
+          <div className="w-1/3 flex flex-col bg-white border-r border-gray-200 chat-container chat-sidebar">
             <ChatInterface
               messages={messages}
               onSendMessage={sendMessage}
@@ -131,7 +131,7 @@ export default function Homepage() {
           </div>
 
           {/* Right Side - Media Panel (2/3 width) - Always Visible */}
-          <div className="w-2/3 bg-gray-50">
+          <div className="w-2/3 bg-gray-50 media-panel-container">
             <MediaPanel
               isOpen={true}
               activeTab={activeTab}
