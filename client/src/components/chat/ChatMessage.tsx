@@ -7,9 +7,10 @@ interface ChatMessageProps {
   message: ChatMessageType;
   onVideoClick?: (url: string) => void;
   onLinkClick?: (url: string) => void;
+  onThumbsUp?: () => void;
 }
 
-export function ChatMessage({ message, onVideoClick, onLinkClick }: ChatMessageProps) {
+export function ChatMessage({ message, onVideoClick, onLinkClick, onThumbsUp }: ChatMessageProps) {
   const isPeter = message.sender === 'peter';
 
   const handleMediaClick = (url: string, type: 'video' | 'link') => {
@@ -19,6 +20,49 @@ export function ChatMessage({ message, onVideoClick, onLinkClick }: ChatMessageP
       onLinkClick(url);
     }
   };
+
+  // Detect message type for Peter's messages
+  const getMessageType = (content: string) => {
+    if (!isPeter) return 'user';
+    
+    // Check if message has links
+    const hasLinks = content.includes('[') && content.includes('](');
+    if (hasLinks) return 'with-links';
+    
+    // Check if it's an information message (no question marks, statements)
+    const hasQuestion = content.includes('?');
+    if (!hasQuestion) return 'information';
+    
+    return 'open-question';
+  };
+
+  const messageType = getMessageType(message.content);
+
+  // Format message content with proper link formatting
+  const formatContent = (content: string) => {
+    if (messageType !== 'with-links') return content;
+    
+    // Replace markdown links with just the title text
+    return content.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1');
+  };
+
+  // Extract links from content
+  const extractLinks = (content: string) => {
+    const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+    const links: Array<{title: string, url: string}> = [];
+    let match;
+    
+    while ((match = linkRegex.exec(content)) !== null) {
+      links.push({
+        title: match[1],
+        url: match[2]
+      });
+    }
+    
+    return links;
+  };
+
+  const extractedLinks = messageType === 'with-links' ? extractLinks(message.content) : [];
 
   return (
     <div 
@@ -45,15 +89,77 @@ export function ChatMessage({ message, onVideoClick, onLinkClick }: ChatMessageP
           "rounded-lg p-3",
           isPeter ? "bg-gray-100" : "bg-primary text-white"
         )}>
-          <p className="text-sm leading-relaxed whitespace-pre-wrap">
-            {message.content}
-          </p>
+          {messageType === 'with-links' ? (
+            <div className="text-sm leading-relaxed">
+              {formatContent(message.content).split('\n').map((line, lineIndex) => {
+                // Find any link titles in this line
+                let processedLine = line;
+                const lineLinks = extractedLinks.filter(link => line.includes(link.title));
+                
+                if (lineLinks.length > 0) {
+                  // Process each link in the line
+                  const parts = [];
+                  let lastIndex = 0;
+                  
+                  lineLinks.forEach((link, linkIndex) => {
+                    const titleIndex = processedLine.indexOf(link.title, lastIndex);
+                    if (titleIndex !== -1) {
+                      // Add text before the link
+                      if (titleIndex > lastIndex) {
+                        parts.push(processedLine.substring(lastIndex, titleIndex));
+                      }
+                      
+                      // Add the clickable link title
+                      parts.push(
+                        <span 
+                          key={`link-${lineIndex}-${linkIndex}`}
+                          className="font-bold cursor-pointer text-blue-600 hover:text-blue-800 underline"
+                          onClick={() => handleMediaClick(link.url, 'link')}
+                        >
+                          {link.title}
+                        </span>
+                      );
+                      
+                      lastIndex = titleIndex + link.title.length;
+                    }
+                  });
+                  
+                  // Add remaining text after the last link
+                  if (lastIndex < processedLine.length) {
+                    parts.push(processedLine.substring(lastIndex));
+                  }
+                  
+                  return <div key={lineIndex}>{parts}</div>;
+                }
+                
+                return <div key={lineIndex}>{line}</div>;
+              })}
+            </div>
+          ) : (
+            <p className="text-sm leading-relaxed whitespace-pre-wrap">
+              {message.content}
+            </p>
+          )}
         </div>
         
-        {/* Media buttons */}
-        {message.metadata && (isPeter) && (
+        {/* Action buttons based on message type */}
+        {isPeter && (
           <div className="mt-2 flex flex-wrap gap-2">
-            {message.metadata.videoUrl && (
+            {/* Thumbs up button for information messages */}
+            {messageType === 'information' && onThumbsUp && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onThumbsUp}
+                data-testid="button-thumbs-up"
+                className="bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
+              >
+                👍 OK
+              </Button>
+            )}
+            
+            {/* Video buttons from metadata */}
+            {message.metadata?.videoUrl && (
               <Button
                 variant="outline"
                 size="sm"
@@ -64,7 +170,9 @@ export function ChatMessage({ message, onVideoClick, onLinkClick }: ChatMessageP
                 📹 Voir la vidéo
               </Button>
             )}
-            {message.metadata.links?.map((link, index) => (
+            
+            {/* Link buttons from metadata */}
+            {message.metadata?.links?.map((link, index) => (
               <Button
                 key={index}
                 variant="outline"
