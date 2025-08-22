@@ -28,40 +28,34 @@ export function MediaPanel({
   }
 
   return (
-    <div className="w-96 bg-white border-l border-gray-200 flex flex-col">
+    <div className="w-full h-full bg-white flex flex-col">
       {/* Header */}
-      <div className="border-b border-gray-200 p-4">
+      <div className="border-b border-gray-200 p-6">
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-gray-900">Ressources multimédias</h3>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onClose}
-            data-testid="button-close-media-panel"
-            className="text-gray-400 hover:text-gray-600 h-8 w-8 p-0"
-          >
-            <X className="w-5 h-5" />
-          </Button>
+          <h3 className="text-xl font-semibold text-gray-900">Ressources multimédias</h3>
+          <div className="text-sm text-gray-500">
+            Vidéos et articles partagés par Peter
+          </div>
         </div>
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-hidden">
         <Tabs value={activeTab} onValueChange={(value) => onTabChange(value as 'video' | 'web')} className="h-full flex flex-col">
-          <TabsList className="grid w-full grid-cols-2 m-4 mb-0">
-            <TabsTrigger value="video" data-testid="tab-video">
-              Vidéos
+          <TabsList className="grid w-full grid-cols-2 mx-6 mt-4 mb-0">
+            <TabsTrigger value="video" data-testid="tab-video" className="text-base font-medium">
+              📹 Vidéos
             </TabsTrigger>
-            <TabsTrigger value="web" data-testid="tab-web">
-              Articles
+            <TabsTrigger value="web" data-testid="tab-web" className="text-base font-medium">
+              📰 Articles
             </TabsTrigger>
           </TabsList>
           
-          <TabsContent value="video" className="flex-1 overflow-y-auto m-0">
+          <TabsContent value="video" className="flex-1 overflow-y-auto m-0 p-6">
             <VideoPlayer video={currentVideo} />
           </TabsContent>
           
-          <TabsContent value="web" className="flex-1 overflow-y-auto m-0">
+          <TabsContent value="web" className="flex-1 overflow-y-auto m-0 p-6">
             <WebView webpage={currentWebpage} />
           </TabsContent>
         </Tabs>

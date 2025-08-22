@@ -49,19 +49,8 @@ export function ChatInterface({
               <div className="text-sm text-green-600">En ligne • Assistant écologique</div>
             </div>
           </div>
-          <div className="flex items-center space-x-2">
-            <div className="text-sm text-gray-500" data-testid="text-message-count">
-              <span>{messageCount}</span> messages
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onToggleMediaPanel}
-              data-testid="button-toggle-media-panel"
-              className="text-gray-400 hover:text-gray-600"
-            >
-              <PanelsRightBottom className="w-5 h-5" />
-            </Button>
+          <div className="text-sm text-gray-500" data-testid="text-message-count">
+            <span>{messageCount}</span> messages
           </div>
         </div>
       </div>

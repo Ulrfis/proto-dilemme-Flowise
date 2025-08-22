@@ -36,6 +36,7 @@ export default function Homepage() {
   const handleStartChat = () => {
     setShowChat(true);
     initializeChat();
+    // Media panel is always visible in the new split layout
     analytics.trackPageView('chat_interface');
   };
 
@@ -57,87 +58,91 @@ export default function Homepage() {
 
   return (
     <main className="flex-1 flex overflow-hidden">
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col bg-white">
-        {!showChat ? (
-          /* Welcome Screen */
-          <div className="flex-1 flex items-center justify-center p-8">
-            <div className="text-center max-w-2xl">
-              <div className="mb-8">
-                <div className="w-20 h-20 bg-primary rounded-full flex items-center justify-center mx-auto mb-4">
-                  <MessageCircle className="w-10 h-10 text-white" />
-                </div>
-                <h2 className="text-3xl font-bold text-gray-900 mb-4">
-                  Rencontrez Peter, votre guide écologique
-                </h2>
-                <p className="text-lg text-gray-600 mb-8">
-                  Explorez les dilemmes du plastique à travers des scénarios interactifs. 
-                  Peter vous accompagne pour comprendre les enjeux environnementaux, économiques et sociaux.
-                </p>
+      {!showChat ? (
+        /* Welcome Screen - Full Width */
+        <div className="flex-1 flex items-center justify-center p-8 bg-white">
+          <div className="text-center max-w-2xl">
+            <div className="mb-8">
+              <div className="w-20 h-20 bg-primary rounded-full flex items-center justify-center mx-auto mb-4">
+                <MessageCircle className="w-10 h-10 text-white" />
               </div>
-              
-              <div className="mb-8">
-                <Button
-                  size="lg"
-                  onClick={handleStartChat}
-                  data-testid="button-start-chat"
-                  className="bg-primary hover:bg-blue-700 text-white font-semibold py-4 px-8 rounded-xl transition-all transform hover:scale-105 text-lg"
-                >
-                  Commencer avec Peter
-                </Button>
-                <p className="text-sm text-gray-500 mt-4">
-                  Session d'apprentissage : 20-30 minutes
-                </p>
+              <h2 className="text-3xl font-bold text-gray-900 mb-4">
+                Rencontrez Peter, votre guide écologique
+              </h2>
+              <p className="text-lg text-gray-600 mb-8">
+                Explorez les dilemmes du plastique à travers des scénarios interactifs. 
+                Peter vous accompagne pour comprendre les enjeux environnementaux, économiques et sociaux.
+              </p>
+            </div>
+            
+            <div className="mb-8">
+              <Button
+                size="lg"
+                onClick={handleStartChat}
+                data-testid="button-start-chat"
+                className="bg-primary hover:bg-blue-700 text-white font-semibold py-4 px-8 rounded-xl transition-all transform hover:scale-105 text-lg"
+              >
+                Commencer avec Peter
+              </Button>
+              <p className="text-sm text-gray-500 mt-4">
+                Session d'apprentissage : 20-30 minutes
+              </p>
+            </div>
+            
+            <div className="grid grid-cols-3 gap-6 text-sm text-gray-600">
+              <div className="flex flex-col items-center">
+                <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-2">
+                  <Lightbulb className="w-6 h-6 text-green-600" />
+                </div>
+                <div className="font-medium">Scénarios réels</div>
+                <div>Cas concrets du quotidien</div>
               </div>
-              
-              <div className="grid grid-cols-3 gap-6 text-sm text-gray-600">
-                <div className="flex flex-col items-center">
-                  <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-2">
-                    <Lightbulb className="w-6 h-6 text-green-600" />
-                  </div>
-                  <div className="font-medium">Scénarios réels</div>
-                  <div>Cas concrets du quotidien</div>
+              <div className="flex flex-col items-center">
+                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-2">
+                  <Video className="w-6 h-6 text-blue-600" />
                 </div>
-                <div className="flex flex-col items-center">
-                  <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-2">
-                    <Video className="w-6 h-6 text-blue-600" />
-                  </div>
-                  <div className="font-medium">Contenu multimédia</div>
-                  <div>Vidéos et ressources</div>
+                <div className="font-medium">Contenu multimédia</div>
+                <div>Vidéos et ressources</div>
+              </div>
+              <div className="flex flex-col items-center">
+                <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mb-2">
+                  <CheckCircle className="w-6 h-6 text-purple-600" />
                 </div>
-                <div className="flex flex-col items-center">
-                  <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mb-2">
-                    <CheckCircle className="w-6 h-6 text-purple-600" />
-                  </div>
-                  <div className="font-medium">Actions concrètes</div>
-                  <div>Solutions applicables</div>
-                </div>
+                <div className="font-medium">Actions concrètes</div>
+                <div>Solutions applicables</div>
               </div>
             </div>
           </div>
-        ) : (
-          /* Chat Interface */
-          <ChatInterface
-            messages={messages}
-            onSendMessage={sendMessage}
-            onVideoClick={handleVideoClick}
-            onLinkClick={handleLinkClick}
-            onToggleMediaPanel={openMediaPanel}
-            isLoading={isLoading}
-            messageCount={messages.length}
-          />
-        )}
-      </div>
+        </div>
+      ) : (
+        /* Chat Interface - Split Layout */
+        <>
+          {/* Left Side - Chat (1/3 width) */}
+          <div className="w-1/3 flex flex-col bg-white border-r border-gray-200">
+            <ChatInterface
+              messages={messages}
+              onSendMessage={sendMessage}
+              onVideoClick={handleVideoClick}
+              onLinkClick={handleLinkClick}
+              onToggleMediaPanel={openMediaPanel}
+              isLoading={isLoading}
+              messageCount={messages.length}
+            />
+          </div>
 
-      {/* Media Panel */}
-      <MediaPanel
-        isOpen={isMediaPanelOpen}
-        activeTab={activeTab}
-        currentVideo={currentVideo}
-        currentWebpage={currentWebpage}
-        onClose={closeMediaPanel}
-        onTabChange={switchTab}
-      />
+          {/* Right Side - Media Panel (2/3 width) - Always Visible */}
+          <div className="w-2/3 bg-gray-50">
+            <MediaPanel
+              isOpen={true}
+              activeTab={activeTab}
+              currentVideo={currentVideo}
+              currentWebpage={currentWebpage}
+              onClose={() => {}} // No close functionality needed since always visible
+              onTabChange={switchTab}
+            />
+          </div>
+        </>
+      )}
     </main>
   );
 }
