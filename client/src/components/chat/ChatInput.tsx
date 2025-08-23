@@ -135,49 +135,29 @@ export function ChatInput({
     };
   }, []);
 
-  const startSpeechRecognition = async () => {
-    if (!recognitionRef.current || isListeningRef.current) return;
+  const toggleSpeechRecognition = () => {
+    if (!recognitionRef.current) return;
     
-    try {
-      // Check microphone permissions first
-      const permission = await navigator.permissions.query({ name: 'microphone' as PermissionName });
-      if (permission.state === 'denied') {
-        alert('Accès au microphone refusé. Veuillez autoriser l\'accès au microphone dans les paramètres de votre navigateur.');
-        return;
+    if (isListeningRef.current) {
+      // Stop recognition
+      try {
+        recognitionRef.current.stop();
+      } catch (error) {
+        console.error('Failed to stop speech recognition:', error);
       }
-      
-      // Store current message before starting recognition
-      messageBeforeRecognitionRef.current = message;
-      
-      // Add small delay to ensure clean state
-      setTimeout(() => {
-        if (recognitionRef.current && !isListeningRef.current) {
-          recognitionRef.current.start();
-        }
-      }, 100);
-      
-    } catch (error) {
-      console.error('Failed to start speech recognition:', error);
-      setIsListening(false);
-      isListeningRef.current = false;
+    } else {
+      // Start recognition
+      try {
+        messageBeforeRecognitionRef.current = message;
+        recognitionRef.current.start();
+      } catch (error) {
+        console.error('Failed to start speech recognition:', error);
+        setIsListening(false);
+        isListeningRef.current = false;
+      }
     }
   };
 
-  const stopSpeechRecognition = () => {
-    if (!recognitionRef.current) return;
-    
-    try {
-      if (isListeningRef.current) {
-        recognitionRef.current.stop();
-      }
-    } catch (error) {
-      console.error('Failed to stop speech recognition:', error);
-    }
-    
-    // Ensure state is updated regardless
-    setIsListening(false);
-    isListeningRef.current = false;
-  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -213,11 +193,7 @@ export function ChatInput({
             <Button
               type="button"
               size="sm"
-              onMouseDown={startSpeechRecognition}
-              onMouseUp={stopSpeechRecognition}
-              onMouseLeave={stopSpeechRecognition}
-              onTouchStart={startSpeechRecognition}
-              onTouchEnd={stopSpeechRecognition}
+              onClick={toggleSpeechRecognition}
               disabled={disabled}
               data-testid="button-speech-recognition"
               className={`absolute right-10 top-1/2 transform -translate-y-1/2 h-8 w-8 p-0 select-none ${
@@ -225,7 +201,7 @@ export function ChatInput({
                   ? "bg-red-500 hover:bg-red-600 text-white animate-pulse" 
                   : "bg-blue-500 hover:bg-blue-600 text-white"
               }`}
-              aria-label={isListening ? "Relâchez pour arrêter l'enregistrement" : "Maintenez enfoncé pour parler"}
+              aria-label={isListening ? "Cliquez pour arrêter l'enregistrement" : "Cliquez pour commencer l'enregistrement vocal"}
             >
               {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
             </Button>
@@ -248,7 +224,7 @@ export function ChatInput({
           <>
             {" • "}
             <span className={isListening ? "text-red-600 font-medium" : ""}>
-              {isListening ? "🎤 Écoute en cours... (relâchez pour arrêter)" : "🎤 Maintenez enfoncé pour parler (HTTPS requis)"}
+              {isListening ? "🎤 Écoute en cours... (cliquez pour arrêter)" : "🎤 Cliquez pour activer la reconnaissance vocale"}
             </span>
           </>
         )}
