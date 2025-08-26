@@ -69,6 +69,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`[Flowise] Response status: ${response.status}`);
       // Log response status only, not content for privacy
       console.log(`[Flowise] Response received: ${response.status}, length: ${responseText.length} chars`);
+      
+      // DEBUG: Log first part of response to see format
+      console.log(`[DEBUG] Response preview:`, responseText.substring(0, 1000));
 
       if (!response.ok) {
         throw new Error(`Flowise API error: ${response.status} ${response.statusText} - ${responseText}`);
