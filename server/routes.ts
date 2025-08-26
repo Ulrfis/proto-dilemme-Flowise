@@ -19,6 +19,97 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Web content proxy endpoint to bypass CORS and X-Frame-Options
+  app.get("/api/proxy", async (req, res) => {
+    try {
+      const { url } = req.query;
+      
+      if (!url || typeof url !== 'string') {
+        return res.status(400).json({ error: "URL parameter is required" });
+      }
+
+      // Validate URL format
+      try {
+        new URL(url);
+      } catch {
+        return res.status(400).json({ error: "Invalid URL format" });
+      }
+
+      console.log(`[Proxy] Fetching: ${url}`);
+
+      // Enhanced headers to maximize compatibility
+      const headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'DNT': '1',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Cache-Control': 'max-age=0'
+      };
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers,
+        redirect: 'follow'
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      let content = await response.text();
+      
+      // Remove X-Frame-Options and CSP headers that block embedding
+      const contentType = response.headers.get('content-type') || 'text/html';
+      
+      // Inject base tag and modify content for iframe compatibility
+      if (contentType.includes('text/html')) {
+        const baseUrl = new URL(url).origin;
+        
+        // Add base tag for relative URLs
+        content = content.replace(
+          /<head[^>]*>/i,
+          `<head><base href="${baseUrl}/">`
+        );
+        
+        // Remove frame-busting scripts
+        content = content.replace(
+          /(if\s*\(\s*top\s*[!=]==?\s*self\s*\)|if\s*\(\s*self\s*[!=]==?\s*top\s*\)|if\s*\(\s*window\s*[!=]==?\s*top\s*\)|if\s*\(\s*top\s*\.location\s*[!=]==?\s*self\s*\.location\s*\))[^}]*}/gi,
+          ''
+        );
+        
+        // Remove X-Frame-Options meta tags
+        content = content.replace(
+          /<meta[^>]*http-equiv\s*=\s*["\']?x-frame-options["\']?[^>]*>/gi,
+          ''
+        );
+      }
+
+      // Set permissive headers
+      res.set({
+        'Content-Type': contentType,
+        'Cache-Control': 'public, max-age=300',
+        'X-Frame-Options': 'ALLOWALL',
+        'Content-Security-Policy': 'frame-ancestors *;',
+        'X-Content-Type-Options': 'nosniff'
+      });
+
+      res.send(content);
+      
+    } catch (error) {
+      console.error("[Proxy] Error:", error);
+      res.status(500).json({ 
+        error: "Failed to proxy content",
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
   // Flowise proxy endpoint for secure API calls
   app.post("/api/flowise/prediction/:chatflowId", async (req, res) => {
     try {
@@ -70,8 +161,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Log response status only, not content for privacy
       console.log(`[Flowise] Response received: ${response.status}, length: ${responseText.length} chars`);
       
-      // DEBUG: Log first part of response to see format
-      console.log(`[DEBUG] Response preview:`, responseText.substring(0, 1000));
 
       if (!response.ok) {
         throw new Error(`Flowise API error: ${response.status} ${response.statusText} - ${responseText}`);
