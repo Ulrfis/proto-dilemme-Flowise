@@ -70,74 +70,60 @@ function parseFlowiseResponse(response: any): ParsedFlowiseResponse {
     const jsonMatch = targetText.match(/\{[\s\S]*\}/);
     
     if (jsonMatch) {
-      console.log('[Flowise] Found JSON pattern in text');
-      try {
-        // Try to fix malformed JSON by properly escaping quotes
-        let jsonString = jsonMatch[0];
-        
-        console.log('[Flowise] Original JSON string:', jsonString.substring(0, 300));
-        
-        // More robust JSON fixing approach
-        const lines = jsonString.split('\n');
-        const fixedLines = lines.map(line => {
-          // Check if this line contains a JSON value (has a colon)
-          if (line.includes(':') && line.includes('"')) {
-            // Look for pattern: "key": "value with "quotes" inside"
-            const colonIndex = line.indexOf(':');
-            const beforeColon = line.substring(0, colonIndex + 1);
-            const afterColon = line.substring(colonIndex + 1).trim();
-            
-            // If the value part starts and ends with quotes but has unescaped quotes inside
-            if (afterColon.startsWith('"') && afterColon.endsWith('"') || afterColon.endsWith('",')) {
-              const isLastProperty = afterColon.endsWith(',');
-              const valueContent = isLastProperty ? afterColon.slice(1, -2) : afterColon.slice(1, -1);
-              
-              // Escape internal quotes
-              const escapedContent = valueContent.replace(/"/g, '\\"');
-              const suffix = isLastProperty ? '",' : '"';
-              
-              return beforeColon + ' "' + escapedContent + suffix;
-            }
-          }
-          return line;
-        });
-        
-        const fixedJson = fixedLines.join('\n');
-        console.log('[Flowise] Fixed JSON string:', fixedJson.substring(0, 300));
-        
-        const parsed = JSON.parse(fixedJson);
-        console.log('[Flowise] Successfully parsed fixed JSON:', Object.keys(parsed));
-        
+      console.log('[Flowise] Found JSON pattern in text, using regex extraction instead of JSON parsing');
+      
+      // Use regex to extract data instead of trying to parse malformed JSON
+      const jsonString = jsonMatch[0];
+      console.log('[Flowise] JSON content first 500 chars:', jsonString.substring(0, 500));
+      
+      // Extract Response field - using multiline approach instead of 's' flag
+      const responseMatch = jsonString.match(/"Response":\s*"([\s\S]*?)"/);
+      const themeMatch = jsonString.match(/"theme":\s*"([\s\S]*?)"/);
+      const indicesMatch = jsonString.match(/"nombre_d_indices":\s*"?([^",}]+)"?/);
+      const scoreMatch = jsonString.match(/"score_globale":\s*"?([^",}]+)"?/);
+      
+      console.log('[Flowise] Regex extraction results:');
+      console.log('- Response found:', !!responseMatch);
+      console.log('- Theme found:', !!themeMatch);
+      console.log('- Indices found:', !!indicesMatch);
+      console.log('- Score found:', !!scoreMatch);
+      
+      if (responseMatch || themeMatch || indicesMatch || scoreMatch) {
         const result: ParsedFlowiseResponse = {
-          displayText: parsed.Response || targetText,
+          displayText: responseMatch ? responseMatch[1] : targetText,
         };
         
         // Extract info panel data if available
         const infoData: InfoPanelData = {};
         let hasInfoData = false;
         
-        if (parsed.theme !== undefined) {
-          infoData.theme = parsed.theme;
+        if (themeMatch) {
+          infoData.theme = themeMatch[1];
           hasInfoData = true;
+          console.log('[Flowise] Extracted theme:', themeMatch[1]);
         }
         
-        if (parsed.nombre_d_indices !== undefined) {
-          infoData.nombre_d_indices = parsed.nombre_d_indices;
+        if (indicesMatch) {
+          infoData.nombre_d_indices = indicesMatch[1].replace(/"/g, ''); // Remove any remaining quotes
           hasInfoData = true;
+          console.log('[Flowise] Extracted indices:', indicesMatch[1]);
         }
         
-        if (parsed.score_globale !== undefined) {
-          infoData.score_globale = parsed.score_globale;
+        if (scoreMatch) {
+          infoData.score_globale = scoreMatch[1].replace(/"/g, ''); // Remove any remaining quotes
           hasInfoData = true;
+          console.log('[Flowise] Extracted score:', scoreMatch[1]);
         }
         
         if (hasInfoData) {
+          console.log('[Flowise] Returning extracted info data:', infoData);
           result.infoData = infoData;
         }
         
+        console.log('[Flowise] Using regex-extracted response:', result.displayText.substring(0, 100) + '...');
         return result;
-      } catch (error) {
-        console.log('[Flowise] Failed to parse JSON from text field:', error);
+      } else {
+        console.log('[Flowise] No regex matches found');
       }
     }
   }
