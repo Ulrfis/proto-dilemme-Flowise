@@ -10,7 +10,7 @@ interface WebViewProps {
 export function WebView({ webpage }: WebViewProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [mode, setMode] = useState<'iframe' | 'proxy' | 'fallback'>('iframe');
+  const [mode, setMode] = useState<'proxy' | 'fallback'>('proxy');
   const [retryCount, setRetryCount] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const timeoutRef = useRef<NodeJS.Timeout>();
@@ -26,13 +26,11 @@ export function WebView({ webpage }: WebViewProps) {
     setError(false);
     setRetryCount(prev => prev + 1);
     
-    // Try different modes on retry
+    // Only try fallback mode on retry
     if (retryCount === 0) {
-      setMode('proxy');
-    } else if (retryCount === 1) {
       setMode('fallback');
     } else {
-      setMode('iframe');
+      setMode('proxy');
       setRetryCount(0);
     }
   };
@@ -42,17 +40,17 @@ export function WebView({ webpage }: WebViewProps) {
     if (webpage) {
       setLoading(true);
       setError(false);
-      setMode('iframe');
+      setMode('proxy');
       setRetryCount(0);
       
       // Set timeout to detect loading failures
       timeoutRef.current = setTimeout(() => {
         if (loading) {
-          console.log('[WebView] Loading timeout, switching to proxy mode');
-          setMode('proxy');
+          console.log('[WebView] Loading timeout, trying fallback mode');
+          setMode('fallback');
           setRetryCount(1);
         }
-      }, 10000);
+      }, 15000);
     }
     
     return () => {
@@ -71,10 +69,10 @@ export function WebView({ webpage }: WebViewProps) {
   };
 
   const handleIframeError = () => {
-    console.log('[WebView] Iframe failed, trying proxy mode');
+    console.log('[WebView] Proxy failed, trying fallback mode');
     setLoading(false);
     setError(true);
-    setMode('proxy');
+    setMode('fallback');
   };
 
   if (!webpage) {
@@ -109,12 +107,8 @@ export function WebView({ webpage }: WebViewProps) {
   };
 
   const getSandboxAttributes = () => {
-    switch (mode) {
-      case 'iframe':
-        return "allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-orientation-lock allow-pointer-lock allow-presentation allow-top-navigation allow-top-navigation-by-user-activation";
-      default:
-        return "allow-scripts allow-same-origin allow-forms allow-popups allow-modals";
-    }
+    // Use safer sandbox attributes for proxy mode
+    return "allow-scripts allow-same-origin allow-forms allow-popups allow-modals";
   };
 
   return (
