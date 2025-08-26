@@ -1,25 +1,11 @@
-import { Globe, RotateCcw, Info } from "lucide-react";
+import { Globe, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface HeaderProps {
   onAboutClick: () => void;
-  onResetSession: () => void;
-  messageCount: number;
 }
 
-export function Header({ onAboutClick, onResetSession, messageCount }: HeaderProps) {
-  const handleReset = () => {
-    if (messageCount > 0) {
-      const confirmed = window.confirm(
-        'Êtes-vous sûr de vouloir recommencer une nouvelle session ? Toute la conversation sera perdue.'
-      );
-      if (confirmed) {
-        onResetSession();
-      }
-    } else {
-      onResetSession();
-    }
-  };
+export function Header({ onAboutClick }: HeaderProps) {
 
   return (
     <header className="bg-white border-b border-gray-200 px-6 py-4">
@@ -43,15 +29,6 @@ export function Header({ onAboutClick, onResetSession, messageCount }: HeaderPro
           >
             <Info className="w-4 h-4 mr-2" />
             À propos
-          </Button>
-          <Button
-            variant="outline"
-            onClick={handleReset}
-            data-testid="button-reset-session"
-            className="text-gray-700 hover:bg-gray-50 font-medium"
-          >
-            <RotateCcw className="w-4 h-4 mr-2" />
-            Nouvelle session
           </Button>
         </nav>
       </div>
