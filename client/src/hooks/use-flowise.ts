@@ -16,10 +16,21 @@ interface ParsedFlowiseResponse {
 
 function parseFlowiseResponse(responseText: string): ParsedFlowiseResponse {
   console.log('[Flowise] Parsing response, length:', responseText.length);
+  console.log('[Flowise] First 200 chars:', responseText.substring(0, 200));
+  
+  // Try to extract JSON from response if it's embedded in text
+  let jsonString = responseText;
+  
+  // Look for JSON patterns (starting with { and ending with })
+  const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    jsonString = jsonMatch[0];
+    console.log('[Flowise] Found JSON pattern, extracted:', jsonString.substring(0, 200));
+  }
   
   try {
     // Try to parse as JSON
-    const parsed = JSON.parse(responseText);
+    const parsed = JSON.parse(jsonString);
     console.log('[Flowise] Successfully parsed JSON:', Object.keys(parsed));
     
     // If it's a valid JSON with our expected structure
@@ -62,10 +73,11 @@ function parseFlowiseResponse(responseText: string): ParsedFlowiseResponse {
       return result;
     }
   } catch (error) {
-    console.log('[Flowise] Not valid JSON, treating as plain text');
+    console.log('[Flowise] JSON parsing failed:', error);
   }
   
   // Return as plain text
+  console.log('[Flowise] Treating as plain text');
   return {
     displayText: responseText,
   };

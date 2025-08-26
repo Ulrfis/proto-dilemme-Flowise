@@ -160,6 +160,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`[Flowise] Response status: ${response.status}`);
       // Log response status only, not content for privacy
       console.log(`[Flowise] Response received: ${response.status}, length: ${responseText.length} chars`);
+      console.log('[Flowise] Raw response first 1000 chars:', responseText.substring(0, 1000));
+      console.log('[Flowise] Raw response last 500 chars:', responseText.substring(responseText.length - 500));
       
 
       if (!response.ok) {
