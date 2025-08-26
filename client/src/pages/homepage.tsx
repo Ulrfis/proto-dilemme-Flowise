@@ -7,8 +7,15 @@ import { useFlowise } from "../hooks/use-flowise";
 import { useMediaPanel } from "../hooks/use-media-panel";
 import { analytics } from "../lib/analytics";
 
+interface InfoPanelData {
+  theme?: string;
+  nombre_d_indices?: string;
+  score_globale?: string | number;
+}
+
 export default function Homepage() {
   const [showChat, setShowChat] = useState(false);
+  const [infoData, setInfoData] = useState<InfoPanelData | null>(null);
   
   // Get Flowise config from environment variables
   const chatflowId = import.meta.env.VITE_FLOWISE_CHATFLOW_ID || import.meta.env.FLOWISE_CHATFLOW_ID;
@@ -156,6 +163,7 @@ export default function Homepage() {
               activeTab={activeTab}
               currentVideo={currentVideo}
               currentWebpage={currentWebpage}
+              infoData={infoData}
               onClose={() => {}} // No close functionality needed since always visible
               onTabChange={switchTab}
             />

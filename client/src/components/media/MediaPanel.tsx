@@ -3,14 +3,22 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { X } from "lucide-react";
 import { VideoPlayer } from "./VideoPlayer";
 import { WebView } from "./WebView";
+import { InfoPanel } from "./InfoPanel";
 import { MediaItem } from "../../types/chat";
 import { cn } from "@/lib/utils";
+
+interface InfoPanelData {
+  theme?: string;
+  nombre_d_indices?: string;
+  score_globale?: string | number;
+}
 
 interface MediaPanelProps {
   isOpen: boolean;
   activeTab: 'video' | 'web';
   currentVideo: MediaItem | null;
   currentWebpage: MediaItem | null;
+  infoData?: InfoPanelData | null;
   onClose: () => void;
   onTabChange: (tab: 'video' | 'web') => void;
 }
@@ -20,6 +28,7 @@ export function MediaPanel({
   activeTab,
   currentVideo,
   currentWebpage,
+  infoData,
   onClose,
   onTabChange,
 }: MediaPanelProps) {
@@ -29,6 +38,11 @@ export function MediaPanel({
 
   return (
     <div className="w-full h-full bg-white flex flex-col">
+      {/* Info Panel - Above header */}
+      <div className="pt-6">
+        <InfoPanel data={infoData} />
+      </div>
+
       {/* Header */}
       <div className="border-b border-gray-200 p-6">
         <div className="flex items-center justify-between">
