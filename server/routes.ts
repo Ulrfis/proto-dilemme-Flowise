@@ -1,8 +1,104 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { analyticsEventSchema } from "@shared/schema";
+import OpenAI from "openai";
+import multer from "multer";
+import fs from "fs/promises";
+import { createReadStream } from "fs";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  
+  // Initialize OpenAI for Whisper API
+  const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+
+  // Configure multer for audio file uploads
+  const upload = multer({
+    dest: '/tmp/',
+    limits: {
+      fileSize: 25 * 1024 * 1024, // 25MB limit for audio files
+    },
+    fileFilter: (req, file, cb) => {
+      // Accept audio files
+      if (file.mimetype.startsWith('audio/')) {
+        cb(null, true);
+      } else {
+        cb(new Error('Only audio files are allowed'));
+      }
+    },
+  });
+
+  // Speech-to-text endpoint using OpenAI Whisper
+  app.post("/api/transcribe", upload.single('audio'), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No audio file provided" });
+      }
+
+      console.log(`[Whisper] Processing audio file: ${req.file.originalname}, size: ${req.file.size} bytes`);
+
+      // Create a readable stream for OpenAI
+      const audioStream = await fs.readFile(req.file.path);
+      const audioBuffer = Buffer.from(audioStream);
+
+      // Create a temporary file with the correct extension
+      const tempFile = {
+        name: req.file.originalname || 'audio.webm',
+        buffer: audioBuffer,
+      };
+
+      // Save buffer to file for OpenAI API
+      const tempPath = `/tmp/audio_${Date.now()}.webm`;
+      await fs.writeFile(tempPath, audioBuffer);
+
+      try {
+        // the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
+        const transcription = await openai.audio.transcriptions.create({
+          file: createReadStream(tempPath),
+          model: "whisper-1",
+          language: "fr", // French language
+          response_format: "json",
+        });
+
+        console.log(`[Whisper] Transcription successful: "${transcription.text.substring(0, 100)}..."`);
+
+        // Clean up temporary files
+        await fs.unlink(req.file.path).catch(err => console.warn('Failed to delete temp file:', err));
+        await fs.unlink(tempPath).catch(err => console.warn('Failed to delete processed file:', err));
+
+        res.json({
+          text: transcription.text,
+          language: 'fr',
+        });
+
+      } catch (openaiError) {
+        console.error('[Whisper] OpenAI API error:', openaiError);
+        
+        // Clean up files on error
+        await fs.unlink(req.file.path).catch(() => {});
+        await fs.unlink(tempPath).catch(() => {});
+        
+        res.status(500).json({
+          error: "Erreur lors de la transcription audio",
+          details: "Le service de reconnaissance vocale a rencontré un problème"
+        });
+      }
+
+    } catch (error) {
+      console.error("[Whisper] Transcription error:", error);
+      
+      // Clean up file if it exists
+      if (req.file) {
+        await fs.unlink(req.file.path).catch(() => {});
+      }
+      
+      res.status(500).json({
+        error: "Erreur lors du traitement audio",
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
   
   // Analytics endpoint for anonymous event tracking
   app.post("/api/analytics", async (req, res) => {

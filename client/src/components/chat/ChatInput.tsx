@@ -1,15 +1,7 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Send, Mic, MicOff } from "lucide-react";
-
-// Type declarations for speech recognition
-declare global {
-  interface Window {
-    SpeechRecognition: any;
-    webkitSpeechRecognition: any;
-  }
-}
+import { Send, Mic, MicOff, Loader2 } from "lucide-react";
 
 interface ChatInputProps {
   onSendMessage: (message: string) => void;
@@ -23,145 +15,169 @@ export function ChatInput({
   placeholder = "Tapez votre message..."
 }: ChatInputProps) {
   const [message, setMessage] = useState("");
-  const [isListening, setIsListening] = useState(false);
-  const [speechSupported, setSpeechSupported] = useState(false);
-  const recognitionRef = useRef<any>(null);
-  const messageBeforeRecognitionRef = useRef<string>("");
-  const isListeningRef = useRef<boolean>(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [recordingSupported, setRecordingSupported] = useState(true);
+  
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
 
-  // Initialize speech recognition once
-  useEffect(() => {
-    const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
-    
-    // Check if running in a secure context (HTTPS or localhost)
-    const isSecureContext = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-    
-    if (SpeechRecognition && isSecureContext) {
-      try {
-        const recognition = new SpeechRecognition();
-        
-        // More conservative settings for better reliability
-        recognition.continuous = false;
-        recognition.interimResults = false; // Disable interim results to reduce network calls
-        recognition.lang = 'fr-FR';
-        recognition.maxAlternatives = 1;
-        
-        // Test if we can create the recognition object
-        recognition.onstart = () => {
-          console.log('Speech recognition started successfully');
-          setIsListening(true);
-          isListeningRef.current = true;
-        };
-        
-        recognition.onresult = (event: any) => {
-          let finalTranscript = '';
-          
-          for (let i = 0; i < event.results.length; i++) {
-            if (event.results[i].isFinal) {
-              finalTranscript += event.results[i][0].transcript;
-            }
-          }
-          
-          if (finalTranscript) {
-            // Update message with transcription
-            const newMessage = messageBeforeRecognitionRef.current + finalTranscript;
-            setMessage(newMessage);
-          }
-        };
-        
-        recognition.onerror = (event: any) => {
-          console.error('Speech recognition error:', event.error);
-          
-          let errorMessage = '';
-          switch (event.error) {
-            case 'not-allowed':
-              errorMessage = 'Accès au microphone refusé. Veuillez autoriser l\'accès au microphone dans les paramètres de votre navigateur.';
-              break;
-            case 'network':
-              errorMessage = 'Erreur réseau. Veuillez vérifier votre connexion internet.';
-              break;
-            case 'no-speech':
-              errorMessage = 'Aucune parole détectée. Essayez de parler plus près du microphone.';
-              break;
-            case 'audio-capture':
-              errorMessage = 'Aucun microphone trouvé. Veuillez vérifier que votre microphone est connecté.';
-              break;
-            case 'service-not-allowed':
-              errorMessage = 'Service de reconnaissance vocale non autorisé.';
-              break;
-            default:
-              errorMessage = `Erreur de reconnaissance vocale: ${event.error}`;
-          }
-          
-          // Show user-friendly error message
-          setTimeout(() => {
-            alert(errorMessage);
-          }, 100);
-          
-          setIsListening(false);
-          isListeningRef.current = false;
-        };
-        
-        recognition.onend = () => {
-          console.log('Speech recognition ended');
-          setIsListening(false);
-          isListeningRef.current = false;
-        };
-        
-        // Test the recognition object
-        recognitionRef.current = recognition;
-        setSpeechSupported(true);
-        
-      } catch (error) {
-        console.error('Failed to initialize speech recognition:', error);
-        setSpeechSupported(false);
-      }
-    } else {
-      console.warn('Speech recognition not supported or not in secure context');
-      if (!isSecureContext) {
-        console.warn('Speech recognition requires HTTPS or localhost');
-      }
-      setSpeechSupported(false);
-    }
-    
-    return () => {
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.abort();
-        } catch (e) {
-          console.warn('Error aborting speech recognition:', e);
+  // Audio recording functions
+  const startRecording = useCallback(async () => {
+    try {
+      console.log('[Audio] Requesting microphone permission...');
+      
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 16000,
+        } 
+      });
+      
+      streamRef.current = stream;
+      audioChunksRef.current = [];
+
+      // Use webm format for better browser compatibility
+      const options = { mimeType: 'audio/webm;codecs=opus' };
+      
+      // Fallback to other formats if webm is not supported
+      if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+        console.warn('[Audio] webm not supported, trying mp4...');
+        if (MediaRecorder.isTypeSupported('audio/mp4')) {
+          options.mimeType = 'audio/mp4';
+        } else if (MediaRecorder.isTypeSupported('audio/wav')) {
+          options.mimeType = 'audio/wav';
+        } else {
+          // Use default format
+          delete (options as any).mimeType;
         }
       }
-    };
-  }, []);
 
-  const toggleSpeechRecognition = () => {
-    if (!recognitionRef.current) return;
-    
-    if (isListeningRef.current) {
-      // Stop recognition
-      try {
-        recognitionRef.current.stop();
-      } catch (error) {
-        console.error('Failed to stop speech recognition:', error);
-      }
-    } else {
-      // Start recognition
-      try {
-        messageBeforeRecognitionRef.current = message;
-        recognitionRef.current.start();
-      } catch (error) {
-        console.error('Failed to start speech recognition:', error);
-        setIsListening(false);
-        isListeningRef.current = false;
+      const mediaRecorder = new MediaRecorder(stream, options);
+      mediaRecorderRef.current = mediaRecorder;
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        console.log('[Audio] Recording stopped, processing...');
+        await processRecording();
+      };
+
+      mediaRecorder.onerror = (event) => {
+        console.error('[Audio] MediaRecorder error:', event);
+        setIsRecording(false);
+        alert('Erreur lors de l\'enregistrement audio');
+      };
+
+      mediaRecorder.start(1000); // Collect data every second
+      setIsRecording(true);
+      console.log('[Audio] Recording started');
+
+    } catch (error) {
+      console.error('[Audio] Failed to start recording:', error);
+      setIsRecording(false);
+      
+      if (error instanceof Error) {
+        if (error.name === 'NotAllowedError') {
+          alert('Accès au microphone refusé. Veuillez autoriser l\'accès dans les paramètres de votre navigateur.');
+        } else if (error.name === 'NotFoundError') {
+          alert('Aucun microphone trouvé. Veuillez vérifier que votre microphone est connecté.');
+        } else {
+          alert('Erreur lors de l\'accès au microphone: ' + error.message);
+        }
       }
     }
-  };
+  }, []);
 
+  const stopRecording = useCallback(() => {
+    console.log('[Audio] Stopping recording...');
+    
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+    
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+  }, [isRecording]);
+
+  const processRecording = useCallback(async () => {
+    if (audioChunksRef.current.length === 0) {
+      console.warn('[Audio] No audio data to process');
+      return;
+    }
+
+    try {
+      setIsTranscribing(true);
+      console.log('[Audio] Creating audio blob...');
+      
+      const audioBlob = new Blob(audioChunksRef.current, { 
+        type: 'audio/webm' 
+      });
+
+      console.log(`[Audio] Audio blob created: ${audioBlob.size} bytes`);
+
+      // Send to backend for transcription
+      const formData = new FormData();
+      formData.append('audio', audioBlob, 'recording.webm');
+
+      console.log('[Audio] Sending to transcription service...');
+      
+      const response = await fetch('/api/transcribe', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.details || 'Erreur de transcription');
+      }
+
+      const result = await response.json();
+      console.log('[Audio] Transcription received:', result.text);
+
+      if (result.text?.trim()) {
+        // Add transcribed text to current message
+        const newMessage = message + (message ? ' ' : '') + result.text.trim();
+        setMessage(newMessage);
+      } else {
+        console.warn('[Audio] Empty transcription result');
+        alert('Aucune parole détectée. Essayez de parler plus fort ou plus près du microphone.');
+      }
+
+    } catch (error) {
+      console.error('[Audio] Transcription error:', error);
+      
+      if (error instanceof Error) {
+        alert('Erreur de transcription: ' + error.message);
+      } else {
+        alert('Erreur lors de la transcription audio');
+      }
+    } finally {
+      setIsTranscribing(false);
+      audioChunksRef.current = [];
+    }
+  }, [message]);
+
+  const toggleRecording = useCallback(() => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  }, [isRecording, startRecording, stopRecording]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (message.trim() && !disabled) {
+    if (message.trim() && !disabled && !isTranscribing) {
       onSendMessage(message.trim());
       setMessage("");
     }
@@ -174,6 +190,13 @@ export function ChatInput({
     }
   };
 
+  // Check if recording is supported
+  const isAudioSupported = typeof navigator !== 'undefined' && 
+    navigator.mediaDevices && 
+    typeof navigator.mediaDevices.getUserMedia === 'function' && 
+    typeof window !== 'undefined' && 
+    typeof window.MediaRecorder === 'function';
+
   return (
     <div className="border-t border-gray-200 p-2">
       <form onSubmit={handleSubmit} className="flex items-center space-x-2">
@@ -184,32 +207,46 @@ export function ChatInput({
             onChange={(e) => setMessage(e.target.value)}
             onKeyPress={handleKeyPress}
             placeholder={placeholder}
-            disabled={disabled}
+            disabled={disabled || isTranscribing}
             data-testid="input-chat-message"
-            className={speechSupported ? "pr-20 h-9" : "pr-12 h-9"}
+            className={isAudioSupported ? "pr-20 h-9" : "pr-12 h-9"}
             aria-label="Message pour Peter"
           />
-          {speechSupported && (
+          {isAudioSupported && (
             <Button
               type="button"
               size="sm"
-              onClick={toggleSpeechRecognition}
-              disabled={disabled}
+              onClick={toggleRecording}
+              disabled={disabled || isTranscribing}
               data-testid="button-speech-recognition"
               className={`absolute right-10 top-1/2 transform -translate-y-1/2 h-7 w-7 p-0 select-none ${
-                isListening 
+                isRecording 
                   ? "bg-red-500 hover:bg-red-600 text-white animate-pulse" 
+                  : isTranscribing
+                  ? "bg-yellow-500 hover:bg-yellow-600 text-white"
                   : "bg-blue-500 hover:bg-blue-600 text-white"
               }`}
-              aria-label={isListening ? "Cliquez pour arrêter l'enregistrement" : "Cliquez pour commencer l'enregistrement vocal"}
+              aria-label={
+                isRecording 
+                  ? "Cliquez pour arrêter l'enregistrement" 
+                  : isTranscribing
+                  ? "Transcription en cours..."
+                  : "Cliquez pour commencer l'enregistrement vocal"
+              }
             >
-              {isListening ? <MicOff className="w-3 h-3" /> : <Mic className="w-3 h-3" />}
+              {isTranscribing ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : isRecording ? (
+                <MicOff className="w-3 h-3" />
+              ) : (
+                <Mic className="w-3 h-3" />
+              )}
             </Button>
           )}
           <Button
             type="submit"
             size="sm"
-            disabled={!message.trim() || disabled}
+            disabled={!message.trim() || disabled || isTranscribing}
             data-testid="button-send-message"
             className="absolute right-2 top-1/2 transform -translate-y-1/2 h-7 w-7 p-0"
             aria-label="Envoyer le message"
@@ -220,11 +257,22 @@ export function ChatInput({
       </form>
       <div className="mt-1 text-xs text-gray-500">
         Entrée pour envoyer
-        {speechSupported && (
+        {isAudioSupported && (
           <>
             {" • "}
-            <span className={isListening ? "text-red-600 font-medium" : ""}>
-              {isListening ? "🎤 Écoute..." : "🎤 Vocal"}
+            <span className={
+              isRecording 
+                ? "text-red-600 font-medium" 
+                : isTranscribing 
+                ? "text-yellow-600 font-medium"
+                : ""
+            }>
+              {isRecording 
+                ? "🎤 Enregistrement..." 
+                : isTranscribing 
+                ? "⚡ Transcription..."
+                : "🎤 Vocal"
+              }
             </span>
           </>
         )}
