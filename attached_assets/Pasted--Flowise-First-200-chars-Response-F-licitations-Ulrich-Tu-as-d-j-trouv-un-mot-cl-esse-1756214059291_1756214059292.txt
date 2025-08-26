@@ -1,0 +1,272 @@
+[Flowise] First 200 chars: {
+
+"Response": "Félicitations, Ulrich ! Tu as déjà trouvé un mot clé essentiel : "plastique". C'est un excellent début ! Maintenant, continuons à explorer pour découvrir d'autres aspects cruciaux liés
+Console.js:61 [Flowise] Found JSON pattern, extracted: {
+
+"Response": "Félicitations, Ulrich ! Tu as déjà trouvé un mot clé essentiel : "plastique". C'est un excellent début ! Maintenant, continuons à explorer pour découvrir d'autres aspects cruciaux liés
+Console.js:61 [Flowise] JSON parsing failed: SyntaxError: Expected ',' or '}' after property value in JSON at position 82 (line 3 column 80)
+    at JSON.parse (<anonymous>)
+    at parseFlowiseResponse (use-flowise.ts:33:25)
+    at use-flowise.ts:109:41
+    at async handleChoiceClick (homepage.tsx:94:5)
+Console.js:61 [Flowise] Treating as plain text
+Console.js:61 [InfoPanel] Rendering with data: null
+_app-da14a1c600524052.js:16  POST https://events.launchdarkly.com/events/bulk/62b35a865152ab14c5942820 net::ERR_BLOCKED_BY_CLIENT
+(anonymous) @ _app-da14a1c600524052.js:16
+(anonymous) @ _app-da14a1c600524052.js:16
+(anonymous) @ _app-da14a1c600524052.js:40
+(anonymous) @ _app-da14a1c600524052.js:40
+(anonymous) @ _app-da14a1c600524052.js:40
+t @ _app-da14a1c600524052.js:40
+(anonymous) @ _app-da14a1c600524052.js:40
+(anonymous) @ _app-da14a1c600524052.js:40
+(anonymous) @ _app-da14a1c600524052.js:40
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+_app-da14a1c600524052.js:16  POST https://events.launchdarkly.com/events/bulk/62b35a865152ab14c5942820 net::ERR_BLOCKED_BY_CLIENT
+(anonymous) @ _app-da14a1c600524052.js:16
+(anonymous) @ _app-da14a1c600524052.js:16
+(anonymous) @ _app-da14a1c600524052.js:40
+(anonymous) @ _app-da14a1c600524052.js:40
+(anonymous) @ _app-da14a1c600524052.js:40
+t @ _app-da14a1c600524052.js:40
+(anonymous) @ _app-da14a1c600524052.js:40
+Promise.catch
+t @ _app-da14a1c600524052.js:40
+(anonymous) @ _app-da14a1c600524052.js:40
+(anonymous) @ _app-da14a1c600524052.js:40
+(anonymous) @ _app-da14a1c600524052.js:40
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16
+setTimeout
+(anonymous) @ _app-da14a1c600524052.js:16
+e @ _app-da14a1c600524052.js:40
+n @ _app-da14a1c600524052.js:16

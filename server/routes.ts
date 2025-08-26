@@ -171,6 +171,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let data;
       try {
         data = JSON.parse(responseText);
+        console.log('[Flowise] Parsed response keys:', Object.keys(data));
+        
+        // The response might have a 'text' field containing the actual message
+        if (data.text) {
+          console.log('[Flowise] Found text field, first 500 chars:', data.text.substring(0, 500));
+          
+          // Try to parse the text field as JSON
+          try {
+            const parsedText = JSON.parse(data.text);
+            console.log('[Flowise] Text field is JSON with keys:', Object.keys(parsedText));
+            // Replace the text with the parsed JSON
+            data.parsedContent = parsedText;
+          } catch (textParseError) {
+            console.log('[Flowise] Text field is not JSON, keeping as is');
+          }
+        }
       } catch (parseError) {
         console.error("Failed to parse Flowise response:", parseError);
         throw new Error("Invalid JSON response from Flowise");
