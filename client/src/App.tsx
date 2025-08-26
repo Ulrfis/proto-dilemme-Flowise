@@ -13,24 +13,16 @@ import { analytics } from "./lib/analytics";
 
 function Router() {
   const [showAbout, setShowAbout] = useState(false);
-  const [messageCount, setMessageCount] = useState(0);
 
   useEffect(() => {
     analytics.trackPageView('homepage');
   }, []);
-
-  const handleResetSession = () => {
-    setMessageCount(0);
-    analytics.trackSessionReset();
-  };
 
   return (
     <DesktopValidator>
       <div className="h-full flex flex-col">
         <Header 
           onAboutClick={() => setShowAbout(true)}
-          onResetSession={handleResetSession}
-          messageCount={messageCount}
         />
         
         <Switch>
