@@ -20,13 +20,27 @@ export default function Homepage() {
   // Get Flowise config from environment variables
   const chatflowId = import.meta.env.VITE_FLOWISE_CHATFLOW_ID || import.meta.env.FLOWISE_CHATFLOW_ID;
   
+  // Callback to update info panel data from Flowise responses
+  const handleInfoDataUpdate = (newData: InfoPanelData | null) => {
+    if (!newData) return; // Skip if null
+    
+    setInfoData(prevData => {
+      // Merge with existing data (keep previous values if new ones are not provided)
+      return {
+        theme: newData.theme !== undefined ? newData.theme : prevData?.theme,
+        nombre_d_indices: newData.nombre_d_indices !== undefined ? newData.nombre_d_indices : prevData?.nombre_d_indices,
+        score_globale: newData.score_globale !== undefined ? newData.score_globale : prevData?.score_globale,
+      };
+    });
+  };
+
   const {
     messages,
     isLoading,
     sendMessage,
     resetSession,
     initializeChat,
-  } = useFlowise(chatflowId);
+  } = useFlowise(chatflowId, handleInfoDataUpdate);
 
   const {
     isOpen: isMediaPanelOpen,
