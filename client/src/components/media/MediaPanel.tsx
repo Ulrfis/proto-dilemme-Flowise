@@ -38,25 +38,15 @@ export function MediaPanel({
 
   return (
     <div className="w-full h-full bg-white flex flex-col">
-      {/* Info Panel - Above header */}
-      <div className="pt-6">
+      {/* Info Panel - Compact */}
+      <div className="pt-3">
         <InfoPanel data={infoData} />
       </div>
 
-      {/* Header */}
-      <div className="border-b border-gray-200 p-6">
-        <div className="flex items-center justify-between">
-          <h3 className="text-xl font-semibold text-gray-900">Ressources multimédias</h3>
-          <div className="text-sm text-gray-500">
-            Vidéos et articles partagés par Peter
-          </div>
-        </div>
-      </div>
-
-      {/* Content */}
+      {/* Content - Direct tabs without header */}
       <div className="flex-1 overflow-hidden">
         <Tabs value={activeTab} onValueChange={(value) => onTabChange(value as 'video' | 'web')} className="h-full flex flex-col">
-          <TabsList className="grid w-full grid-cols-2 mx-6 mt-4 mb-0">
+          <TabsList className="grid w-full grid-cols-2 mx-4 mt-2 mb-0">
             <TabsTrigger value="video" data-testid="tab-video" className="text-base font-medium">
               📹 Vidéos
             </TabsTrigger>
@@ -65,11 +55,11 @@ export function MediaPanel({
             </TabsTrigger>
           </TabsList>
           
-          <TabsContent value="video" className="flex-1 overflow-y-auto m-0 p-6">
+          <TabsContent value="video" className="flex-1 overflow-y-auto m-0 p-4">
             <VideoPlayer video={currentVideo} />
           </TabsContent>
           
-          <TabsContent value="web" className="flex-1 overflow-y-auto m-0 p-6">
+          <TabsContent value="web" className="flex-1 overflow-y-auto m-0 p-4">
             <WebView webpage={currentWebpage} />
           </TabsContent>
         </Tabs>

@@ -82,26 +82,26 @@ export function ChatInterface({
 
   return (
     <div className="h-full flex flex-col">
-      {/* Chat Header - Fixed */}
-      <div className="bg-gray-50 border-b border-gray-200 p-4 flex-shrink-0">
+      {/* Chat Header - Compact */}
+      <div className="bg-gray-50 border-b border-gray-200 p-2 flex-shrink-0">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
-              <span className="text-white font-semibold">P</span>
+          <div className="flex items-center space-x-2">
+            <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
+              <span className="text-white text-sm font-semibold">P</span>
             </div>
             <div>
-              <div className="font-semibold text-gray-900">Peter</div>
-              <div className="text-sm text-green-600">En ligne • Assistant écologique</div>
+              <div className="text-sm font-semibold text-gray-900">Peter</div>
+              <div className="text-xs text-green-600">Assistant écologique</div>
             </div>
           </div>
-          <div className="text-sm text-gray-500" data-testid="text-message-count">
-            <span>{messageCount}</span> messages
+          <div className="text-xs text-gray-500" data-testid="text-message-count">
+            <span>{messageCount}</span> msgs
           </div>
         </div>
       </div>
       
       {/* Chat Messages - Scrollable */}
-      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 chat-messages">
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-3 space-y-3 chat-messages">
         {messages.map((message) => (
           <ChatMessage
             key={message.id}
@@ -136,26 +136,26 @@ export function ChatInterface({
           placeholder="Tapez votre message..."
         />
         
-        {/* Copy Conversation Button */}
-        <div className="px-4 pb-4 flex justify-center">
+        {/* Copy Conversation Button - Compact */}
+        <div className="px-2 pb-2 flex justify-center">
           <Button
             variant="ghost"
             size="sm"
             onClick={copyConversationToClipboard}
             disabled={messages.length === 0}
             data-testid="button-copy-conversation"
-            className="text-gray-500 hover:text-gray-700 flex items-center space-x-2"
+            className="text-gray-500 hover:text-gray-700 flex items-center space-x-1 h-7 px-2"
             title="Copier toute la conversation dans le presse-papiers"
           >
             {copied ? (
               <>
-                <Check className="w-4 h-4" />
+                <Check className="w-3 h-3" />
                 <span className="text-xs">Copié!</span>
               </>
             ) : (
               <>
-                <Copy className="w-4 h-4" />
-                <span className="text-xs">Copier la conversation</span>
+                <Copy className="w-3 h-3" />
+                <span className="text-xs">Copier</span>
               </>
             )}
           </Button>

@@ -21,8 +21,8 @@ export function InfoPanel({ data }: InfoPanelProps) {
   console.log('[InfoPanel] Rendering with data:', data);
 
   return (
-    <div className="mx-6 mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-      <div className="flex items-center justify-center gap-6 text-sm font-medium text-blue-900">
+    <div className="mx-4 mb-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
+      <div className="flex items-center justify-center gap-4 text-sm font-medium text-blue-900">
         <div className="flex items-center gap-2">
           <span>Thématique :</span>
           <span className="font-semibold">{theme}</span>
