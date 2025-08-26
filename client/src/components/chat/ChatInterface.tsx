@@ -30,10 +30,13 @@ export function ChatInterface({
   messageCount,
 }: ChatInterfaceProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+    }
   };
 
   useEffect(() => {
@@ -98,7 +101,7 @@ export function ChatInterface({
       </div>
       
       {/* Chat Messages - Scrollable */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 chat-messages">
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 chat-messages">
         {messages.map((message) => (
           <ChatMessage
             key={message.id}
