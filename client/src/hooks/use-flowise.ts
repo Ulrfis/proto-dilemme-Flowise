@@ -75,13 +75,35 @@ function parseFlowiseResponse(response: any): ParsedFlowiseResponse {
         // Try to fix malformed JSON by properly escaping quotes
         let jsonString = jsonMatch[0];
         
-        // Fix common JSON issues: unescaped quotes in values
-        const fixedJson = jsonString.replace(/"([^"]*)"([^"]*)"([^"]*)"/g, (match, p1, p2, p3) => {
-          if (p2.includes(':') || p2.includes(',') || p2.includes('}')) {
-            return match; // Don't modify if it's likely proper JSON structure
+        console.log('[Flowise] Original JSON string:', jsonString.substring(0, 300));
+        
+        // More robust JSON fixing approach
+        const lines = jsonString.split('\n');
+        const fixedLines = lines.map(line => {
+          // Check if this line contains a JSON value (has a colon)
+          if (line.includes(':') && line.includes('"')) {
+            // Look for pattern: "key": "value with "quotes" inside"
+            const colonIndex = line.indexOf(':');
+            const beforeColon = line.substring(0, colonIndex + 1);
+            const afterColon = line.substring(colonIndex + 1).trim();
+            
+            // If the value part starts and ends with quotes but has unescaped quotes inside
+            if (afterColon.startsWith('"') && afterColon.endsWith('"') || afterColon.endsWith('",')) {
+              const isLastProperty = afterColon.endsWith(',');
+              const valueContent = isLastProperty ? afterColon.slice(1, -2) : afterColon.slice(1, -1);
+              
+              // Escape internal quotes
+              const escapedContent = valueContent.replace(/"/g, '\\"');
+              const suffix = isLastProperty ? '",' : '"';
+              
+              return beforeColon + ' "' + escapedContent + suffix;
+            }
           }
-          return `"${p1}\\"${p2}\\"${p3}"`;
+          return line;
         });
+        
+        const fixedJson = fixedLines.join('\n');
+        console.log('[Flowise] Fixed JSON string:', fixedJson.substring(0, 300));
         
         const parsed = JSON.parse(fixedJson);
         console.log('[Flowise] Successfully parsed fixed JSON:', Object.keys(parsed));
