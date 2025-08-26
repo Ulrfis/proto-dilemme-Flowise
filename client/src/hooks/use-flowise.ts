@@ -15,9 +15,12 @@ interface ParsedFlowiseResponse {
 }
 
 function parseFlowiseResponse(responseText: string): ParsedFlowiseResponse {
+  console.log('[Flowise] Parsing response, length:', responseText.length);
+  
   try {
     // Try to parse as JSON
     const parsed = JSON.parse(responseText);
+    console.log('[Flowise] Successfully parsed JSON:', Object.keys(parsed));
     
     // If it's a valid JSON with our expected structure
     if (typeof parsed === 'object' && parsed !== null) {
@@ -25,33 +28,41 @@ function parseFlowiseResponse(responseText: string): ParsedFlowiseResponse {
         displayText: parsed.Response || responseText,
       };
       
+      console.log('[Flowise] Response text to display:', result.displayText.substring(0, 100) + '...');
+      
       // Extract info panel data if available
       const infoData: InfoPanelData = {};
       let hasInfoData = false;
       
       if (parsed.theme !== undefined) {
+        console.log('[Flowise] Found theme:', parsed.theme);
         infoData.theme = parsed.theme;
         hasInfoData = true;
       }
       
       if (parsed.nombre_d_indices !== undefined) {
+        console.log('[Flowise] Found nombre_d_indices:', parsed.nombre_d_indices);
         infoData.nombre_d_indices = parsed.nombre_d_indices;
         hasInfoData = true;
       }
       
       if (parsed.score_globale !== undefined) {
+        console.log('[Flowise] Found score_globale:', parsed.score_globale);
         infoData.score_globale = parsed.score_globale;
         hasInfoData = true;
       }
       
       if (hasInfoData) {
+        console.log('[Flowise] Returning info data:', infoData);
         result.infoData = infoData;
+      } else {
+        console.log('[Flowise] No info data found in JSON');
       }
       
       return result;
     }
   } catch (error) {
-    // Not valid JSON, treat as plain text
+    console.log('[Flowise] Not valid JSON, treating as plain text');
   }
   
   // Return as plain text
