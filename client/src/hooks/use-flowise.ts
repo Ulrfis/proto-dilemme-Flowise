@@ -14,72 +14,117 @@ interface ParsedFlowiseResponse {
   infoData?: InfoPanelData;
 }
 
-function parseFlowiseResponse(responseText: string): ParsedFlowiseResponse {
-  console.log('[Flowise] Parsing response, length:', responseText.length);
-  console.log('[Flowise] First 200 chars:', responseText.substring(0, 200));
+function parseFlowiseResponse(response: any): ParsedFlowiseResponse {
+  console.log('[Flowise] Parsing response:', typeof response, Object.keys(response || {}));
   
-  // Try to extract JSON from response if it's embedded in text
-  let jsonString = responseText;
+  let targetText = '';
   
-  // Look for JSON patterns (starting with { and ending with })
-  const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-  if (jsonMatch) {
-    jsonString = jsonMatch[0];
-    console.log('[Flowise] Found JSON pattern, extracted:', jsonString.substring(0, 200));
-  }
-  
-  try {
-    // Try to parse as JSON
-    const parsed = JSON.parse(jsonString);
-    console.log('[Flowise] Successfully parsed JSON:', Object.keys(parsed));
+  // Check if we have parsedContent (JSON extracted from text field by server)
+  if (response.parsedContent) {
+    console.log('[Flowise] Found parsedContent:', Object.keys(response.parsedContent));
+    const parsed = response.parsedContent;
     
-    // If it's a valid JSON with our expected structure
-    if (typeof parsed === 'object' && parsed !== null) {
-      const result: ParsedFlowiseResponse = {
-        displayText: parsed.Response || responseText,
-      };
-      
-      console.log('[Flowise] Response text to display:', result.displayText.substring(0, 100) + '...');
-      
-      // Extract info panel data if available
-      const infoData: InfoPanelData = {};
-      let hasInfoData = false;
-      
-      if (parsed.theme !== undefined) {
-        console.log('[Flowise] Found theme:', parsed.theme);
-        infoData.theme = parsed.theme;
-        hasInfoData = true;
-      }
-      
-      if (parsed.nombre_d_indices !== undefined) {
-        console.log('[Flowise] Found nombre_d_indices:', parsed.nombre_d_indices);
-        infoData.nombre_d_indices = parsed.nombre_d_indices;
-        hasInfoData = true;
-      }
-      
-      if (parsed.score_globale !== undefined) {
-        console.log('[Flowise] Found score_globale:', parsed.score_globale);
-        infoData.score_globale = parsed.score_globale;
-        hasInfoData = true;
-      }
-      
-      if (hasInfoData) {
-        console.log('[Flowise] Returning info data:', infoData);
-        result.infoData = infoData;
-      } else {
-        console.log('[Flowise] No info data found in JSON');
-      }
-      
-      return result;
+    const result: ParsedFlowiseResponse = {
+      displayText: parsed.Response || response.text || 'Réponse non disponible',
+    };
+    
+    console.log('[Flowise] Response text to display:', result.displayText.substring(0, 100) + '...');
+    
+    // Extract info panel data if available
+    const infoData: InfoPanelData = {};
+    let hasInfoData = false;
+    
+    if (parsed.theme !== undefined) {
+      console.log('[Flowise] Found theme:', parsed.theme);
+      infoData.theme = parsed.theme;
+      hasInfoData = true;
     }
-  } catch (error) {
-    console.log('[Flowise] JSON parsing failed:', error);
+    
+    if (parsed.nombre_d_indices !== undefined) {
+      console.log('[Flowise] Found nombre_d_indices:', parsed.nombre_d_indices);
+      infoData.nombre_d_indices = parsed.nombre_d_indices;
+      hasInfoData = true;
+    }
+    
+    if (parsed.score_globale !== undefined) {
+      console.log('[Flowise] Found score_globale:', parsed.score_globale);
+      infoData.score_globale = parsed.score_globale;
+      hasInfoData = true;
+    }
+    
+    if (hasInfoData) {
+      console.log('[Flowise] Returning info data:', infoData);
+      result.infoData = infoData;
+    }
+    
+    return result;
   }
   
-  // Return as plain text
-  console.log('[Flowise] Treating as plain text');
+  // Fallback: try to parse text field directly
+  if (response.text) {
+    targetText = response.text;
+    console.log('[Flowise] Using text field, first 200 chars:', targetText.substring(0, 200));
+    
+    // Try to extract JSON from text field with better handling of malformed JSON
+    const cleanText = targetText.replace(/"/g, '\\"').replace(/\\"/g, '"'); // Basic quote escaping
+    const jsonMatch = targetText.match(/\{[\s\S]*\}/);
+    
+    if (jsonMatch) {
+      console.log('[Flowise] Found JSON pattern in text');
+      try {
+        // Try to fix malformed JSON by properly escaping quotes
+        let jsonString = jsonMatch[0];
+        
+        // Fix common JSON issues: unescaped quotes in values
+        const fixedJson = jsonString.replace(/"([^"]*)"([^"]*)"([^"]*)"/g, (match, p1, p2, p3) => {
+          if (p2.includes(':') || p2.includes(',') || p2.includes('}')) {
+            return match; // Don't modify if it's likely proper JSON structure
+          }
+          return `"${p1}\\"${p2}\\"${p3}"`;
+        });
+        
+        const parsed = JSON.parse(fixedJson);
+        console.log('[Flowise] Successfully parsed fixed JSON:', Object.keys(parsed));
+        
+        const result: ParsedFlowiseResponse = {
+          displayText: parsed.Response || targetText,
+        };
+        
+        // Extract info panel data if available
+        const infoData: InfoPanelData = {};
+        let hasInfoData = false;
+        
+        if (parsed.theme !== undefined) {
+          infoData.theme = parsed.theme;
+          hasInfoData = true;
+        }
+        
+        if (parsed.nombre_d_indices !== undefined) {
+          infoData.nombre_d_indices = parsed.nombre_d_indices;
+          hasInfoData = true;
+        }
+        
+        if (parsed.score_globale !== undefined) {
+          infoData.score_globale = parsed.score_globale;
+          hasInfoData = true;
+        }
+        
+        if (hasInfoData) {
+          result.infoData = infoData;
+        }
+        
+        return result;
+      } catch (error) {
+        console.log('[Flowise] Failed to parse JSON from text field:', error);
+      }
+    }
+  }
+  
+  // Final fallback: return as plain text
+  const fallbackText = response.text || response.toString() || 'Réponse non disponible';
+  console.log('[Flowise] Using fallback text');
   return {
-    displayText: responseText,
+    displayText: fallbackText,
   };
 }
 
@@ -106,7 +151,7 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
       const response = await client.sendMessage(content.trim());
       
       // Parse the response to extract structured data
-      const { displayText, infoData } = parseFlowiseResponse(response.text);
+      const { displayText, infoData } = parseFlowiseResponse(response);
       
       // Update info panel data if new data is available
       if (infoData && onInfoDataUpdate) {
