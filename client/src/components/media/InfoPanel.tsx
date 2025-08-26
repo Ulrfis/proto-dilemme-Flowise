@@ -18,13 +18,13 @@ export function InfoPanel({ data }: InfoPanelProps) {
   const score = data?.score_globale || "à venir";
 
   return (
-    <div className="mx-6 mb-4 p-3 bg-yellow-400 border border-yellow-500 rounded-lg">
-      <div className="flex items-center justify-center gap-8 text-sm font-medium text-black">
+    <div className="mx-6 mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+      <div className="flex items-center justify-center gap-8 text-sm font-medium text-blue-900">
         <div className="flex items-center gap-2">
           <span>Thématique :</span>
           <span className="font-semibold">{theme}</span>
         </div>
-        <div className="text-gray-700">|</div>
+        <div className="text-blue-400">|</div>
         <div className="flex items-center gap-2">
           <span>Score :</span>
           <span className="font-semibold">{score}</span>
