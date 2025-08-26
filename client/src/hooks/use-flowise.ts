@@ -15,12 +15,9 @@ interface ParsedFlowiseResponse {
 }
 
 function parseFlowiseResponse(responseText: string): ParsedFlowiseResponse {
-  console.log('[DEBUG] Raw Flowise response:', responseText.substring(0, 500) + '...');
-  
   try {
     // Try to parse as JSON
     const parsed = JSON.parse(responseText);
-    console.log('[DEBUG] Successfully parsed JSON:', parsed);
     
     // If it's a valid JSON with our expected structure
     if (typeof parsed === 'object' && parsed !== null) {
@@ -33,34 +30,28 @@ function parseFlowiseResponse(responseText: string): ParsedFlowiseResponse {
       let hasInfoData = false;
       
       if (parsed.theme !== undefined) {
-        console.log('[DEBUG] Found theme:', parsed.theme);
         infoData.theme = parsed.theme;
         hasInfoData = true;
       }
       
       if (parsed.nombre_d_indices !== undefined) {
-        console.log('[DEBUG] Found nombre_d_indices:', parsed.nombre_d_indices);
         infoData.nombre_d_indices = parsed.nombre_d_indices;
         hasInfoData = true;
       }
       
       if (parsed.score_globale !== undefined) {
-        console.log('[DEBUG] Found score_globale:', parsed.score_globale);
         infoData.score_globale = parsed.score_globale;
         hasInfoData = true;
       }
       
       if (hasInfoData) {
-        console.log('[DEBUG] Returning info data:', infoData);
         result.infoData = infoData;
-      } else {
-        console.log('[DEBUG] No info data found in JSON');
       }
       
       return result;
     }
   } catch (error) {
-    console.log('[DEBUG] Failed to parse as JSON, treating as plain text:', error);
+    // Not valid JSON, treat as plain text
   }
   
   // Return as plain text
