@@ -3,7 +3,64 @@ import { ChatMessage } from "../types/chat";
 import { FlowiseClient, extractMediaFromText } from "../lib/flowise";
 import { analytics } from "../lib/analytics";
 
-export function useFlowise(chatflowId: string) {
+interface InfoPanelData {
+  theme?: string;
+  nombre_d_indices?: string;
+  score_globale?: string | number;
+}
+
+interface ParsedFlowiseResponse {
+  displayText: string;
+  infoData?: InfoPanelData;
+}
+
+function parseFlowiseResponse(responseText: string): ParsedFlowiseResponse {
+  try {
+    // Try to parse as JSON
+    const parsed = JSON.parse(responseText);
+    
+    // If it's a valid JSON with our expected structure
+    if (typeof parsed === 'object' && parsed !== null) {
+      const result: ParsedFlowiseResponse = {
+        displayText: parsed.Response || responseText,
+      };
+      
+      // Extract info panel data if available
+      const infoData: InfoPanelData = {};
+      let hasInfoData = false;
+      
+      if (parsed.theme !== undefined) {
+        infoData.theme = parsed.theme;
+        hasInfoData = true;
+      }
+      
+      if (parsed.nombre_d_indices !== undefined) {
+        infoData.nombre_d_indices = parsed.nombre_d_indices;
+        hasInfoData = true;
+      }
+      
+      if (parsed.score_globale !== undefined) {
+        infoData.score_globale = parsed.score_globale;
+        hasInfoData = true;
+      }
+      
+      if (hasInfoData) {
+        result.infoData = infoData;
+      }
+      
+      return result;
+    }
+  } catch (error) {
+    // Not valid JSON, treat as plain text
+  }
+  
+  // Return as plain text
+  return {
+    displayText: responseText,
+  };
+}
+
+export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPanelData | null) => void) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [client] = useState(() => new FlowiseClient(chatflowId));
@@ -25,12 +82,20 @@ export function useFlowise(chatflowId: string) {
     try {
       const response = await client.sendMessage(content.trim());
       
-      // Extract media from response
-      const { cleanText, videos, links } = extractMediaFromText(response.text);
+      // Parse the response to extract structured data
+      const { displayText, infoData } = parseFlowiseResponse(response.text);
+      
+      // Update info panel data if new data is available
+      if (infoData && onInfoDataUpdate) {
+        onInfoDataUpdate(infoData);
+      }
+      
+      // Extract media from display text
+      const { cleanText, videos, links } = extractMediaFromText(displayText);
       
       const peterMessage: ChatMessage = {
         id: `peter_${Date.now()}`,
-        content: response.text, // Keep original text for markdown link processing
+        content: displayText, // Use the parsed display text
         sender: 'peter',
         timestamp: new Date().toISOString(),
         metadata: {
