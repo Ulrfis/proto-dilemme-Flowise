@@ -169,7 +169,7 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex-1 aspect-video min-h-[400px]">
+      <div className="flex-1 aspect-video min-h-[500px]">
         {renderPlayer()}
       </div>
       

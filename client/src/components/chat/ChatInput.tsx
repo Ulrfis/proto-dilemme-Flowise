@@ -175,8 +175,8 @@ export function ChatInput({
   };
 
   return (
-    <div className="border-t border-gray-200 p-4">
-      <form onSubmit={handleSubmit} className="flex items-center space-x-3">
+    <div className="border-t border-gray-200 p-2">
+      <form onSubmit={handleSubmit} className="flex items-center space-x-2">
         <div className="flex-1 relative">
           <Input
             type="text"
@@ -186,7 +186,7 @@ export function ChatInput({
             placeholder={placeholder}
             disabled={disabled}
             data-testid="input-chat-message"
-            className={speechSupported ? "pr-20" : "pr-12"}
+            className={speechSupported ? "pr-20 h-9" : "pr-12 h-9"}
             aria-label="Message pour Peter"
           />
           {speechSupported && (
@@ -196,14 +196,14 @@ export function ChatInput({
               onClick={toggleSpeechRecognition}
               disabled={disabled}
               data-testid="button-speech-recognition"
-              className={`absolute right-10 top-1/2 transform -translate-y-1/2 h-8 w-8 p-0 select-none ${
+              className={`absolute right-10 top-1/2 transform -translate-y-1/2 h-7 w-7 p-0 select-none ${
                 isListening 
                   ? "bg-red-500 hover:bg-red-600 text-white animate-pulse" 
                   : "bg-blue-500 hover:bg-blue-600 text-white"
               }`}
               aria-label={isListening ? "Cliquez pour arrêter l'enregistrement" : "Cliquez pour commencer l'enregistrement vocal"}
             >
-              {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+              {isListening ? <MicOff className="w-3 h-3" /> : <Mic className="w-3 h-3" />}
             </Button>
           )}
           <Button
@@ -211,25 +211,23 @@ export function ChatInput({
             size="sm"
             disabled={!message.trim() || disabled}
             data-testid="button-send-message"
-            className="absolute right-2 top-1/2 transform -translate-y-1/2 h-8 w-8 p-0"
+            className="absolute right-2 top-1/2 transform -translate-y-1/2 h-7 w-7 p-0"
             aria-label="Envoyer le message"
           >
-            <Send className="w-4 h-4" />
+            <Send className="w-3 h-3" />
           </Button>
         </div>
       </form>
-      <div className="mt-2 text-xs text-gray-500">
-        Appuyez sur Entrée pour envoyer
+      <div className="mt-1 text-xs text-gray-500">
+        Entrée pour envoyer
         {speechSupported && (
           <>
             {" • "}
             <span className={isListening ? "text-red-600 font-medium" : ""}>
-              {isListening ? "🎤 Écoute en cours... (cliquez pour arrêter)" : "🎤 Cliquez pour activer la reconnaissance vocale"}
+              {isListening ? "🎤 Écoute..." : "🎤 Vocal"}
             </span>
           </>
         )}
-        {" • "}
-        <span className="text-amber-600 ml-1">Conversation éducative anonyme</span>
       </div>
     </div>
   );
