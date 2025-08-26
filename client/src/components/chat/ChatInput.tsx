@@ -145,9 +145,13 @@ export function ChatInput({
       console.log('[Audio] Transcription received:', result.text);
 
       if (result.text?.trim()) {
-        // Add transcribed text to current message
+        // Create the complete message with transcribed text
         const newMessage = message + (message ? ' ' : '') + result.text.trim();
-        setMessage(newMessage);
+        console.log('[Audio] Auto-sending transcribed message:', newMessage);
+        
+        // Automatically send the message to Flowise
+        onSendMessage(newMessage.trim());
+        setMessage(""); // Clear the input field
       } else {
         console.warn('[Audio] Empty transcription result');
         alert('Aucune parole détectée. Essayez de parler plus fort ou plus près du microphone.');
@@ -165,7 +169,7 @@ export function ChatInput({
       setIsTranscribing(false);
       audioChunksRef.current = [];
     }
-  }, [message]);
+  }, [message, onSendMessage]);
 
   const toggleRecording = useCallback(() => {
     if (isRecording) {
