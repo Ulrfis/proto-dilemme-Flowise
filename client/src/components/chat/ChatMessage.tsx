@@ -161,7 +161,7 @@ export function ChatMessage({
       )}>
         <div className={cn(
           "rounded-lg p-3",
-          isPeter ? "bg-gray-100" : "bg-primary text-white"
+          isPeter ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"
         )}>
           {messageType === 'with-choices' ? (
             <div className="text-sm leading-relaxed whitespace-pre-wrap">
@@ -237,7 +237,7 @@ export function ChatMessage({
                 size="sm"
                 onClick={() => onChoiceClick(choice)}
                 data-testid={`button-choice-${index}`}
-                className="bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100 text-left"
+                className="bg-accent border-accent text-accent-foreground hover:bg-accent/80 text-left"
               >
                 {choice}
               </Button>
@@ -250,7 +250,7 @@ export function ChatMessage({
                 size="sm"
                 onClick={onThumbsUp}
                 data-testid="button-thumbs-up"
-                className="bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
+                className="bg-accent border-accent text-accent-foreground hover:bg-accent/80"
               >
                 👍 OK
               </Button>
@@ -263,7 +263,7 @@ export function ChatMessage({
                 size="sm"
                 onClick={() => handleMediaClick(message.metadata!.videoUrl!, 'video')}
                 data-testid="button-open-video"
-                className="bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
+                className="bg-accent border-accent text-accent-foreground hover:bg-accent/80"
               >
                 📹 Voir la vidéo
               </Button>
@@ -277,7 +277,7 @@ export function ChatMessage({
                 size="sm"
                 onClick={() => handleMediaClick(link, 'link')}
                 data-testid={`button-open-link-${index}`}
-                className="bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
+                className="bg-accent border-accent text-accent-foreground hover:bg-accent/80"
               >
                 🔗 Voir le lien
               </Button>

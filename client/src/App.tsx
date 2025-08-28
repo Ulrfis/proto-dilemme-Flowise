@@ -11,8 +11,15 @@ import About from "./pages/about";
 import NotFound from "./pages/not-found";
 import { analytics } from "./lib/analytics";
 
+interface InfoPanelData {
+  theme?: string;
+  nombre_d_indices?: string;
+  score_globale?: string | number;
+}
+
 function Router() {
   const [showAbout, setShowAbout] = useState(false);
+  const [infoData, setInfoData] = useState<InfoPanelData | null>(null);
 
   useEffect(() => {
     analytics.trackPageView('homepage');
@@ -23,10 +30,13 @@ function Router() {
       <div className="h-full flex flex-col">
         <Header 
           onAboutClick={() => setShowAbout(true)}
+          infoData={infoData}
         />
         
         <Switch>
-          <Route path="/" component={Homepage} />
+          <Route path="/">
+            <Homepage onInfoDataUpdate={setInfoData} />
+          </Route>
           <Route component={NotFound} />
         </Switch>
         

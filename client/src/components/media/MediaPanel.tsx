@@ -3,22 +3,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { X } from "lucide-react";
 import { VideoPlayer } from "./VideoPlayer";
 import { WebView } from "./WebView";
-import { InfoPanel } from "./InfoPanel";
 import { MediaItem } from "../../types/chat";
 import { cn } from "@/lib/utils";
-
-interface InfoPanelData {
-  theme?: string;
-  nombre_d_indices?: string;
-  score_globale?: string | number;
-}
 
 interface MediaPanelProps {
   isOpen: boolean;
   activeTab: 'video' | 'web';
   currentVideo: MediaItem | null;
   currentWebpage: MediaItem | null;
-  infoData?: InfoPanelData | null;
   onClose: () => void;
   onTabChange: (tab: 'video' | 'web') => void;
 }
@@ -28,7 +20,6 @@ export function MediaPanel({
   activeTab,
   currentVideo,
   currentWebpage,
-  infoData,
   onClose,
   onTabChange,
 }: MediaPanelProps) {
@@ -37,29 +28,34 @@ export function MediaPanel({
   }
 
   return (
-    <div className="w-full h-full bg-white flex flex-col">
-      {/* Info Panel - Compact */}
-      <div className="pt-3">
-        <InfoPanel data={infoData} />
-      </div>
-
-      {/* Content - Direct tabs without header */}
+    <div className="w-full h-full bg-background flex flex-col">
+      {/* Content - Tabs aligned with chat */}
       <div className="flex-1 overflow-hidden">
         <Tabs value={activeTab} onValueChange={(value) => onTabChange(value as 'video' | 'web')} className="h-full flex flex-col">
-          <TabsList className="grid w-full grid-cols-2 mx-4 mt-2 mb-0">
-            <TabsTrigger value="video" data-testid="tab-video" className="text-base font-medium">
-              📹 Vidéos
-            </TabsTrigger>
-            <TabsTrigger value="web" data-testid="tab-web" className="text-base font-medium">
-              📰 Articles
-            </TabsTrigger>
-          </TabsList>
+          <div className="px-3 pt-3 pb-0">
+            <TabsList className="grid w-full grid-cols-2 bg-muted">
+              <TabsTrigger 
+                value="video" 
+                data-testid="tab-video" 
+                className="text-sm font-medium data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+              >
+                📹 Vidéos
+              </TabsTrigger>
+              <TabsTrigger 
+                value="web" 
+                data-testid="tab-web" 
+                className="text-sm font-medium data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+              >
+                📰 Articles
+              </TabsTrigger>
+            </TabsList>
+          </div>
           
-          <TabsContent value="video" className="flex-1 overflow-y-auto m-0 p-4">
+          <TabsContent value="video" className="flex-1 overflow-y-auto m-0 p-3">
             <VideoPlayer video={currentVideo} />
           </TabsContent>
           
-          <TabsContent value="web" className="flex-1 overflow-y-auto m-0 p-4">
+          <TabsContent value="web" className="flex-1 overflow-y-auto m-0 p-3">
             <WebView webpage={currentWebpage} />
           </TabsContent>
         </Tabs>
