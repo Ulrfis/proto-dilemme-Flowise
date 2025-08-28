@@ -14,7 +14,11 @@ interface InfoPanelData {
   score_globale?: string | number;
 }
 
-export default function Homepage() {
+interface HomepageProps {
+  onInfoDataUpdate?: (data: InfoPanelData | null) => void;
+}
+
+export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
   const [showChat, setShowChat] = useState(false);
   const [infoData, setInfoData] = useState<InfoPanelData | null>(null);
   
@@ -27,11 +31,18 @@ export default function Homepage() {
     
     setInfoData(prevData => {
       // Merge with existing data (keep previous values if new ones are not provided)
-      return {
+      const updatedData = {
         theme: newData.theme !== undefined ? newData.theme : prevData?.theme,
         nombre_d_indices: newData.nombre_d_indices !== undefined ? newData.nombre_d_indices : prevData?.nombre_d_indices,
         score_globale: newData.score_globale !== undefined ? newData.score_globale : prevData?.score_globale,
       };
+      
+      // Also update parent component
+      if (onInfoDataUpdate) {
+        onInfoDataUpdate(updatedData);
+      }
+      
+      return updatedData;
     });
   };
 
@@ -181,7 +192,6 @@ export default function Homepage() {
               activeTab={activeTab}
               currentVideo={currentVideo}
               currentWebpage={currentWebpage}
-              infoData={infoData}
               onClose={() => {}} // No close functionality needed since always visible
               onTabChange={switchTab}
             />
