@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { MessageCircle, Lightbulb, Video, CheckCircle } from "lucide-react";
+import peterAvatarImage from "@assets/Peter Avatar_1756372265537.jpg";
 import { ChatInterface } from "../components/chat/ChatInterface";
 import { MediaPanel } from "../components/media/MediaPanel";
 import { useFlowise } from "../hooks/use-flowise";
@@ -101,15 +102,18 @@ export default function Homepage() {
         <div className="flex-1 flex items-center justify-center p-8 bg-white">
           <div className="text-center max-w-2xl">
             <div className="mb-8">
-              <div className="w-20 h-20 bg-primary rounded-full flex items-center justify-center mx-auto mb-4">
-                <MessageCircle className="w-10 h-10 text-white" />
+              <div className="w-20 h-20 mx-auto mb-4">
+                <img 
+                  src={peterAvatarImage} 
+                  alt="Peter - Guide écologique" 
+                  className="w-20 h-20 rounded-full object-cover"
+                />
               </div>
               <h2 className="text-3xl font-bold text-gray-900 mb-4">
-                Rencontrez Peter, votre guide écologique
+                Peter vous guide pour comprendre comment le plastique impacte notre santé
               </h2>
               <p className="text-lg text-gray-600 mb-8">
-                Explorez les dilemmes du plastique à travers des scénarios interactifs. 
-                Peter vous accompagne pour comprendre les enjeux environnementaux, économiques et sociaux.
+                Explorez les dilemmes du plastique à travers des scénarios interactifs, avec de la vidéo et des documents.
               </p>
             </div>
             
@@ -120,7 +124,7 @@ export default function Homepage() {
                 data-testid="button-start-chat"
                 className="bg-primary hover:bg-blue-700 text-white font-semibold py-4 px-8 rounded-xl transition-all transform hover:scale-105 text-lg"
               >
-                Commencer avec Peter
+                Démarrer l'aventure !
               </Button>
               <p className="text-sm text-gray-500 mt-4">
                 Session d'apprentissage : 20-30 minutes

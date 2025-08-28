@@ -21,7 +21,7 @@ export function Header({ onAboutClick }: HeaderProps) {
           </div>
           <div>
             <h1 className="text-xl font-bold text-gray-900">Dilemme Plastique</h1>
-            <p className="text-sm text-gray-600">Explorez les défis environnementaux avec Peter</p>
+            <p className="text-sm text-gray-600">Découvrez les raisons de l'impact négatif du plastique sur la santé humaine</p>
           </div>
         </div>
         
