@@ -2,9 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { PanelsRightBottom, Loader2, Copy, Check } from "lucide-react";
 import { ChatMessage as ChatMessageType } from "../../types/chat";
 import { cn } from "@/lib/utils";
+import { AvatarSelector } from "../avatar/AvatarSelector";
+import { useUserAvatar } from "../../hooks/use-user-avatar";
+import peterAvatarImage from "@assets/Peter Avatar_1756370825342.jpg";
 
 interface ChatInterfaceProps {
   messages: ChatMessageType[];
@@ -32,6 +36,7 @@ export function ChatInterface({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
+  const userAvatar = useUserAvatar();
 
   const scrollToBottom = () => {
     if (messagesContainerRef.current) {
@@ -86,16 +91,27 @@ export function ChatInterface({
       <div className="bg-gray-50 border-b border-gray-200 p-2 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-              <span className="text-white text-sm font-semibold">P</span>
-            </div>
+            <Avatar className="w-8 h-8">
+              <AvatarImage src={peterAvatarImage} alt="Peter" />
+              <AvatarFallback className="bg-primary text-white text-sm font-semibold">
+                P
+              </AvatarFallback>
+            </Avatar>
             <div>
               <div className="text-sm font-semibold text-gray-900">Peter</div>
               <div className="text-xs text-green-600">Assistant écologique</div>
             </div>
           </div>
-          <div className="text-xs text-gray-500" data-testid="text-message-count">
-            <span>{messageCount}</span> msgs
+          <div className="flex items-center space-x-3">
+            <AvatarSelector 
+              currentName={userAvatar.name}
+              currentGender={userAvatar.gender}
+              currentAvatarUrl={userAvatar.avatarUrl}
+              onAvatarChange={userAvatar.updateAvatar}
+            />
+            <div className="text-xs text-gray-500" data-testid="text-message-count">
+              <span>{messageCount}</span> msgs
+            </div>
           </div>
         </div>
       </div>
@@ -110,14 +126,19 @@ export function ChatInterface({
             onLinkClick={onLinkClick}
             onThumbsUp={onThumbsUp}
             onChoiceClick={onChoiceClick}
+            userAvatarUrl={userAvatar.avatarUrl}
+            userName={userAvatar.name}
           />
         ))}
         
         {isLoading && (
           <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-              <span className="text-white text-sm font-semibold">P</span>
-            </div>
+            <Avatar className="w-8 h-8">
+              <AvatarImage src={peterAvatarImage} alt="Peter" />
+              <AvatarFallback className="bg-primary text-white text-sm font-semibold">
+                P
+              </AvatarFallback>
+            </Avatar>
             <div className="flex items-center space-x-2 bg-gray-100 rounded-lg p-3">
               <Loader2 className="w-4 h-4 animate-spin text-gray-500" />
               <span className="text-sm text-gray-500">Peter réfléchit...</span>
