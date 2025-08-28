@@ -1,0 +1,107 @@
+{
+  "colors": {
+    "background": {
+      "gradient": ["#FFD6C9", "#F6E1F7", "#FFFFFF"],
+      "primary": "#FFFFFF",
+      "secondary": "#FDF7F4",
+      "muted": "#F4E9F7"
+    },
+    "text": {
+      "primary": "#1A1A1A",
+      "secondary": "#4A4A4A",
+      "muted": "#7A7A7A",
+      "light": "#FFFFFF"
+    },
+    "accent": {
+      "pink": "#F9C8C3",
+      "peach": "#FDD7C2",
+      "purple": "#E8D7F8",
+      "blue": "#CDE3FA"
+    },
+    "borders": {
+      "default": "#E6E6E6"
+    }
+  },
+  "fonts": {
+    "heading": {
+      "family": "'Inter', 'Helvetica Neue', Arial, sans-serif",
+      "weight": "600-700",
+      "sizes": {
+        "h1": "3rem",
+        "h2": "2.25rem",
+        "h3": "1.5rem",
+        "h4": "1.25rem"
+      }
+    },
+    "body": {
+      "family": "'Inter', 'Helvetica Neue', Arial, sans-serif",
+      "weight": "400-500",
+      "sizes": {
+        "base": "1rem",
+        "small": "0.875rem",
+        "tiny": "0.75rem"
+      }
+    }
+  },
+  "spacing": {
+    "container": "max-width: 1200px",
+    "section": "6rem",
+    "gridGap": "2rem",
+    "padding": {
+      "sm": "0.5rem",
+      "md": "1rem",
+      "lg": "2rem",
+      "xl": "4rem"
+    }
+  },
+  "buttons": {
+    "primary": {
+      "background": "#1A1A1A",
+      "color": "#FFFFFF",
+      "radius": "9999px",
+      "padding": "0.75rem 1.5rem",
+      "hover": {
+        "background": "#333333"
+      }
+    },
+    "secondary": {
+      "background": "#F4E9F7",
+      "color": "#1A1A1A",
+      "radius": "9999px",
+      "padding": "0.75rem 1.5rem",
+      "hover": {
+        "background": "#E8D7F8"
+      }
+    }
+  },
+  "cards": {
+    "background": "#FFFFFF",
+    "radius": "1rem",
+    "shadow": "0 4px 20px rgba(0,0,0,0.05)",
+    "padding": "2rem"
+  },
+  "layout": {
+    "navbar": {
+      "height": "4rem",
+      "background": "transparent",
+      "padding": "0 2rem"
+    },
+    "footer": {
+      "background": "#FDF7F4",
+      "padding": "3rem 2rem"
+    }
+  },
+  "effects": {
+    "shadows": {
+      "sm": "0 1px 2px rgba(0,0,0,0.05)",
+      "md": "0 4px 6px rgba(0,0,0,0.1)",
+      "lg": "0 10px 15px rgba(0,0,0,0.1)"
+    },
+    "radius": {
+      "sm": "0.5rem",
+      "md": "1rem",
+      "lg": "2rem",
+      "pill": "9999px"
+    }
+  }
+}
