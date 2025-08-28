@@ -12,6 +12,8 @@ interface InfoPanelData {
 interface ParsedFlowiseResponse {
   displayText: string;
   infoData?: InfoPanelData;
+  flowiseURL?: string;
+  flowiseYouTubeURL?: string;
 }
 
 function parseFlowiseResponse(response: any): ParsedFlowiseResponse {
@@ -27,6 +29,17 @@ function parseFlowiseResponse(response: any): ParsedFlowiseResponse {
     const result: ParsedFlowiseResponse = {
       displayText: parsed.Response || response.text || 'Réponse non disponible',
     };
+    
+    // Extract URL and URLYOUTUBE if available
+    if (parsed.URL !== undefined) {
+      console.log('[Flowise] Found URL:', parsed.URL);
+      result.flowiseURL = parsed.URL;
+    }
+    
+    if (parsed.URLYOUTUBE !== undefined) {
+      console.log('[Flowise] Found URLYOUTUBE:', parsed.URLYOUTUBE);
+      result.flowiseYouTubeURL = parsed.URLYOUTUBE;
+    }
     
     console.log('[Flowise] Response text to display:', result.displayText.substring(0, 100) + '...');
     
@@ -81,17 +94,32 @@ function parseFlowiseResponse(response: any): ParsedFlowiseResponse {
       const themeMatch = jsonString.match(/"theme":\s*"([\s\S]*?)"/);
       const indicesMatch = jsonString.match(/"nombre_d_indices":\s*"?([^",}]+)"?/);
       const scoreMatch = jsonString.match(/"score_globale":\s*"?([^",}]+)"?/);
+      const urlMatch = jsonString.match(/"URL":\s*"([\s\S]*?)"/); 
+      const youtubeMatch = jsonString.match(/"URLYOUTUBE":\s*"([\s\S]*?)"/);
       
       console.log('[Flowise] Regex extraction results:');
       console.log('- Response found:', !!responseMatch);
       console.log('- Theme found:', !!themeMatch);
       console.log('- Indices found:', !!indicesMatch);
       console.log('- Score found:', !!scoreMatch);
+      console.log('- URL found:', !!urlMatch);
+      console.log('- YouTube URL found:', !!youtubeMatch);
       
-      if (responseMatch || themeMatch || indicesMatch || scoreMatch) {
+      if (responseMatch || themeMatch || indicesMatch || scoreMatch || urlMatch || youtubeMatch) {
         const result: ParsedFlowiseResponse = {
           displayText: responseMatch ? responseMatch[1] : targetText,
         };
+        
+        // Extract URL and URLYOUTUBE if available
+        if (urlMatch) {
+          result.flowiseURL = urlMatch[1];
+          console.log('[Flowise] Extracted URL:', urlMatch[1]);
+        }
+        
+        if (youtubeMatch) {
+          result.flowiseYouTubeURL = youtubeMatch[1];
+          console.log('[Flowise] Extracted YouTube URL:', youtubeMatch[1]);
+        }
         
         // Extract info panel data if available
         const infoData: InfoPanelData = {};
@@ -159,7 +187,7 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
       const response = await client.sendMessage(content.trim());
       
       // Parse the response to extract structured data
-      const { displayText, infoData } = parseFlowiseResponse(response);
+      const { displayText, infoData, flowiseURL, flowiseYouTubeURL } = parseFlowiseResponse(response);
       
       // Update info panel data if new data is available
       if (infoData && onInfoDataUpdate) {
@@ -169,27 +197,47 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
       // Extract media from display text
       const { cleanText, videos, links } = extractMediaFromText(displayText);
       
+      // Add Flowise URLs to links array
+      const allLinks = [...links];
+      if (flowiseURL) {
+        // Clean up the URL by removing markdown formatting and extra whitespace
+        const cleanURL = flowiseURL.replace(/\[\*\*([^\]]+)\]\([^)]+\)/g, '$1').replace(/\n/g, '').trim();
+        if (cleanURL && cleanURL.startsWith('http')) {
+          allLinks.push(cleanURL);
+        }
+      }
+      
+      // Add YouTube videos to videos array  
+      const allVideos = [...videos];
+      if (flowiseYouTubeURL) {
+        // Clean up the YouTube URL by removing markdown formatting and extra whitespace
+        const cleanYouTubeURL = flowiseYouTubeURL.replace(/\[\*\*([^\]]+)\]\([^)]+\)/g, '$1').replace(/\n/g, '').trim();
+        if (cleanYouTubeURL && cleanYouTubeURL.includes('youtube.com')) {
+          allVideos.push(cleanYouTubeURL);
+        }
+      }
+      
       const peterMessage: ChatMessage = {
         id: `peter_${Date.now()}`,
         content: displayText, // Use the parsed display text
         sender: 'peter',
         timestamp: new Date().toISOString(),
         metadata: {
-          hasVideo: videos.length > 0,
-          hasLinks: links.length > 0,
-          videoUrl: videos[0],
-          links,
+          hasVideo: allVideos.length > 0,
+          hasLinks: allLinks.length > 0,
+          videoUrl: allVideos[0],
+          links: allLinks,
         },
       };
 
       setMessages(prev => [...prev, peterMessage]);
 
       // Track media if present
-      if (videos.length > 0) {
-        analytics.trackVideoOpened(videos[0]);
+      if (allVideos.length > 0) {
+        allVideos.forEach(video => analytics.trackVideoOpened(video));
       }
-      if (links.length > 0) {
-        links.forEach(link => analytics.trackLinkOpened(link));
+      if (allLinks.length > 0) {
+        allLinks.forEach(link => analytics.trackLinkOpened(link));
       }
 
     } catch (error) {
