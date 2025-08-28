@@ -37,14 +37,14 @@ export function MediaPanel({
               <TabsTrigger 
                 value="video" 
                 data-testid="tab-video" 
-                className="text-sm font-medium data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                className="text-sm font-medium data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"
               >
                 📹 Vidéos
               </TabsTrigger>
               <TabsTrigger 
                 value="web" 
                 data-testid="tab-web" 
-                className="text-sm font-medium data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                className="text-sm font-medium data-[state=active]:bg-accent data-[state=active]:text-accent-foreground"
               >
                 📰 Articles
               </TabsTrigger>
