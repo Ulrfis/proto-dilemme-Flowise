@@ -58,7 +58,7 @@ export function Header({ onAboutClick, infoData }: HeaderProps) {
             variant="ghost"
             onClick={onAboutClick}
             data-testid="button-about"
-            className="text-gray-700 hover:text-primary font-medium"
+            className="text-gray-700 hover:text-accent font-medium"
           >
             <Info className="w-4 h-4 mr-2" />
             À propos

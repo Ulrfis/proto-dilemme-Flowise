@@ -133,7 +133,7 @@ export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
                 size="lg"
                 onClick={handleStartChat}
                 data-testid="button-start-chat"
-                className="bg-primary hover:bg-blue-700 text-white font-semibold py-4 px-8 rounded-xl transition-all transform hover:scale-105 text-lg"
+                className="bg-accent hover:bg-accent/80 text-accent-foreground font-semibold py-4 px-8 rounded-xl transition-all transform hover:scale-105 text-lg"
               >
                 Démarrer l'aventure !
               </Button>

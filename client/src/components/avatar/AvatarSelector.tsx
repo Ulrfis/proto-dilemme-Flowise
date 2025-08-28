@@ -156,7 +156,7 @@ export function AvatarSelector({
           <Button 
             variant="outline" 
             onClick={handleRandomAvatar}
-            className="w-full"
+            className="w-full bg-accent border-accent text-accent-foreground hover:bg-accent/80"
             data-testid="button-random-avatar"
           >
             <Shuffle className="w-4 h-4 mr-2" />
@@ -165,13 +165,18 @@ export function AvatarSelector({
 
           {/* Action Buttons */}
           <div className="flex justify-end space-x-2">
-            <Button variant="outline" onClick={handleCancel}>
+            <Button 
+              variant="outline" 
+              onClick={handleCancel}
+              className="bg-accent border-accent text-accent-foreground hover:bg-accent/80"
+            >
               Annuler
             </Button>
             <Button 
               onClick={handleSave}
               disabled={!tempName.trim()}
               data-testid="button-save-avatar"
+              className="bg-accent hover:bg-accent/80 text-accent-foreground"
             >
               Enregistrer
             </Button>
