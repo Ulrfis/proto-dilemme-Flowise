@@ -1,5 +1,6 @@
 import { ChatMessage as ChatMessageType } from "../../types/chat";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import peterAvatarImage from "@assets/Peter Avatar_1756370825342.jpg";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -9,9 +10,19 @@ interface ChatMessageProps {
   onLinkClick?: (url: string) => void;
   onThumbsUp?: () => void;
   onChoiceClick?: (choice: string) => void;
+  userAvatarUrl?: string;
+  userName?: string;
 }
 
-export function ChatMessage({ message, onVideoClick, onLinkClick, onThumbsUp, onChoiceClick }: ChatMessageProps) {
+export function ChatMessage({ 
+  message, 
+  onVideoClick, 
+  onLinkClick, 
+  onThumbsUp, 
+  onChoiceClick,
+  userAvatarUrl,
+  userName = 'Utilisateur'
+}: ChatMessageProps) {
   const isPeter = message.sender === 'peter';
 
   const handleMediaClick = (url: string, type: 'video' | 'link') => {
@@ -127,12 +138,21 @@ export function ChatMessage({ message, onVideoClick, onLinkClick, onThumbsUp, on
       data-testid={`message-${message.sender}-${message.id}`}
     >
       <Avatar className="w-8 h-8 flex-shrink-0">
-        <AvatarFallback className={cn(
-          "text-sm font-semibold",
-          isPeter ? "bg-primary text-white" : "bg-gray-200 text-gray-700"
-        )}>
-          {isPeter ? 'P' : 'U'}
-        </AvatarFallback>
+        {isPeter ? (
+          <>
+            <AvatarImage src={peterAvatarImage} alt="Peter" />
+            <AvatarFallback className="bg-primary text-white text-sm font-semibold">
+              P
+            </AvatarFallback>
+          </>
+        ) : (
+          <>
+            <AvatarImage src={userAvatarUrl} alt={userName} />
+            <AvatarFallback className="bg-gray-200 text-gray-700 text-sm font-semibold">
+              {userName.charAt(0).toUpperCase() || 'U'}
+            </AvatarFallback>
+          </>
+        )}
       </Avatar>
       
       <div className={cn(
