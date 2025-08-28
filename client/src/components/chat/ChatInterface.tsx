@@ -99,7 +99,7 @@ export function ChatInterface({
             </Avatar>
             <div>
               <div className="text-sm font-semibold text-gray-900">Peter</div>
-              <div className="text-xs text-green-600">Assistant écologique</div>
+              <div className="text-xs text-green-600">Ton guide plastique</div>
             </div>
           </div>
           <div className="flex items-center space-x-3">
