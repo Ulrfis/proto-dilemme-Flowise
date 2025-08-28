@@ -228,7 +228,7 @@ export function ChatInput({
                   ? "bg-red-500 hover:bg-red-600 text-white animate-pulse" 
                   : isTranscribing
                   ? "bg-yellow-500 hover:bg-yellow-600 text-white"
-                  : "bg-blue-500 hover:bg-blue-600 text-white"
+                  : "bg-accent hover:bg-accent/80 text-accent-foreground"
               }`}
               aria-label={
                 isRecording 
@@ -252,7 +252,7 @@ export function ChatInput({
             size="sm"
             disabled={!message.trim() || disabled || isTranscribing}
             data-testid="button-send-message"
-            className="absolute right-2 top-1/2 transform -translate-y-1/2 h-7 w-7 p-0"
+            className="absolute right-2 top-1/2 transform -translate-y-1/2 h-7 w-7 p-0 bg-accent hover:bg-accent/80 text-accent-foreground"
             aria-label="Envoyer le message"
           >
             <Send className="w-3 h-3" />
