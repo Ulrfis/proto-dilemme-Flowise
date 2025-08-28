@@ -27,7 +27,8 @@ export function AvatarSelector({
 
   const generateAvatarUrl = (name: string, gender: 'male' | 'female') => {
     if (!name.trim()) return '';
-    return `https://avatar-placeholder.iran.liara.run/${gender}/${encodeURIComponent(name.trim())}`;
+    const genderPath = gender === 'male' ? 'boy' : 'girl';
+    return `https://avatar.iran.liara.run/public/${genderPath}?username=${encodeURIComponent(name.trim())}`;
   };
 
   const generateRandomName = () => {

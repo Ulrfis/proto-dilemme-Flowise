@@ -18,7 +18,8 @@ const generateRandomName = () => {
 };
 
 const generateAvatarUrl = (name: string, gender: 'male' | 'female') => {
-  return `https://avatar-placeholder.iran.liara.run/${gender}/${encodeURIComponent(name.trim())}`;
+  const genderPath = gender === 'male' ? 'boy' : 'girl';
+  return `https://avatar.iran.liara.run/public/${genderPath}?username=${encodeURIComponent(name.trim())}`;
 };
 
 const getDefaultAvatar = (): UserAvatarState => {
@@ -75,7 +76,7 @@ export function useUserAvatar() {
         updateAvatar(userAvatar.name, userAvatar.gender, expectedUrl);
       }
     }
-  }, [userAvatar.name, userAvatar.gender]);
+  }, [userAvatar.name, userAvatar.gender, userAvatar.avatarUrl]);
 
   return {
     ...userAvatar,
