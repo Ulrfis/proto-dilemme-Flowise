@@ -15,8 +15,8 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:", "https:"],
       connectSrc: ["'self'", "https:"], // Allow HTTPS connections
-      frameSrc: ["'self'", "https://www.youtube.com", "https://play.gumlet.io"],
-      mediaSrc: ["'self'", "https:"],
+      frameSrc: ["'self'", "https://www.youtube.com", "https://www.youtube-nocookie.com", "https://play.gumlet.io"],
+      mediaSrc: ["'self'", "https:", "https://www.youtube.com", "https://play.gumlet.io"],
     },
   },
 }));

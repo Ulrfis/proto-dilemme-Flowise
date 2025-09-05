@@ -1,0 +1,50 @@
+index-BnTsHJRa.js:226 YouTube URL detected: "https://www.youtube.com/watch?v=EeJj0yN1-2g" -> ID: "EeJj0yN1-2g"
+index-BnTsHJRa.js:33 Allow attribute will take precedence over 'allowfullscreen'.
+tu @ index-BnTsHJRa.js:33
+index-BnTsHJRa.js:168 handleMediaClick: "https://www.unep.org/fr/actualites-et-recits/recit/les-interdictions-relatives-aux-sacs-en-plastique-peuvent-contribuer" -> "https://www.unep.org/fr/actualites-et-recits/recit/les-interdictions-relatives-aux-sacs-en-plastique-peuvent-contribuer"
+index-BnTsHJRa.js:33 Error: <path> attribute d: Expected moveto path command ('M' or 'm'), "13.828 10.172a4 …".
+tu @ index-BnTsHJRa.js:33
+/api/proxy?url=https%3A%2F%2Fwww.unep.org%2Ffr%2Factualites-et-recits%2Frecit%2Fles-interdictions-relatives-aux-sacs-en-plastique-peuvent-contribuer:1  Failed to load resource: the server responded with a status of 500 ()
+/api/proxy?url=https%3A%2F%2Fwww.unep.org%2Ffr%2Factualites-et-recits%2Frecit%2Fles-interdictions-relatives-aux-sacs-en-plastique-peuvent-contribuer:1 An iframe which has both allow-scripts and allow-same-origin for its sandbox attribute can escape its sandboxing.
+index-BnTsHJRa.js:168 handleMediaClick: "https://www.youtube.com/watch?v=EeJj0yN1-2g" -> "https://www.youtube.com/watch?v=EeJj0yN1-2g"
+index-BnTsHJRa.js:33 Error: <path> attribute d: Expected moveto path command ('M' or 'm'), "12 9v3m0 0v3m0-3…".
+tu @ index-BnTsHJRa.js:33
+index-BnTsHJRa.js:226 YouTube URL detected: "https://www.youtube.com/watch?v=EeJj0yN1-2g" -> ID: "EeJj0yN1-2g"
+index-BnTsHJRa.js:168 handleMediaClick: "https://www.unep.org/fr/actualites-et-recits/recit/les-interdictions-relatives-aux-sacs-en-plastique-peuvent-contribuer" -> "https://www.unep.org/fr/actualites-et-recits/recit/les-interdictions-relatives-aux-sacs-en-plastique-peuvent-contribuer"
+index-BnTsHJRa.js:33 Error: <path> attribute d: Expected moveto path command ('M' or 'm'), "13.828 10.172a4 …".
+tu @ index-BnTsHJRa.js:33
+/api/proxy?url=https%3A%2F%2Fwww.unep.org%2Ffr%2Factualites-et-recits%2Frecit%2Fles-interdictions-relatives-aux-sacs-en-plastique-peuvent-contribuer:1  Failed to load resource: the server responded with a status of 500 ()
+/api/proxy?url=https%3A%2F%2Fwww.unep.org%2Ffr%2Factualites-et-recits%2Frecit%2Fles-interdictions-relatives-aux-sacs-en-plastique-peuvent-contribuer:1 An iframe which has both allow-scripts and allow-same-origin for its sandbox attribute can escape its sandboxing.
+index-BnTsHJRa.js:33 Refused to frame 'https://webcache.googleusercontent.com/' because it violates the following Content Security Policy directive: "frame-src 'self' https://www.youtube.com https://play.gumlet.io".
+
+/api/proxy?url=https%3A%2F%2Fwww.unep.org%2Ffr%2Factualites-et-recits%2Frecit%2Fles-interdictions-relatives-aux-sacs-en-plastique-peuvent-contribuer:1  Failed to load resource: the server responded with a status of 500 ()
+/api/proxy?url=https%3A%2F%2Fwww.unep.org%2Ffr%2Factualites-et-recits%2Frecit%2Fles-interdictions-relatives-aux-sacs-en-plastique-peuvent-contribuer:1 An iframe which has both allow-scripts and allow-same-origin for its sandbox attribute can escape its sandboxing.
+index-BnTsHJRa.js:168 handleMediaClick: "https://www.youtube.com/watch?v=EeJj0yN1-2g" -> "https://www.youtube.com/watch?v=EeJj0yN1-2g"
+index-BnTsHJRa.js:33 Error: <path> attribute d: Expected moveto path command ('M' or 'm'), "12 9v3m0 0v3m0-3…".
+tu @ index-BnTsHJRa.js:33
+index-BnTsHJRa.js:226 YouTube URL detected: "https://www.youtube.com/watch?v=EeJj0yN1-2g" -> ID: "EeJj0yN1-2g"
+www.youtube.com/api/stats/qoe?cpn=ziKTqZlIKlwArEXc&el=embedded&ns=yt&fexp=v1%2C24004644%2C27005591%2C53408%2C34656%2C106030%2C18644%2C14869%2C75925%2C26895%2C9252%2C3479%2C13030%2C23206%2C15179%2C2%2C20221%2C19815%2C11782%2C27594%2C5346%2C699%2C64%2C4324%2C5396%2C2887%2C142%2C2356%2C16586%2C2381%2C1864%2C3132%2C1096%2C4174%2C1059%2C4127%2C4734%2C1786%2C8063%2C5948%2C3928%2C802%2C1163%2C1116%2C11753%2C3566%2C378%2C475%2C58%2C196%2C1011%2C939%2C344%2C2147%2C1825%2C2080%2C1201%2C2822%2C509&cl=800254696&seq=1&event=streamingstats&docid=EeJj0yN1-2g&cbrand=apple&cbr=Chrome&cbrver=139.0.0.0&c=WEB_EMBEDDED_PLAYER&cver=1.20250827.22.00&cplayer=UNIPLAYER&cos=Macintosh&cosver=10_15_7&cplatform=DESKTOP&vps=0.000:N,0.000:ER&cmt=0.000:0.000,0.000:0.000&error=0.000:embedder.identity.missing.referrer::0.000:0;a6s.0&vis=0.000:0&bh=0.000:0.000&qclc=ChB6aUtUcVpsSUtsd0FyRVhjEAE:1  Failed to load resource: net::ERR_BLOCKED_BY_CLIENT
+www.youtube.com/youtubei/v1/log_event?alt=json:1  Failed to load resource: net::ERR_BLOCKED_BY_CLIENT
+www.youtube.com/youtubei/v1/log_event?alt=json:1  Failed to load resource: net::ERR_BLOCKED_BY_CLIENT
+(index):1 Refused to load the stylesheet 'https://fonts.googleapis.com/css2?family=Architects+Daughter&family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Fira+Code:wght@300..700&family=Geist+Mono:wght@100..900&family=Geist:wght@100..900&family=IBM+Plex+Mono:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=L...mily=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Roboto+Mono:ital,wght@0,100..700;1,100..700&family=Roboto:ital,wght@0,100..900;1,100..900&family=Source+Code+Pro:ital,wght@0,200..900;1,200..900&family=Source+Serif+4:ital,opsz,wght@0,8..60,200..900;1,8..60,200..900&family=Space+Grotesk:wght@300..700&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap' because it violates the following Content Security Policy directive: "style-src 'self' 'unsafe-inline'". Note that 'style-src-elem' was not explicitly set, so 'style-src' is used as a fallback.
+
+(index):1 Refused to load the stylesheet 'https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap' because it violates the following Content Security Policy directive: "style-src 'self' 'unsafe-inline'". Note that 'style-src-elem' was not explicitly set, so 'style-src' is used as a fallback.
+
+www-embed-player.js:1219  POST https://www.youtube.com/youtubei/v1/log_event?alt=json net::ERR_BLOCKED_BY_CLIENT
+Mq @ www-embed-player.js:1219
+Qq @ www-embed-player.js:1224
+iw @ www-embed-player.js:1635
+p.sendAndWrite @ www-embed-player.js:1538
+hw.sendAndWrite @ www-embed-player.js:1630
+c @ base.js:2091
+(anonymous) @ base.js:2099
+Promise.then
+g.JW @ base.js:2099
+rod @ base.js:2195
+QZm @ base.js:2186
+(anonymous) @ base.js:2184
+g.v5 @ base.js:1158
+pB @ base.js:2184
+M @ base.js:2187
+(anonymous) @ base.js:2189
+(anonymous) @ base.js:1674
