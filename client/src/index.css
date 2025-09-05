@@ -210,4 +210,125 @@
     border-top: 8px solid transparent;
     border-bottom: 0px solid transparent;
   }
+
+  /* Effets confetti futuristes */
+  .confetti-particle {
+    font-size: 2rem;
+    user-select: none;
+    animation: confetti-glow 2s ease-in-out infinite alternate;
+    will-change: transform, opacity;
+  }
+
+  .confetti-star {
+    animation: confetti-glow 1.5s ease-in-out infinite alternate,
+               confetti-rotate 3s linear infinite;
+  }
+
+  .confetti-sparkle {
+    animation: confetti-sparkle 0.8s ease-in-out infinite alternate,
+               confetti-pulse 2s ease-in-out infinite;
+  }
+
+  .confetti-crystal {
+    animation: confetti-crystal 2s ease-in-out infinite,
+               confetti-rotate 4s linear infinite reverse;
+  }
+
+  .confetti-flash {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(circle at center, 
+                rgba(0, 245, 255, 0.1) 0%, 
+                rgba(255, 0, 255, 0.05) 50%, 
+                transparent 70%);
+    animation: confetti-flash-effect 0.5s ease-out;
+    pointer-events: none;
+  }
+
+  @keyframes confetti-glow {
+    0% { 
+      filter: brightness(1) saturate(1);
+      transform: scale(1);
+    }
+    100% { 
+      filter: brightness(1.5) saturate(1.5);
+      transform: scale(1.1);
+    }
+  }
+
+  @keyframes confetti-rotate {
+    from { transform: rotate(0deg) scale(var(--scale, 1)); }
+    to { transform: rotate(360deg) scale(var(--scale, 1)); }
+  }
+
+  @keyframes confetti-sparkle {
+    0% { 
+      filter: brightness(1) hue-rotate(0deg);
+      transform: scale(0.8);
+    }
+    50% {
+      filter: brightness(2) hue-rotate(180deg);
+      transform: scale(1.2);
+    }
+    100% { 
+      filter: brightness(1) hue-rotate(360deg);
+      transform: scale(0.8);
+    }
+  }
+
+  @keyframes confetti-pulse {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 1; }
+  }
+
+  @keyframes confetti-crystal {
+    0% { 
+      transform: perspective(1000px) rotateX(0deg) rotateY(0deg);
+      filter: brightness(1);
+    }
+    25% {
+      transform: perspective(1000px) rotateX(90deg) rotateY(90deg);
+      filter: brightness(1.5);
+    }
+    50% {
+      transform: perspective(1000px) rotateX(180deg) rotateY(180deg);
+      filter: brightness(2);
+    }
+    75% {
+      transform: perspective(1000px) rotateX(270deg) rotateY(270deg);
+      filter: brightness(1.5);
+    }
+    100% { 
+      transform: perspective(1000px) rotateX(360deg) rotateY(360deg);
+      filter: brightness(1);
+    }
+  }
+
+  @keyframes confetti-flash-effect {
+    0% { 
+      opacity: 1;
+      background: radial-gradient(circle at center, 
+                  rgba(0, 245, 255, 0.3) 0%, 
+                  rgba(255, 0, 255, 0.2) 30%, 
+                  rgba(255, 255, 0, 0.1) 60%,
+                  transparent 70%);
+    }
+    100% { 
+      opacity: 0;
+      background: radial-gradient(circle at center, 
+                  rgba(0, 245, 255, 0.1) 0%, 
+                  rgba(255, 0, 255, 0.05) 50%, 
+                  transparent 70%);
+    }
+  }
+
+  /* Optimisation performance */
+  .confetti-particle {
+    backface-visibility: hidden;
+    perspective: 1000px;
+    transform-style: preserve-3d;
+  }
 }
