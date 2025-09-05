@@ -226,11 +226,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         throw new Error("FLOWISE_CHATFLOW_ID environment variable is required");
       }
 
-      console.log(`[Flowise] Connecting to: ${flowiseHost}`);
-      console.log(`[Flowise] Using chatflow: ${actualChatflowId}`);
-
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Connection": "keep-alive"
       };
 
       if (flowiseApiKey) {
@@ -243,44 +242,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
         returnSourceDocuments: true,
       };
 
-      // Only log non-sensitive request info
+      // Minimal logging for performance
       console.log(`[Flowise] Request to chatflow: ${actualChatflowId}, chatId: ${requestBody.chatId}`);
 
+      // Add timeout and connection optimization
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 second timeout
+      
       const response = await fetch(`${flowiseHost}/api/v1/prediction/${actualChatflowId}`, {
         method: "POST",
         headers,
         body: JSON.stringify(requestBody),
+        signal: controller.signal
       });
+      
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Flowise API error: ${response.status} ${response.statusText}`);
+      }
 
       const responseText = await response.text();
       console.log(`[Flowise] Response status: ${response.status}`);
-      // Log response status only, not content for privacy
       console.log(`[Flowise] Response received: ${response.status}, length: ${responseText.length} chars`);
-      console.log('[Flowise] Raw response first 1000 chars:', responseText.substring(0, 1000));
-      console.log('[Flowise] Raw response last 500 chars:', responseText.substring(responseText.length - 500));
       
-
-      if (!response.ok) {
-        throw new Error(`Flowise API error: ${response.status} ${response.statusText} - ${responseText}`);
-      }
-
+      // Optimized JSON parsing
       let data;
       try {
         data = JSON.parse(responseText);
         console.log('[Flowise] Parsed response keys:', Object.keys(data));
         
-        // The response might have a 'text' field containing the actual message
-        if (data.text) {
-          console.log('[Flowise] Found text field, first 500 chars:', data.text.substring(0, 500));
+        // Optimized text field parsing
+        if (data.text && typeof data.text === 'string') {
+          console.log('[Flowise] Found text field, first 200 chars:', data.text.substring(0, 200));
           
-          // Try to parse the text field as JSON
-          try {
-            const parsedText = JSON.parse(data.text);
-            console.log('[Flowise] Text field is JSON with keys:', Object.keys(parsedText));
-            // Replace the text with the parsed JSON
-            data.parsedContent = parsedText;
-          } catch (textParseError) {
-            console.log('[Flowise] Text field is not JSON, keeping as is');
+          // Quick check if text looks like JSON before parsing
+          const trimmedText = data.text.trim();
+          if (trimmedText.startsWith('{') && trimmedText.endsWith('}')) {
+            try {
+              const parsedText = JSON.parse(data.text);
+              console.log('[Flowise] Text field is JSON with keys:', Object.keys(parsedText));
+              data.parsedContent = parsedText;
+            } catch (textParseError) {
+              console.log('[Flowise] Text field is not valid JSON, keeping as is');
+            }
           }
         }
       } catch (parseError) {

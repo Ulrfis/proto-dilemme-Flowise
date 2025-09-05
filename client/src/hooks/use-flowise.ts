@@ -89,13 +89,22 @@ function parseFlowiseResponse(response: any): ParsedFlowiseResponse {
       const jsonString = jsonMatch[0];
       console.log('[Flowise] JSON content first 500 chars:', jsonString.substring(0, 500));
       
-      // Extract Response field - using multiline approach instead of 's' flag
-      const responseMatch = jsonString.match(/"Response":\s*"([\s\S]*?)"/);
-      const themeMatch = jsonString.match(/"theme":\s*"([\s\S]*?)"/);
-      const indicesMatch = jsonString.match(/"nombre_d_indices":\s*"?([^",}]+)"?/);
-      const scoreMatch = jsonString.match(/"score_globale":\s*"?([^",}]+)"?/);
-      const urlMatch = jsonString.match(/"URL":\s*"([\s\S]*?)"/); 
-      const youtubeMatch = jsonString.match(/"URLYOUTUBE":\s*"([\s\S]*?)"/);
+      // Optimized regex patterns - compile once and reuse
+      const patterns = {
+        response: /"Response":\s*"([\s\S]*?)"/,
+        theme: /"theme":\s*"([\s\S]*?)"/,
+        indices: /"nombre_d_indices":\s*"?([^",}]+)"?/,
+        score: /"score_globale":\s*"?([^",}]+)"?/,
+        url: /"URL":\s*"([\s\S]*?)"/,
+        youtube: /"URLYOUTUBE":\s*"([\s\S]*?)"/
+      };
+      
+      const responseMatch = jsonString.match(patterns.response);
+      const themeMatch = jsonString.match(patterns.theme);
+      const indicesMatch = jsonString.match(patterns.indices);
+      const scoreMatch = jsonString.match(patterns.score);
+      const urlMatch = jsonString.match(patterns.url);
+      const youtubeMatch = jsonString.match(patterns.youtube);
       
       console.log('[Flowise] Regex extraction results:');
       console.log('- Response found:', !!responseMatch);
