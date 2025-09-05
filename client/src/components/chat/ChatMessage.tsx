@@ -132,12 +132,12 @@ export function ChatMessage({
   return (
     <div 
       className={cn(
-        "flex items-start space-x-3",
+        "flex items-end space-x-3 mb-4",
         !isPeter && "flex-row-reverse space-x-reverse"
       )}
       data-testid={`message-${message.sender}-${message.id}`}
     >
-      <Avatar className="w-8 h-8 flex-shrink-0">
+      <Avatar className="w-8 h-8 flex-shrink-0 mb-1">
         {isPeter ? (
           <>
             <AvatarImage src={peterAvatarImage} alt="Peter" />
@@ -156,12 +156,14 @@ export function ChatMessage({
       </Avatar>
       
       <div className={cn(
-        "flex-1 max-w-2xl",
-        !isPeter && "text-right"
+        "flex-1",
+        isPeter ? "mr-16" : "ml-16 text-right"
       )}>
         <div className={cn(
-          "rounded-lg p-3",
-          isPeter ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"
+          "relative px-4 py-3 max-w-sm shadow-sm inline-block",
+          isPeter 
+            ? "bg-teal-500 text-white rounded-2xl rounded-bl-md chat-bubble-left" 
+            : "bg-white text-gray-800 rounded-2xl rounded-br-md border border-gray-200 chat-bubble-right float-right"
         )}>
           {messageType === 'with-choices' ? (
             <div className="text-sm leading-relaxed whitespace-pre-wrap">
