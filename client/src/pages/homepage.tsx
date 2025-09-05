@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { MessageCircle, Lightbulb, Video, CheckCircle } from "lucide-react";
 import peterAvatarImage from "@assets/Peter Avatar_1756372265537.jpg";
 import { ChatInterface } from "../components/chat/ChatInterface";
 import { MediaPanel } from "../components/media/MediaPanel";
+import { ConfettiEffect } from "../components/effects/ConfettiEffect";
 import { useFlowise } from "../hooks/use-flowise";
 import { useMediaPanel } from "../hooks/use-media-panel";
 import { analytics } from "../lib/analytics";
@@ -21,6 +22,8 @@ interface HomepageProps {
 export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
   const [showChat, setShowChat] = useState(false);
   const [infoData, setInfoData] = useState<InfoPanelData | null>(null);
+  const [showConfetti, setShowConfetti] = useState(false);
+  const previousIndicesRef = useRef<number>(0);
   
   // Get Flowise config from environment variables
   const chatflowId = import.meta.env.VITE_FLOWISE_CHATFLOW_ID || import.meta.env.FLOWISE_CHATFLOW_ID;
@@ -36,6 +39,23 @@ export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
         nombre_d_indices: newData.nombre_d_indices !== undefined ? newData.nombre_d_indices : prevData?.nombre_d_indices,
         score_globale: newData.score_globale !== undefined ? newData.score_globale : prevData?.score_globale,
       };
+      
+      // Détecter si le nombre d'indices a augmenté pour déclencher l'effet confetti
+      const currentIndices = parseInt(updatedData.nombre_d_indices || '0', 10);
+      const previousIndices = previousIndicesRef.current;
+      
+      console.log('[Confetti] Vérification indices:', {
+        previous: previousIndices,
+        current: currentIndices,
+        increased: currentIndices > previousIndices && currentIndices > 0
+      });
+      
+      if (currentIndices > previousIndices && currentIndices > 0) {
+        console.log('[Confetti] Indice trouvé ! Déclenchement de l\'effet confetti');
+        setShowConfetti(true);
+      }
+      
+      previousIndicesRef.current = currentIndices;
       
       // Also update parent component
       if (onInfoDataUpdate) {
@@ -106,8 +126,19 @@ export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
     await sendMessage(choice);
   };
 
+  const handleConfettiComplete = () => {
+    setShowConfetti(false);
+    console.log('[Confetti] Effet terminé');
+  };
+
   return (
-    <main className="flex-1 flex overflow-hidden">
+    <main className="flex-1 flex overflow-hidden relative">
+      {/* Effet confetti futuriste */}
+      <ConfettiEffect 
+        isTriggered={showConfetti} 
+        onComplete={handleConfettiComplete}
+      />
+      
       {!showChat ? (
         /* Welcome Screen - Full Width */
         <div className="flex-1 flex items-center justify-center p-8 bg-white">
