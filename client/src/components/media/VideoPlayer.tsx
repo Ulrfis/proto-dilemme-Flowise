@@ -40,18 +40,18 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
         }
         
         if (youtubeVideoId) {
-          // Clean YouTube embed with minimal distractions
+          // Clean YouTube embed with minimal distractions (updated for 2025)
           embedUrl = `https://www.youtube.com/embed/${youtubeVideoId}?` +
             'rel=0&' +                    // Remove related videos at end
             'modestbranding=1&' +         // Remove YouTube logo
-            'showinfo=0&' +               // Hide video title and uploader info
             'controls=1&' +               // Keep video controls
             'disablekb=0&' +              // Allow keyboard controls
             'fs=1&' +                     // Allow fullscreen
             'iv_load_policy=3&' +         // Hide annotations
             'cc_load_policy=0&' +         // Don't force closed captions
             'playsinline=1&' +            // Play inline on mobile
-            'widget_referrer=' + encodeURIComponent(window.location.origin);
+            'enablejsapi=0&' +            // Disable JS API to prevent CSP issues
+            'origin=' + encodeURIComponent(window.location.origin);
         }
         
         console.log(`YouTube URL detected: "${video.url}" -> ID: "${youtubeVideoId}"`);
@@ -132,16 +132,19 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
         />
       );
     } else if (playerType === 'youtube' && videoData.embedUrl) {
-      // Use YouTube iframe embed
+      // Use YouTube iframe embed with improved error handling
       return (
         <iframe
           key={videoData.youtubeVideoId} // Force re-render when video changes
           src={videoData.embedUrl}
           className="w-full h-full border-none rounded-lg shadow-lg"
-          allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
           title={video?.title || "Lecteur vidéo YouTube éducatif"}
           data-testid="iframe-youtube-player"
           allowFullScreen
+          referrerPolicy="strict-origin-when-cross-origin"
+          sandbox="allow-scripts allow-same-origin allow-presentation"
+          loading="lazy"
         />
       );
     } else {
