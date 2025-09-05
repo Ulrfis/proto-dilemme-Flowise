@@ -185,4 +185,29 @@
     height: 100%;
     overflow: hidden;
   }
+
+  /* Modern chat bubble tails */
+  .chat-bubble-left::before {
+    content: '';
+    position: absolute;
+    left: -8px;
+    bottom: 4px;
+    width: 0;
+    height: 0;
+    border-right: 8px solid #14b8a6;
+    border-top: 8px solid transparent;
+    border-bottom: 0px solid transparent;
+  }
+
+  .chat-bubble-right::after {
+    content: '';
+    position: absolute;
+    right: -8px;
+    bottom: 4px;
+    width: 0;
+    height: 0;
+    border-left: 8px solid white;
+    border-top: 8px solid transparent;
+    border-bottom: 0px solid transparent;
+  }
 }
