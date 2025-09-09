@@ -11,12 +11,15 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"], // Needed for Vite dev
-      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https:", "https://api.rectify.so", "*.rectify.so"], // Needed for Vite dev and Rectify widget
+      styleSrc: ["'self'", "'unsafe-inline'", "https:", "https://api.rectify.so", "*.rectify.so"],
       imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'", "https:"], // Allow HTTPS connections
-      frameSrc: ["'self'", "https://www.youtube.com", "https://www.youtube-nocookie.com", "https://play.gumlet.io"],
+      connectSrc: ["'self'", "https:", "https://api.rectify.so", "*.rectify.so"], // Allow HTTPS connections and Rectify API
+      frameSrc: ["'self'", "https:", "https://www.youtube.com", "https://www.youtube-nocookie.com", "https://play.gumlet.io", "https://api.rectify.so", "*.rectify.so"],
       mediaSrc: ["'self'", "https:", "https://www.youtube.com", "https://play.gumlet.io"],
+      fontSrc: ["'self'", "https:", "data:"],
+      childSrc: ["'self'", "https:", "*.rectify.so"],
+      workerSrc: ["'self'", "blob:", "https:", "*.rectify.so"],
     },
   },
 }));
