@@ -12,5 +12,22 @@
     <script type="module" src="/src/main.tsx"></script>
     <!-- This is a replit script which adds a banner on the top of the page when opened in development mode outside the replit environment -->
     <script type="text/javascript" src="https://replit.com/public/js/replit-dev-banner.js"></script>
+    <script type="text/javascript">
+      (function (w, d, s, o) {
+        var js = d.createElement(s);
+        js.src = o.widgetSrc;
+        js.async = true;
+        js.onload = function () {
+          if (typeof w.Rectify === 'function') {
+            w.RectifyInstance = new w.Rectify();
+            w.RectifyInstance.init(o.projectId, o.userInfo, o.config);
+          }
+        };
+        d.head.appendChild(js);
+      }(window, document, 'script', {
+      widgetSrc: 'https://api.rectify.so/widget/widget.umd.js',    // Required
+      projectId: '67fa3feb2c561c2729b9fc5d',     // Required
+    }));
+    </script>
   </body>
 </html>
