@@ -35,7 +35,7 @@ export function Header({ onAboutClick, infoData }: HeaderProps) {
         
         <nav className="flex items-center space-x-4">
           {infoData && (
-            <div className="bg-primary text-primary-foreground px-3 py-2 rounded-lg text-sm">
+            <div className="px-3 py-2 rounded-lg text-sm text-white" style={{backgroundColor: '#14B8A7'}}>
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
                   <span>Thématique :</span>
