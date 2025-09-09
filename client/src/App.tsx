@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { DesktopValidator } from "./components/layout/DesktopValidator";
 import { Header } from "./components/layout/Header";
+import { RectifyWidget } from "./components/integrations/RectifyWidget";
 import Homepage from "./pages/homepage";
 import About from "./pages/about";
 import NotFound from "./pages/not-found";
@@ -53,6 +54,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
+        <RectifyWidget />
         <Router />
       </TooltipProvider>
     </QueryClientProvider>
