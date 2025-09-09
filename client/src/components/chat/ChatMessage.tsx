@@ -60,6 +60,18 @@ export function ChatMessage({
   };
 
   const messageType = getMessageType(message.content);
+  
+  // Typing indicator component for streaming messages
+  const TypingIndicator = () => (
+    <div className="flex items-center space-x-1 text-white/70">
+      <div className="flex space-x-1">
+        <div className="w-1 h-1 bg-white/70 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+        <div className="w-1 h-1 bg-white/70 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+        <div className="w-1 h-1 bg-white/70 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+      </div>
+      <span className="text-xs">Peter écrit...</span>
+    </div>
+  );
 
   // Format message content with proper link formatting
   const formatContent = (content: string) => {
@@ -165,9 +177,13 @@ export function ChatMessage({
             ? "bg-teal-500 text-white rounded-2xl rounded-bl-md chat-bubble-left" 
             : "bg-white text-gray-800 rounded-2xl rounded-br-md border border-gray-200 chat-bubble-right float-right"
         )}>
-          {messageType === 'with-choices' ? (
+          {/* Show typing indicator for streaming messages with no content */}
+          {isPeter && message.isStreaming && !message.content ? (
+            <TypingIndicator />
+          ) : messageType === 'with-choices' ? (
             <div className="text-sm leading-relaxed whitespace-pre-wrap">
               {formatChoiceContent(message.content)}
+              {message.isStreaming && <span className="inline-block w-2 h-4 ml-1 bg-white/70 animate-pulse">|</span>}
             </div>
           ) : messageType === 'with-links' ? (
             <div className="text-sm leading-relaxed">
@@ -220,16 +236,18 @@ export function ChatMessage({
                 
                 return <div key={lineIndex}>{line}</div>;
               })}
+              {message.isStreaming && <span className="inline-block w-2 h-4 ml-1 bg-white/70 animate-pulse">|</span>}
             </div>
           ) : (
             <p className="text-sm leading-relaxed whitespace-pre-wrap">
               {message.content}
+              {isPeter && message.isStreaming && <span className="inline-block w-2 h-4 ml-1 bg-white/70 animate-pulse">|</span>}
             </p>
           )}
         </div>
         
-        {/* Action buttons based on message type */}
-        {isPeter && (
+        {/* Action buttons based on message type - only show when not streaming */}
+        {isPeter && !message.isStreaming && (
           <div className="mt-2 flex flex-wrap gap-2">
             {/* Choice buttons for menu messages */}
             {messageType === 'with-choices' && onChoiceClick && extractedChoices.map((choice, index) => (
