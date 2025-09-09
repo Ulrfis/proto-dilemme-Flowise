@@ -264,19 +264,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const responseText = await response.text();
-      console.log(`[Flowise] Response status: ${response.status}`);
-      console.log(`[Flowise] Response received: ${response.status}, length: ${responseText.length} chars`);
       
       // Ultra-optimized single-pass JSON parsing
       let data;
       try {
         data = JSON.parse(responseText);
-        console.log('[Flowise] Parsed response keys:', Object.keys(data));
-        
         // Single-pass optimized text field processing
         if (data.text && typeof data.text === 'string') {
           const textField = data.text;
-          console.log('[Flowise] Found text field, length:', textField.length);
           
           // Pre-compiled regex patterns for maximum performance
           const jsonPattern = /^\s*\{[\s\S]*\}\s*$/;
@@ -286,7 +281,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
               // Direct parsing - fastest approach
               const parsedText = JSON.parse(textField);
               data.parsedContent = parsedText;
-              console.log('[Flowise] Direct JSON parse successful');
             } catch {
               // Ultra-fast regex extraction - only if JSON.parse fails
               const extractors = {
@@ -298,7 +292,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 URLYOUTUBE: /"URLYOUTUBE":\s*"((?:[^"\\]|\\.)*)"/ 
               };
               
-              const extracted = {};
+              const extracted: Record<string, string> = {};
               let hasData = false;
               
               // Single pass through text with all patterns
@@ -312,7 +306,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
               
               if (hasData) {
                 data.parsedContent = extracted;
-                console.log('[Flowise] Regex extraction successful');
               }
             }
           }
