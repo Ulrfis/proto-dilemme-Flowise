@@ -45,6 +45,9 @@ A desktop-only French educational web app integrating Flowise chatbot "Peter" fo
 - Implemented message type handling: information messages (thumbs up button), open questions, and messages with links (bold formatting)
 - Fixed URL cleaning to remove trailing punctuation from all links
 - YouTube video integration with clean embed player - no distracting overlays or related videos
+- **Rectify Analytics Integration** : Widget fully integrated across the application for user analytics
+- **Visual Consistency** : Unified green color (#14B8A7) across Peter's message bubbles, guide text, and header info box
+- **Changelog System** : Added CHANGELOG.md file for tracking all project changes with timestamps
 
 ## Development Guidelines
 Following fullstack_js blueprint with:
