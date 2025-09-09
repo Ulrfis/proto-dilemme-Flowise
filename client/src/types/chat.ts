@@ -3,7 +3,6 @@ export interface ChatMessage {
   content: string;
   sender: 'user' | 'peter';
   timestamp: string;
-  isStreaming?: boolean;
   metadata?: {
     hasVideo?: boolean;
     hasLinks?: boolean;
