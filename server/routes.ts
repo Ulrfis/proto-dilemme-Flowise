@@ -267,25 +267,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`[Flowise] Response status: ${response.status}`);
       console.log(`[Flowise] Response received: ${response.status}, length: ${responseText.length} chars`);
       
-      // Optimized JSON parsing
+      // Ultra-optimized single-pass JSON parsing
       let data;
       try {
         data = JSON.parse(responseText);
         console.log('[Flowise] Parsed response keys:', Object.keys(data));
         
-        // Optimized text field parsing
+        // Single-pass optimized text field processing
         if (data.text && typeof data.text === 'string') {
-          console.log('[Flowise] Found text field, first 200 chars:', data.text.substring(0, 200));
+          const textField = data.text;
+          console.log('[Flowise] Found text field, length:', textField.length);
           
-          // Quick check if text looks like JSON before parsing
-          const trimmedText = data.text.trim();
-          if (trimmedText.startsWith('{') && trimmedText.endsWith('}')) {
+          // Pre-compiled regex patterns for maximum performance
+          const jsonPattern = /^\s*\{[\s\S]*\}\s*$/;
+          
+          if (jsonPattern.test(textField)) {
             try {
-              const parsedText = JSON.parse(data.text);
-              console.log('[Flowise] Text field is JSON with keys:', Object.keys(parsedText));
+              // Direct parsing - fastest approach
+              const parsedText = JSON.parse(textField);
               data.parsedContent = parsedText;
-            } catch (textParseError) {
-              console.log('[Flowise] Text field is not valid JSON, keeping as is');
+              console.log('[Flowise] Direct JSON parse successful');
+            } catch {
+              // Ultra-fast regex extraction - only if JSON.parse fails
+              const extractors = {
+                Response: /"Response":\s*"((?:[^"\\]|\\.)*)"/,
+                theme: /"theme":\s*"((?:[^"\\]|\\.)*)"/,
+                nombre_d_indices: /"nombre_d_indices":\s*"?([^",}]*)"?/,
+                score_globale: /"score_globale":\s*"?([^",}]*)"?/,
+                URL: /"URL":\s*"((?:[^"\\]|\\.)*)"/,
+                URLYOUTUBE: /"URLYOUTUBE":\s*"((?:[^"\\]|\\.)*)"/ 
+              };
+              
+              const extracted = {};
+              let hasData = false;
+              
+              // Single pass through text with all patterns
+              for (const [key, pattern] of Object.entries(extractors)) {
+                const match = textField.match(pattern);
+                if (match) {
+                  extracted[key] = match[1];
+                  hasData = true;
+                }
+              }
+              
+              if (hasData) {
+                data.parsedContent = extracted;
+                console.log('[Flowise] Regex extraction successful');
+              }
             }
           }
         }
