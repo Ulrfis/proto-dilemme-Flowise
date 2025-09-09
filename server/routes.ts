@@ -240,6 +240,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         question,
         chatId: chatId || `session_${Date.now()}`,
         returnSourceDocuments: true,
+        streaming: true,
       };
 
       // Minimal logging for performance
@@ -263,6 +264,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
         throw new Error(`Flowise API error: ${response.status} ${response.statusText}`);
       }
 
+      // Handle streaming response
+      if (response.body) {
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Headers': 'Cache-Control'
+        });
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let fullResponse = '';
+        
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split('\n');
+            
+            for (const line of lines) {
+              if (line.trim().startsWith('data: ')) {
+                const data = line.slice(6).trim();
+                if (data && data !== '[DONE]') {
+                  try {
+                    const parsed = JSON.parse(data);
+                    if (parsed.event === 'token' && parsed.data) {
+                      fullResponse += parsed.data;
+                      res.write(`data: ${JSON.stringify({ type: 'token', content: parsed.data })}\n\n`);
+                    }
+                  } catch (e) {
+                    // Skip invalid JSON
+                  }
+                }
+              }
+            }
+          }
+          
+          // Send the complete response for processing
+          const finalData = {
+            text: fullResponse,
+            streaming: true,
+          };
+          
+          res.write(`data: ${JSON.stringify({ type: 'complete', content: finalData })}\n\n`);
+          res.end();
+          return;
+          
+        } catch (streamError) {
+          console.error('Streaming error:', streamError);
+          res.write(`data: ${JSON.stringify({ type: 'error', content: 'Streaming failed' })}\n\n`);
+          res.end();
+          return;
+        }
+      }
+
+      // Fallback to non-streaming
       const responseText = await response.text();
       
       // Ultra-optimized single-pass JSON parsing
@@ -315,6 +375,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         throw new Error("Invalid JSON response from Flowise");
       }
 
+      // Only reached for non-streaming fallback
       res.json(data);
     } catch (error) {
       console.error("Flowise proxy error:", error);

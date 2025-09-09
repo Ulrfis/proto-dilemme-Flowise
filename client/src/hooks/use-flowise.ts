@@ -67,10 +67,31 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
     setIsLoading(true);
     analytics.trackMessageSent(content.length);
 
+    // Create streaming message placeholder
+    const streamingMessageId = `peter_${Date.now()}`;
+    const streamingMessage: ChatMessage = {
+      id: streamingMessageId,
+      content: '',
+      sender: 'peter',
+      timestamp: new Date().toISOString(),
+      isStreaming: true,
+    };
+
+    setMessages(prev => [...prev, streamingMessage]);
+
     try {
-      const response = await client.sendMessage(content.trim());
+      const response = await client.sendMessage(content.trim(), (token: string) => {
+        // Update the streaming message with new tokens
+        setMessages(prev => 
+          prev.map(msg => 
+            msg.id === streamingMessageId 
+              ? { ...msg, content: msg.content + token }
+              : msg
+          )
+        );
+      });
       
-      // Parse the response to extract structured data
+      // Parse the final response to extract structured data
       const { displayText, infoData, flowiseURL, flowiseYouTubeURL } = parseFlowiseResponse(response);
       
       // Update info panel data if new data is available
@@ -101,20 +122,24 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
         }
       }
       
-      const peterMessage: ChatMessage = {
-        id: `peter_${Date.now()}`,
-        content: displayText, // Use the parsed display text
-        sender: 'peter',
-        timestamp: new Date().toISOString(),
-        metadata: {
-          hasVideo: allVideos.length > 0,
-          hasLinks: allLinks.length > 0,
-          videoUrl: allVideos[0],
-          links: allLinks,
-        },
-      };
-
-      setMessages(prev => [...prev, peterMessage]);
+      // Update the final message with complete data
+      setMessages(prev => 
+        prev.map(msg => 
+          msg.id === streamingMessageId 
+            ? {
+                ...msg,
+                content: displayText,
+                isStreaming: false,
+                metadata: {
+                  hasVideo: allVideos.length > 0,
+                  hasLinks: allLinks.length > 0,
+                  videoUrl: allVideos[0],
+                  links: allLinks,
+                },
+              }
+            : msg
+        )
+      );
 
       // Track media if present
       if (allVideos.length > 0) {
@@ -127,18 +152,22 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
     } catch (error) {
       console.error("Error sending message:", error);
       
-      const errorMessage: ChatMessage = {
-        id: `error_${Date.now()}`,
-        content: "Désolé, je rencontre des difficultés techniques. Pouvez-vous réessayer votre message ?",
-        sender: 'peter',
-        timestamp: new Date().toISOString(),
-      };
-
-      setMessages(prev => [...prev, errorMessage]);
+      // Replace streaming message with error message
+      setMessages(prev => 
+        prev.map(msg => 
+          msg.id === streamingMessageId 
+            ? {
+                ...msg,
+                content: "Désolé, je rencontre des difficultés techniques. Pouvez-vous réessayer votre message ?",
+                isStreaming: false,
+              }
+            : msg
+        )
+      );
     } finally {
       setIsLoading(false);
     }
-  }, [client]);
+  }, [client, onInfoDataUpdate]);
 
   const resetSession = useCallback(() => {
     setMessages([]);

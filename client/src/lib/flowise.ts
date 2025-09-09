@@ -1,5 +1,9 @@
 import { FlowiseResponse } from "@shared/schema";
 
+interface StreamingCallbacks {
+  onToken?: (token: string) => void;
+}
+
 export class FlowiseClient {
   private chatflowId: string;
   private sessionId: string;
@@ -10,7 +14,7 @@ export class FlowiseClient {
     this.sessionId = `session_${Date.now()}_${crypto.randomUUID().replace(/-/g, '')}`;
   }
 
-  async sendMessage(message: string): Promise<FlowiseResponse> {
+  async sendMessage(message: string, onToken?: (token: string) => void): Promise<FlowiseResponse> {
     try {
       // Add timeout and request optimization
       const controller = new AbortController();
@@ -20,7 +24,7 @@ export class FlowiseClient {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Accept": "application/json",
+          "Accept": "text/event-stream",
           "Connection": "keep-alive"
         },
         body: JSON.stringify({
@@ -36,11 +40,75 @@ export class FlowiseClient {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
+      // Check if response is streaming
+      const contentType = response.headers.get('content-type');
+      if (contentType?.includes('text/event-stream')) {
+        return this.handleStreamingResponse(response, onToken);
+      }
+
+      // Fallback to regular JSON response
       const data = await response.json();
       return data;
     } catch (error) {
       console.error("Flowise client error:", error);
       throw new Error("Impossible de communiquer avec Peter. Vérifiez votre connexion et réessayez.");
+    }
+  }
+
+  private async handleStreamingResponse(response: Response, onToken?: (token: string) => void): Promise<FlowiseResponse> {
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+    let fullResponse = '';
+    
+    if (!reader) {
+      throw new Error('No readable stream available');
+    }
+    
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+        
+        for (const line of lines) {
+          if (line.trim().startsWith('data: ')) {
+            const data = line.slice(6).trim();
+            if (data) {
+              try {
+                const parsed = JSON.parse(data);
+                
+                if (parsed.type === 'token' && parsed.content) {
+                  fullResponse += parsed.content;
+                  if (onToken) {
+                    onToken(parsed.content);
+                  }
+                } else if (parsed.type === 'complete' && parsed.content) {
+                  // Return the complete response data
+                  return {
+                    text: fullResponse,
+                    ...parsed.content
+                  };
+                } else if (parsed.type === 'error') {
+                  throw new Error(parsed.content || 'Streaming error');
+                }
+              } catch (e) {
+                // Skip invalid JSON
+              }
+            }
+          }
+        }
+      }
+      
+      // If we reach here without a complete message, return what we have
+      return { text: fullResponse };
+      
+    } catch (error) {
+      console.error('Streaming error:', error);
+      throw error;
+    } finally {
+      reader.releaseLock();
     }
   }
 
