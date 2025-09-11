@@ -242,12 +242,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         returnSourceDocuments: true,
       };
 
-      // Minimal logging for performance
-      console.log(`[Flowise] Request to chatflow: ${actualChatflowId}, chatId: ${requestBody.chatId}`);
-
       // Add timeout and connection optimization
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // Reduced to 15 second timeout
       
       const response = await fetch(`${flowiseHost}/api/v1/prediction/${actualChatflowId}`, {
         method: "POST",
@@ -264,55 +261,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const responseText = await response.text();
-      console.log(`[Flowise] Response status: ${response.status}`);
-      console.log(`[Flowise] Response received: ${response.status}, length: ${responseText.length} chars`);
       
-      // Ultra-optimized single-pass JSON parsing
+      // Streamlined JSON parsing - minimal processing
       let data;
       try {
         data = JSON.parse(responseText);
-        console.log('[Flowise] Parsed response keys:', Object.keys(data));
         
-        // Single-pass optimized text field processing
+        // Fast text field processing with optimized logic
         if (data.text && typeof data.text === 'string') {
           const textField = data.text;
-          console.log('[Flowise] Found text field, length:', textField.length);
           
-          // Pre-compiled regex patterns for maximum performance
-          const jsonPattern = /^\s*\{[\s\S]*\}\s*$/;
-          
-          if (jsonPattern.test(textField)) {
+          // Quick JSON detection - avoid expensive regex
+          if (textField.trim().startsWith('{') && textField.trim().endsWith('}')) {
             try {
               // Direct parsing - fastest approach
               const parsedText = JSON.parse(textField);
               data.parsedContent = parsedText;
-              console.log('[Flowise] Direct JSON parse successful');
             } catch {
-              // Ultra-fast regex extraction - only if JSON.parse fails
-              const extractors = {
-                Response: /"Response":\s*"((?:[^"\\]|\\.)*)"/,
-                theme: /"theme":\s*"((?:[^"\\]|\\.)*)"/,
-                nombre_d_indices: /"nombre_d_indices":\s*"?([^",}]*)"?/,
-                score_globale: /"score_globale":\s*"?([^",}]*)"?/,
-                URL: /"URL":\s*"((?:[^"\\]|\\.)*)"/,
-                URLYOUTUBE: /"URLYOUTUBE":\s*"((?:[^"\\]|\\.)*)"/ 
-              };
+              // Fallback: extract only essential fields with single regex
+              const combinedPattern = /"(Response|theme|nombre_d_indices|score_globale|URL|URLYOUTUBE)":\s*"?([^",}]*)"?/g;
+              const extracted: Record<string, string> = {};
+              let match;
               
-              const extracted = {};
-              let hasData = false;
-              
-              // Single pass through text with all patterns
-              for (const [key, pattern] of Object.entries(extractors)) {
-                const match = textField.match(pattern);
-                if (match) {
-                  extracted[key] = match[1];
-                  hasData = true;
-                }
+              while ((match = combinedPattern.exec(textField)) !== null) {
+                extracted[match[1]] = match[2];
               }
               
-              if (hasData) {
+              if (Object.keys(extracted).length > 0) {
                 data.parsedContent = extracted;
-                console.log('[Flowise] Regex extraction successful');
               }
             }
           }

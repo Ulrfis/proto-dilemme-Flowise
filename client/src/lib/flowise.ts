@@ -14,7 +14,7 @@ export class FlowiseClient {
     try {
       // Add timeout and request optimization
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // Reduced to 15 second timeout
       
       const response = await fetch(`/api/flowise/prediction/${this.chatflowId}`, {
         method: "POST",
@@ -59,43 +59,34 @@ function cleanUrl(url: string): string {
   return url.replace(/[.,;:!?)\]}\s]+$/, '').replace(/\)+\.?\s*$/, '').replace(/\.$/, '').trim();
 }
 
-// Cached regex patterns for better performance
-const VIDEO_REGEX = /(https?:\/\/[^\s]+(?:gumlet\.io|youtube\.com\/watch|youtu\.be|vimeo\.com)[^\s]*)/gi;
-const LINK_REGEX = /(https?:\/\/[^\s]+)/gi;
+// Pre-compiled regex patterns for optimal performance
+const MEDIA_REGEX = /(https?:\/\/[^\s]+)/gi;
+const VIDEO_DOMAINS = /(?:gumlet\.io|youtube\.com\/watch|youtu\.be|vimeo\.com)/;
 
-// Optimized helper function to detect and extract media from text
+// Ultra-optimized single-pass media extraction
 export function extractMediaFromText(text: string): { 
   cleanText: string; 
   videos: string[]; 
   links: string[]; 
 } {
   const videos: string[] = [];
-  const allLinks: string[] = [];
-  const videoUrls = new Set<string>(); // Use Set for faster lookups
+  const links: string[] = [];
   
-  // Extract videos first - reset regex
-  VIDEO_REGEX.lastIndex = 0;
-  let cleanText = text.replace(VIDEO_REGEX, (match) => {
-    const cleanedUrl = cleanUrl(match);
-    videos.push(cleanedUrl);
-    videoUrls.add(cleanedUrl);
-    return `[Vidéo disponible dans le panneau média]`;
-  });
-  
-  // Extract remaining links - reset regex
-  LINK_REGEX.lastIndex = 0;
-  cleanText = cleanText.replace(LINK_REGEX, (match) => {
-    const cleanedUrl = cleanUrl(match);
-    if (!videoUrls.has(cleanedUrl)) {
-      allLinks.push(cleanedUrl);
+  // Single regex pass - much faster than multiple passes
+  MEDIA_REGEX.lastIndex = 0;
+  const cleanText = text.replace(MEDIA_REGEX, (match) => {
+    // Quick URL cleaning - minimal operations
+    const cleanedUrl = match.replace(/[.,;:!?)\]}\s]+$/, '').trim();
+    
+    // Fast domain check without complex regex
+    if (VIDEO_DOMAINS.test(cleanedUrl)) {
+      videos.push(cleanedUrl);
+      return `[Vidéo disponible dans le panneau média]`;
+    } else {
+      links.push(cleanedUrl);
       return `[Lien disponible dans le panneau média]`;
     }
-    return match;
   });
   
-  return {
-    cleanText,
-    videos,
-    links: allLinks,
-  };
+  return { cleanText, videos, links };
 }

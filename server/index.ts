@@ -1,10 +1,23 @@
 import express, { type Request, Response, NextFunction } from "express";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
+import compression from "compression";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
 const app = express();
+
+// Compression middleware - add early for maximum benefit
+app.use(compression({
+  level: 6, // Balance between speed and compression ratio
+  threshold: 1024, // Only compress responses > 1KB
+  filter: (req: any, res: any) => {
+    // Compress JSON responses (API calls) and text content
+    const contentType = res.getHeader('content-type');
+    return compression.filter(req, res) || 
+           (typeof contentType === 'string' && contentType.includes('application/json'));
+  }
+}));
 
 // Security middleware
 app.use(helmet({
