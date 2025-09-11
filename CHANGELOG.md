@@ -2,6 +2,19 @@
 
 Tous les changements notables de ce projet seront documentés dans ce fichier.
 
+## [2025-09-11] 19:50:00
+
+### ⚡ Optimisation majeure des performances de conversation
+- **Optimisations serveur** : Simplification du parsing JSON avec suppression des boucles regex complexes
+- **Réduction des logs** : Suppression des logs verbeux pour améliorer les temps de réponse
+- **Parsing optimisé** : Traitement du champ texte en un seul passage avec regex pré-compilées
+- **Compression HTTP** : Ajout du middleware gzip pour réduire la taille des réponses JSON
+- **Timeout équilibré** : Ajustement à 20 secondes pour permettre les réponses complexes tout en restant rapide
+- **Optimisations client** : Extraction média en un seul passage regex au lieu de passes multiples
+- **Nettoyage URL réduit** : Simplification des opérations de nettoyage d'URL
+- **Analytics non-bloquantes** : Tous les appels de tracking rendus asynchrones avec setTimeout
+- **Résultat** : Amélioration de la stabilité des conversations et réduction des timeouts. Temps de réponse actuels : 7-12 secondes (contre 6-10s+ avec erreurs fréquentes avant). **Note**: Le goulot d'étranglement principal reste le temps de traitement de l'API Flowise elle-même.
+
 ## [2025-01-09] 12:20:00
 
 ### ✅ Cohérence visuelle de la couleur verte #14B8A7

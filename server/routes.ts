@@ -244,7 +244,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Add timeout and connection optimization
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // Reduced to 15 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 20000); // Balanced timeout - fast enough but allows for complex responses
       
       const response = await fetch(`${flowiseHost}/api/v1/prediction/${actualChatflowId}`, {
         method: "POST",
