@@ -65,7 +65,8 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
 
     setMessages(prev => [...prev, userMessage]);
     setIsLoading(true);
-    analytics.trackMessageSent(content.length);
+    // Non-blocking analytics to prevent UI delays
+    setTimeout(() => analytics.trackMessageSent(content.length), 0);
 
     try {
       const response = await client.sendMessage(content.trim());
@@ -116,12 +117,12 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
 
       setMessages(prev => [...prev, peterMessage]);
 
-      // Track media if present
-      if (allVideos.length > 0) {
-        allVideos.forEach(video => analytics.trackVideoOpened(video));
-      }
-      if (allLinks.length > 0) {
-        allLinks.forEach(link => analytics.trackLinkOpened(link));
+      // Non-blocking analytics tracking to prevent UI delays
+      if (allVideos.length > 0 || allLinks.length > 0) {
+        setTimeout(() => {
+          allVideos.forEach(video => analytics.trackVideoOpened(video));
+          allLinks.forEach(link => analytics.trackLinkOpened(link));
+        }, 0);
       }
 
     } catch (error) {
@@ -143,7 +144,8 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
   const resetSession = useCallback(() => {
     setMessages([]);
     client.resetSession();
-    analytics.trackSessionReset();
+    // Non-blocking analytics
+    setTimeout(() => analytics.trackSessionReset(), 0);
   }, [client]);
 
   const initializeChat = useCallback(() => {
@@ -155,7 +157,8 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
     };
 
     setMessages([welcomeMessage]);
-    analytics.trackChatStart();
+    // Non-blocking analytics
+    setTimeout(() => analytics.trackChatStart(), 0);
   }, []);
 
   return {
