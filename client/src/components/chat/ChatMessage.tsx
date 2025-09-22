@@ -24,6 +24,7 @@ export function ChatMessage({
   userName = 'Utilisateur'
 }: ChatMessageProps) {
   const isPeter = message.sender === 'peter';
+  const isDebug = message.sender === 'debug';
 
   const handleMediaClick = (url: string, type: 'video' | 'link') => {
     // Comprehensive URL cleaning
@@ -42,6 +43,7 @@ export function ChatMessage({
 
   // Detect message type for Peter's messages
   const getMessageType = (content: string) => {
+    if (isDebug) return 'debug';
     if (!isPeter) return 'user';
     
     // Check if message has bullet points that should become buttons
@@ -133,12 +135,17 @@ export function ChatMessage({
     <div 
       className={cn(
         "flex items-end space-x-3 mb-4",
-        !isPeter && "flex-row-reverse space-x-reverse"
+        !isPeter && !isDebug && "flex-row-reverse space-x-reverse",
+        isDebug && "opacity-75"
       )}
       data-testid={`message-${message.sender}-${message.id}`}
     >
       <Avatar className="w-8 h-8 flex-shrink-0 mb-1">
-        {isPeter ? (
+        {isDebug ? (
+          <AvatarFallback className="bg-gray-400 text-white text-xs font-semibold">
+            {'{}'}
+          </AvatarFallback>
+        ) : isPeter ? (
           <>
             <AvatarImage src={peterAvatarImage} alt="Peter" />
             <AvatarFallback className="bg-primary text-white text-sm font-semibold">
@@ -157,15 +164,24 @@ export function ChatMessage({
       
       <div className={cn(
         "flex-1",
-        isPeter ? "mr-16" : "ml-16 text-right"
+        isDebug ? "mr-16" : isPeter ? "mr-16" : "ml-16 text-right"
       )}>
         <div className={cn(
           "relative px-4 py-3 max-w-sm shadow-sm inline-block",
-          isPeter 
-            ? "bg-teal-500 text-white rounded-2xl rounded-bl-md chat-bubble-left" 
-            : "bg-white text-gray-800 rounded-2xl rounded-br-md border border-gray-200 chat-bubble-right float-right"
+          isDebug
+            ? "bg-gray-100 text-gray-600 rounded-lg border border-gray-300"
+            : isPeter 
+              ? "bg-teal-500 text-white rounded-2xl rounded-bl-md chat-bubble-left" 
+              : "bg-white text-gray-800 rounded-2xl rounded-br-md border border-gray-200 chat-bubble-right float-right"
         )}>
-          {messageType === 'with-choices' ? (
+          {messageType === 'debug' ? (
+            <div className="text-xs font-mono leading-tight">
+              <div className="mb-1 text-gray-500 font-bold text-xs">DEBUG - JSON BRUT FLOWISE:</div>
+              <pre className="whitespace-pre-wrap overflow-x-auto text-xs">
+                {message.content}
+              </pre>
+            </div>
+          ) : messageType === 'with-choices' ? (
             <div className="text-sm leading-relaxed whitespace-pre-wrap">
               {formatChoiceContent(message.content)}
             </div>
