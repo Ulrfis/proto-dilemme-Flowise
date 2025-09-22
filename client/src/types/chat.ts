@@ -1,8 +1,9 @@
 export interface ChatMessage {
   id: string;
   content: string;
-  sender: 'user' | 'peter';
+  sender: 'user' | 'peter' | 'debug';
   timestamp: string;
+  rawJson?: any; // For storing raw Flowise JSON response
   metadata?: {
     hasVideo?: boolean;
     hasLinks?: boolean;
