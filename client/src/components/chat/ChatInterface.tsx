@@ -48,13 +48,34 @@ export function ChatInterface({
     scrollToBottom();
   }, [messages]);
 
+  const formatMessageForClipboard = (message: ChatMessageType) => {
+    const sender = message.sender === 'peter' ? 'Peter' : 'Utilisateur';
+    let formattedMessage = `${sender}: ${message.content}`;
+    
+    // Add videos and links if they exist in metadata
+    if (message.metadata) {
+      const { links, videoUrl } = message.metadata;
+      
+      // Add video URL
+      if (videoUrl) {
+        formattedMessage += `\n  📹 Vidéo: ${videoUrl}`;
+      }
+      
+      // Add links
+      if (links && links.length > 0) {
+        links.forEach((link, index) => {
+          formattedMessage += `\n  🔗 Lien ${index + 1}: ${link}`;
+        });
+      }
+    }
+    
+    return formattedMessage;
+  };
+
   const copyConversationToClipboard = async () => {
     try {
-      // Format conversation for clipboard
-      const conversationText = messages.map(message => {
-        const sender = message.sender === 'peter' ? 'Peter' : 'Utilisateur';
-        return `${sender}: ${message.content}`;
-      }).join('\n\n');
+      // Format conversation for clipboard with links and videos
+      const conversationText = messages.map(formatMessageForClipboard).join('\n\n');
 
       // Add header with timestamp
       const timestamp = new Date().toLocaleString('fr-FR');
@@ -70,10 +91,7 @@ export function ChatInterface({
       console.error('Failed to copy conversation:', error);
       // Fallback for older browsers
       const textArea = document.createElement('textarea');
-      const conversationText = messages.map(message => {
-        const sender = message.sender === 'peter' ? 'Peter' : 'Utilisateur';
-        return `${sender}: ${message.content}`;
-      }).join('\n\n');
+      const conversationText = messages.map(formatMessageForClipboard).join('\n\n');
       const timestamp = new Date().toLocaleString('fr-FR');
       textArea.value = `Conversation Dilemme Plastique - ${timestamp}\n${'='.repeat(50)}\n\n${conversationText}`;
       document.body.appendChild(textArea);
