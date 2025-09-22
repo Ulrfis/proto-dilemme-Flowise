@@ -49,6 +49,10 @@ export function ChatInterface({
   }, [messages]);
 
   const formatMessageForClipboard = (message: ChatMessageType) => {
+    if (message.sender === 'debug') {
+      return `[DEBUG - JSON BRUT FLOWISE]\n${message.content}\n`;
+    }
+    
     const sender = message.sender === 'peter' ? 'Peter' : 'Utilisateur';
     let formattedMessage = `${sender}: ${message.content}`;
     
