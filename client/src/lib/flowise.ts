@@ -63,7 +63,7 @@ function cleanUrl(url: string): string {
 const MEDIA_REGEX = /(https?:\/\/[^\s]+)/gi;
 const VIDEO_DOMAINS = /(?:gumlet\.io|youtube\.com\/watch|youtu\.be|vimeo\.com)/;
 
-// Ultra-optimized single-pass media extraction
+// Ultra-optimized single-pass media extraction with early exit
 export function extractMediaFromText(text: string): { 
   cleanText: string; 
   videos: string[]; 
@@ -71,6 +71,11 @@ export function extractMediaFromText(text: string): {
 } {
   const videos: string[] = [];
   const links: string[] = [];
+  
+  // Quick check: if no http in text, skip expensive regex
+  if (!text.includes('http://') && !text.includes('https://')) {
+    return { cleanText: text, videos, links };
+  }
   
   // Single regex pass - much faster than multiple passes
   MEDIA_REGEX.lastIndex = 0;
