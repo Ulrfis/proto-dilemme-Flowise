@@ -2,6 +2,16 @@
 
 Tous les changements notables de ce projet seront documentés dans ce fichier.
 
+## [2025-11-06] 14:30:00
+
+### 🛡️ Robustesse du parsing JSON - Jamais afficher de JSON brut
+- **CRITIQUE** : Garantie qu'aucun JSON brut n'est jamais affiché aux utilisateurs, même en cas d'échec du parsing
+  - Fallback serveur utilise regex pour extraire le champ Response du JSON malformé
+  - Fallback client affiche un message d'erreur convivial au lieu de response.text brut
+  - Stratégie de parsing à trois niveaux : parse JSON complet → extraction regex → message d'erreur amical
+- **Augmentation du timeout** : Passage de 20s à 30s pour les réponses Flowise complexes
+- **Gestion complète des cas limites** : Client et serveur gèrent tous les cas de JSON sans jamais exposer le JSON brut
+
 ## [2025-11-06] 11:15:00
 
 ### 🔧 Corrections critiques de l'expérience utilisateur
