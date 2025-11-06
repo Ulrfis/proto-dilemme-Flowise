@@ -42,7 +42,44 @@ function parseFlowiseResponse(response: any): ParsedFlowiseResponse {
     return result;
   }
   
-  // Minimal fallback - no complex regex processing
+  // Fallback: Try to parse JSON from response.text if server parsing failed
+  if (response.text && typeof response.text === 'string') {
+    const textField = response.text.trim();
+    
+    // Check if text looks like JSON
+    if (textField.startsWith('{') || textField.includes('"Response"')) {
+      try {
+        console.log('[Client] Attempting to parse JSON fallback...');
+        const parsed = JSON.parse(textField);
+        
+        const result: ParsedFlowiseResponse = {
+          displayText: parsed.Response || textField,
+        };
+        
+        // Extract URLs
+        if (parsed.URL) result.flowiseURL = parsed.URL;
+        if (parsed.URLYOUTUBE) result.flowiseYouTubeURL = parsed.URLYOUTUBE;
+        
+        // Extract info data
+        const infoData: InfoPanelData = {};
+        if (parsed.theme) infoData.theme = parsed.theme;
+        if (parsed.nombre_d_indices) infoData.nombre_d_indices = parsed.nombre_d_indices;
+        if (parsed.score_globale) infoData.score_globale = parsed.score_globale;
+        
+        if (Object.keys(infoData).length > 0) {
+          result.infoData = infoData;
+        }
+        
+        console.log('[Client] Successfully parsed JSON fallback');
+        return result;
+      } catch (parseError) {
+        console.error('[Client] Failed to parse JSON fallback:', parseError);
+        // If JSON parse fails, just use the text as-is (but this shouldn't show JSON)
+      }
+    }
+  }
+  
+  // Last resort fallback - use text as displayText
   return {
     displayText: response.text || response.toString() || 'Réponse non disponible',
   };

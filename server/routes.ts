@@ -310,19 +310,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Fast text field processing with optimized logic
         if (data.text && typeof data.text === 'string') {
-          const textField = data.text;
+          const textField = data.text.trim();
           
-          // Quick JSON detection - avoid expensive regex
-          if (textField.trim().startsWith('{') && textField.trim().endsWith('}')) {
+          // Try to detect and parse JSON in the text field
+          // Check if it looks like JSON (starts with { and has typical JSON structure)
+          const looksLikeJSON = textField.startsWith('{') || 
+                                textField.includes('"Response"') || 
+                                textField.includes('"theme"');
+          
+          if (looksLikeJSON) {
             try {
               // Direct parsing - fastest approach
               const parsedText = JSON.parse(textField);
               data.parsedContent = parsedText;
+              console.log('[Flowise] Successfully parsed nested JSON from text field');
             } catch (parseError) {
-              // If JSON parsing fails, log error and use raw text
-              console.error("Failed to parse nested JSON in text field:", parseError);
-              data.parsedContent = { Response: textField };
+              // Try to clean up the JSON and parse again
+              console.warn('[Flowise] First JSON parse attempt failed, trying cleanup...');
+              try {
+                // Remove any leading/trailing whitespace and try again
+                const cleanedText = textField
+                  .replace(/^\s+|\s+$/g, '')  // trim whitespace
+                  .replace(/\n/g, ' ')         // replace newlines with spaces
+                  .replace(/\s+/g, ' ');       // collapse multiple spaces
+                
+                const parsedText = JSON.parse(cleanedText);
+                data.parsedContent = parsedText;
+                console.log('[Flowise] Successfully parsed cleaned JSON');
+              } catch (secondError) {
+                // If still fails, wrap the text as Response
+                console.error('[Flowise] Failed to parse JSON after cleanup:', secondError);
+                console.error('[Flowise] Raw text field:', textField.substring(0, 200));
+                data.parsedContent = { Response: textField };
+              }
             }
+          } else {
+            // Plain text response, wrap it
+            data.parsedContent = { Response: textField };
           }
         }
       } catch (parseError) {
