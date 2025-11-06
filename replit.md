@@ -49,12 +49,16 @@ A desktop-only French educational web app integrating Flowise chatbot "Peter" fo
 - **Visual Consistency** : Unified green color (#14B8A7) across Peter's message bubbles, guide text, and header info box
 - **Changelog System** : Added CHANGELOG.md file for tracking all project changes with timestamps
 - **Performance Optimizations (Nov 2025)** : Major Flowise API performance improvements
-  - In-memory caching (5-min TTL) for instant repeated question responses
   - Disabled sourceDocuments for 50-90% payload reduction
   - Streamlined JSON parsing without expensive regex fallbacks
   - Conditional media extraction only when URLs present
   - Comprehensive performance metrics logging
-  - **Result**: Response time reduced from 7-12s to 3-5s (new questions), <100ms (cached)
+  - **Result**: Response time reduced from 7-12s to 3-5s
+- **UX Fixes (Nov 2025)** : Critical conversation experience improvements
+  - Removed debug JSON messages from chat interface
+  - Disabled caching to preserve conversational context
+  - Peter now maintains memory throughout conversation (remembers user's name, etc.)
+  - Fixed conversation loop bug where Peter would forget previous context
 
 ## Development Guidelines
 Following fullstack_js blueprint with:
