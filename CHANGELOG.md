@@ -2,6 +2,18 @@
 
 Tous les changements notables de ce projet seront documentés dans ce fichier.
 
+## [2025-11-06] 11:15:00
+
+### 🔧 Corrections critiques de l'expérience utilisateur
+- **Suppression des messages debug JSON** : Retrait complet des messages de debug qui affichaient le JSON brut dans le chat
+  - Les utilisateurs ne voient plus le JSON technique dans leurs conversations
+  - Interface nettoyée et professionnelle
+- **Correction de la continuité conversationnelle** : Désactivation du cache pour préserver le contexte
+  - Peter se souvient maintenant du nom de l'utilisateur tout au long de la conversation
+  - Fin des boucles où Peter oubliait les informations données précédemment
+  - Chaque message conserve le contexte complet via le sessionId unique
+- **Résultat** : Expérience de conversation fluide et naturelle avec Peter qui maintient la mémoire conversationnelle
+
 ## [2025-11-06] 10:50:00
 
 ### ⚡ Optimisations majeures de performance - Objectif 3-5 secondes atteint
