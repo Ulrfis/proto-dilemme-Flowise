@@ -79,9 +79,11 @@ function parseFlowiseResponse(response: any): ParsedFlowiseResponse {
     }
   }
   
-  // Last resort fallback - use text as displayText
+  // Last resort fallback - NEVER show raw JSON to users
+  // If we get here, parsing failed both server and client-side
+  console.error('[Client] All parsing attempts failed, showing error message');
   return {
-    displayText: response.text || response.toString() || 'Réponse non disponible',
+    displayText: "Je rencontre des difficultés à traiter cette réponse. Pouvez-vous réessayer ?",
   };
 }
 

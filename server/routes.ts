@@ -281,7 +281,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Add timeout and connection optimization
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 20000);
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s for complex responses
       
       const fetchStart = Date.now();
       const response = await fetch(`${flowiseHost}/api/v1/prediction/${actualChatflowId}`, {
@@ -338,10 +338,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 data.parsedContent = parsedText;
                 console.log('[Flowise] Successfully parsed cleaned JSON');
               } catch (secondError) {
-                // If still fails, wrap the text as Response
+                // If still fails, try to extract Response field manually using regex
                 console.error('[Flowise] Failed to parse JSON after cleanup:', secondError);
                 console.error('[Flowise] Raw text field:', textField.substring(0, 200));
-                data.parsedContent = { Response: textField };
+                
+                // Try to extract Response field with regex as last resort
+                const responseMatch = textField.match(/"Response"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+
+                if (responseMatch) {
+                  console.log('[Flowise] Extracted Response field via regex');
+                  data.parsedContent = { Response: responseMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n') };
+                } else {
+                  // Ultimate fallback: return friendly error message instead of raw JSON
+                  console.error('[Flowise] Could not extract Response field, using error message');
+                  data.parsedContent = { 
+                    Response: "Je rencontre des difficultés à formuler ma réponse. Pouvez-vous reformuler votre question ?" 
+                  };
+                }
               }
             }
           } else {
