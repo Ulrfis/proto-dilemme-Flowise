@@ -5,6 +5,34 @@ import OpenAI from "openai";
 import multer from "multer";
 import fs from "fs/promises";
 import { createReadStream } from "fs";
+import crypto from "crypto";
+
+// Simple in-memory cache for Flowise responses
+interface CacheEntry {
+  response: any;
+  timestamp: number;
+}
+
+const flowiseCache = new Map<string, CacheEntry>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// Clean expired cache entries periodically
+setInterval(() => {
+  const now = Date.now();
+  const keysToDelete: string[] = [];
+  flowiseCache.forEach((entry, key) => {
+    if (now - entry.timestamp > CACHE_TTL) {
+      keysToDelete.push(key);
+    }
+  });
+  keysToDelete.forEach(key => flowiseCache.delete(key));
+}, 60 * 1000); // Clean every minute
+
+function generateCacheKey(question: string): string {
+  // Normalize and hash the question
+  const normalized = question.trim().toLowerCase();
+  return crypto.createHash('md5').update(normalized).digest('hex');
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   
@@ -213,6 +241,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { chatflowId } = req.params;
       const { question, chatId } = req.body;
 
+      // Check cache first
+      const cacheKey = generateCacheKey(question);
+      const cachedEntry = flowiseCache.get(cacheKey);
+      const now = Date.now();
+
+      if (cachedEntry && (now - cachedEntry.timestamp < CACHE_TTL)) {
+        console.log(`[Flowise Cache] HIT for question: "${question.substring(0, 50)}..." (${Date.now() - perfStart}ms)`);
+        cachedEntry.response._performance.fromCache = true;
+        cachedEntry.response._performance.cacheAge = now - cachedEntry.timestamp;
+        return res.json(cachedEntry.response);
+      }
+
+      console.log(`[Flowise Cache] MISS for question: "${question.substring(0, 50)}..."`);
+
       // Use the configured chatflow ID or the one from URL params
       const actualChatflowId = process.env.FLOWISE_CHATFLOW_ID || chatflowId;
       const flowiseHost = process.env.FLOWISE_HOST;
@@ -305,6 +347,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       console.log(`[Flowise Performance] Total: ${data._performance.totalTime}ms | Fetch: ${fetchDuration}ms | Parse: ${parseDuration}ms | Size: ${data._performance.payloadSizeKB}KB`);
+
+      // Store in cache
+      flowiseCache.set(cacheKey, {
+        response: data,
+        timestamp: Date.now()
+      });
+      console.log(`[Flowise Cache] Stored response (cache size: ${flowiseCache.size})`);
 
       res.json(data);
     } catch (error) {
