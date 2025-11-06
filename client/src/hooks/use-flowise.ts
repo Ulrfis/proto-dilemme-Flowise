@@ -69,7 +69,9 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
     setTimeout(() => analytics.trackMessageSent(content.length), 0);
 
     try {
+      const clientStart = Date.now();
       const response = await client.sendMessage(content.trim());
+      const clientFetchTime = Date.now() - clientStart;
       
       // Create debug message with raw JSON
       const debugMessage: ChatMessage = {
@@ -81,7 +83,9 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
       };
       
       // Parse the response to extract structured data
+      const parseStart = Date.now();
       const { displayText, infoData, flowiseURL, flowiseYouTubeURL } = parseFlowiseResponse(response);
+      const parseTime = Date.now() - parseStart;
       
       // Update info panel data if new data is available
       if (infoData && onInfoDataUpdate) {
@@ -89,7 +93,9 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
       }
       
       // Extract media from display text
+      const mediaStart = Date.now();
       const { cleanText, videos, links } = extractMediaFromText(displayText);
+      const mediaTime = Date.now() - mediaStart;
       
       // Add Flowise URLs to links array
       const allLinks = [...links];
@@ -126,6 +132,14 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
 
       // Add both debug and peter messages
       setMessages(prev => [...prev, debugMessage, peterMessage]);
+      
+      // Log client-side performance metrics
+      const serverPerf = (response as any)._performance;
+      if (serverPerf) {
+        console.log(`[Client Performance] Total: ${clientFetchTime}ms | Parse: ${parseTime}ms | Media: ${mediaTime}ms`);
+        console.log(`[Server Performance] Flowise Fetch: ${serverPerf.flowiseFetchTime}ms | Parse: ${serverPerf.parsingTime}ms | Payload: ${serverPerf.payloadSizeKB}KB`);
+        console.log(`[End-to-End] Total user-visible latency: ${clientFetchTime}ms`);
+      }
 
       // Non-blocking analytics tracking to prevent UI delays
       if (allVideos.length > 0 || allLinks.length > 0) {

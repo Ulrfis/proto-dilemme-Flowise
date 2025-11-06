@@ -208,6 +208,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Flowise proxy endpoint for secure API calls
   app.post("/api/flowise/prediction/:chatflowId", async (req, res) => {
+    const perfStart = Date.now();
     try {
       const { chatflowId } = req.params;
       const { question, chatId } = req.body;
@@ -239,19 +240,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const requestBody = {
         question,
         chatId: chatId || `session_${Date.now()}`,
-        returnSourceDocuments: true,
+        returnSourceDocuments: false,
       };
 
       // Add timeout and connection optimization
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 20000); // Balanced timeout - fast enough but allows for complex responses
+      const timeoutId = setTimeout(() => controller.abort(), 20000);
       
+      const fetchStart = Date.now();
       const response = await fetch(`${flowiseHost}/api/v1/prediction/${actualChatflowId}`, {
         method: "POST",
         headers,
         body: JSON.stringify(requestBody),
         signal: controller.signal
       });
+      const fetchDuration = Date.now() - fetchStart;
       
       clearTimeout(timeoutId);
 
@@ -261,8 +264,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const responseText = await response.text();
+      const payloadSize = new Blob([responseText]).size;
       
       // Streamlined JSON parsing - minimal processing
+      const parseStart = Date.now();
       let data;
       try {
         data = JSON.parse(responseText);
@@ -277,19 +282,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
               // Direct parsing - fastest approach
               const parsedText = JSON.parse(textField);
               data.parsedContent = parsedText;
-            } catch {
-              // Fallback: extract only essential fields with single regex
-              const combinedPattern = /"(Response|theme|nombre_d_indices|score_globale|URL|URLYOUTUBE)":\s*"?([^",}]*)"?/g;
-              const extracted: Record<string, string> = {};
-              let match;
-              
-              while ((match = combinedPattern.exec(textField)) !== null) {
-                extracted[match[1]] = match[2];
-              }
-              
-              if (Object.keys(extracted).length > 0) {
-                data.parsedContent = extracted;
-              }
+            } catch (parseError) {
+              // If JSON parsing fails, log error and use raw text
+              console.error("Failed to parse nested JSON in text field:", parseError);
+              data.parsedContent = { Response: textField };
             }
           }
         }
@@ -297,6 +293,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("Failed to parse Flowise response:", parseError);
         throw new Error("Invalid JSON response from Flowise");
       }
+      const parseDuration = Date.now() - parseStart;
+      
+      // Add performance metrics
+      data._performance = {
+        totalTime: Date.now() - perfStart,
+        flowiseFetchTime: fetchDuration,
+        parsingTime: parseDuration,
+        payloadSizeBytes: payloadSize,
+        payloadSizeKB: (payloadSize / 1024).toFixed(2)
+      };
+      
+      console.log(`[Flowise Performance] Total: ${data._performance.totalTime}ms | Fetch: ${fetchDuration}ms | Parse: ${parseDuration}ms | Size: ${data._performance.payloadSizeKB}KB`);
 
       res.json(data);
     } catch (error) {
