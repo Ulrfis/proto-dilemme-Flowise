@@ -14,7 +14,7 @@ export class FlowiseClient {
     try {
       // Add timeout and request optimization
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 20000); // Balanced timeout - fast enough but allows for complex responses
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout for complex Flowise responses
       
       const response = await fetch(`/api/flowise/prediction/${this.chatflowId}`, {
         method: "POST",
