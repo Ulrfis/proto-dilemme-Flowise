@@ -241,19 +241,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { chatflowId } = req.params;
       const { question, chatId } = req.body;
 
-      // Check cache first
-      const cacheKey = generateCacheKey(question);
-      const cachedEntry = flowiseCache.get(cacheKey);
-      const now = Date.now();
-
-      if (cachedEntry && (now - cachedEntry.timestamp < CACHE_TTL)) {
-        console.log(`[Flowise Cache] HIT for question: "${question.substring(0, 50)}..." (${Date.now() - perfStart}ms)`);
-        cachedEntry.response._performance.fromCache = true;
-        cachedEntry.response._performance.cacheAge = now - cachedEntry.timestamp;
-        return res.json(cachedEntry.response);
-      }
-
-      console.log(`[Flowise Cache] MISS for question: "${question.substring(0, 50)}..."`);
+      // IMPORTANT: Cache is DISABLED for this application
+      // Peter needs full conversational context to remember user's name and maintain continuity
+      // Every message is sent with a sessionId (chatId) for context tracking
+      console.log(`[Flowise] Processing question in conversation (chatId: ${chatId})`);
+      
+      // Note: Cache functionality preserved but not used. Can be re-enabled for
+      // different use cases where conversational context is not required.
 
       // Use the configured chatflow ID or the one from URL params
       const actualChatflowId = process.env.FLOWISE_CHATFLOW_ID || chatflowId;
@@ -348,12 +342,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`[Flowise Performance] Total: ${data._performance.totalTime}ms | Fetch: ${fetchDuration}ms | Parse: ${parseDuration}ms | Size: ${data._performance.payloadSizeKB}KB`);
 
-      // Store in cache
-      flowiseCache.set(cacheKey, {
-        response: data,
-        timestamp: Date.now()
-      });
-      console.log(`[Flowise Cache] Stored response (cache size: ${flowiseCache.size})`);
+      // Cache is disabled to preserve conversational context
+      // (Peter needs to remember user's name and conversation history)
 
       res.json(data);
     } catch (error) {

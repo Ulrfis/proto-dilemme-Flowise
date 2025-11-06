@@ -73,15 +73,6 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
       const response = await client.sendMessage(content.trim());
       const clientFetchTime = Date.now() - clientStart;
       
-      // Create debug message with raw JSON
-      const debugMessage: ChatMessage = {
-        id: `debug_${Date.now()}`,
-        content: `JSON brut de Flowise:\n${JSON.stringify(response, null, 2)}`,
-        sender: 'debug',
-        timestamp: new Date().toISOString(),
-        rawJson: response,
-      };
-      
       // Parse the response to extract structured data
       const parseStart = Date.now();
       const { displayText, infoData, flowiseURL, flowiseYouTubeURL } = parseFlowiseResponse(response);
@@ -130,8 +121,8 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
         },
       };
 
-      // Add both debug and peter messages
-      setMessages(prev => [...prev, debugMessage, peterMessage]);
+      // Add peter message to conversation
+      setMessages(prev => [...prev, peterMessage]);
       
       // Log client-side performance metrics
       const serverPerf = (response as any)._performance;
