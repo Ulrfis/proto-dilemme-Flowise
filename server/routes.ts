@@ -305,6 +305,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let buffer = '';
       let firstTokenTime = 0;
       let tokenCount = 0;
+      let fullText = '';
 
       try {
         while (true) {
@@ -312,16 +313,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           if (done) {
             console.log(`[Flowise Stream] Stream complete. Tokens: ${tokenCount}, First token: ${firstTokenTime}ms`);
+            console.log(`[Flowise Stream] Full text received (${fullText.length} chars):`, fullText.substring(0, 100));
             break;
           }
 
           const chunk = decoder.decode(value, { stream: true });
+          console.log(`[Flowise Stream] Received chunk (${chunk.length} chars):`, chunk.substring(0, 50));
+          
+          fullText += chunk;
           buffer += chunk;
 
           const lines = buffer.split('\n');
           buffer = lines.pop() || '';
 
           for (const line of lines) {
+            // Handle SSE format if Flowise sends it
             if (line.startsWith('data: ')) {
               const data = line.slice(6).trim();
 
@@ -332,22 +338,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
               try {
                 const parsed = JSON.parse(data);
 
-                if (tokenCount === 0 && parsed.event === 'token') {
+                if (tokenCount === 0) {
                   firstTokenTime = Date.now() - perfStart;
-                  console.log(`[Flowise Stream] First token received in ${firstTokenTime}ms`);
+                  console.log(`[Flowise Stream] First SSE token received in ${firstTokenTime}ms`);
                 }
 
-                if (parsed.event === 'token') {
-                  tokenCount++;
-                }
-
+                tokenCount++;
                 res.write(`data: ${data}\n\n`);
               } catch (parseError) {
                 if (data) {
+                  if (tokenCount === 0) {
+                    firstTokenTime = Date.now() - perfStart;
+                  }
                   tokenCount++;
                   res.write(`data: ${JSON.stringify({ event: 'token', data: data })}\n\n`);
                 }
               }
+            }
+            // Handle plain text chunks (more common with Flowise)
+            else if (line.trim()) {
+              if (tokenCount === 0) {
+                firstTokenTime = Date.now() - perfStart;
+                console.log(`[Flowise Stream] First text chunk received in ${firstTokenTime}ms`);
+              }
+              
+              // Send each line as a token event
+              tokenCount++;
+              res.write(`data: ${JSON.stringify({ event: 'token', data: line })}\n\n`);
             }
           }
         }
