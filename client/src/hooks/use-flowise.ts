@@ -104,84 +104,100 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
 
     setMessages(prev => [...prev, userMessage]);
     setIsLoading(true);
-    // Non-blocking analytics to prevent UI delays
     setTimeout(() => analytics.trackMessageSent(content.length), 0);
 
+    const peterMessageId = `peter_${Date.now()}`;
+    const peterMessage: ChatMessage = {
+      id: peterMessageId,
+      content: '',
+      sender: 'peter',
+      timestamp: new Date().toISOString(),
+      isStreaming: true,
+    };
+
+    setMessages(prev => [...prev, peterMessage]);
+
     try {
-      const clientStart = Date.now();
-      const response = await client.sendMessage(content.trim());
-      const clientFetchTime = Date.now() - clientStart;
-      
-      // Parse the response to extract structured data
-      const parseStart = Date.now();
-      const { displayText, infoData, flowiseURL, flowiseYouTubeURL } = parseFlowiseResponse(response);
-      const parseTime = Date.now() - parseStart;
-      
-      // Update info panel data if new data is available
-      if (infoData && onInfoDataUpdate) {
-        onInfoDataUpdate(infoData);
-      }
-      
-      // Extract media from display text
-      const mediaStart = Date.now();
-      const { cleanText, videos, links } = extractMediaFromText(displayText);
-      const mediaTime = Date.now() - mediaStart;
-      
-      // Add Flowise URLs to links array
-      const allLinks = [...links];
-      if (flowiseURL) {
-        // Clean up the URL by removing markdown formatting and extra whitespace
-        const cleanURL = flowiseURL.replace(/\[\*\*([^\]]+)\]\([^)]+\)/g, '$1').replace(/\n/g, '').trim();
-        if (cleanURL && cleanURL.startsWith('http')) {
-          allLinks.push(cleanURL);
-        }
-      }
-      
-      // Add YouTube videos to videos array  
-      const allVideos = [...videos];
-      if (flowiseYouTubeURL) {
-        // Clean up the YouTube URL by removing markdown formatting and extra whitespace
-        const cleanYouTubeURL = flowiseYouTubeURL.replace(/\[\*\*([^\]]+)\]\([^)]+\)/g, '$1').replace(/\n/g, '').trim();
-        if (cleanYouTubeURL && cleanYouTubeURL.includes('youtube.com')) {
-          allVideos.push(cleanYouTubeURL);
-        }
-      }
-      
-      const peterMessage: ChatMessage = {
-        id: `peter_${Date.now()}`,
-        content: displayText, // Use the parsed display text
-        sender: 'peter',
-        timestamp: new Date().toISOString(),
-        metadata: {
-          hasVideo: allVideos.length > 0,
-          hasLinks: allLinks.length > 0,
-          videoUrl: allVideos[0],
-          links: allLinks,
+      console.log('[use-flowise] Starting streaming...');
+      let accumulatedText = '';
+      let streamMetadata: any = {};
+
+      await client.sendMessageStreaming(
+        content.trim(),
+        (token: string) => {
+          accumulatedText += token;
+          setMessages(prev => prev.map(msg =>
+            msg.id === peterMessageId
+              ? { ...msg, content: accumulatedText, isStreaming: true }
+              : msg
+          ));
         },
-      };
+        (metadata: any) => {
+          streamMetadata = { ...streamMetadata, ...metadata };
+          console.log('[use-flowise] Metadata received:', metadata);
 
-      // Add peter message to conversation
-      setMessages(prev => [...prev, peterMessage]);
-      
-      // Log client-side performance metrics
-      const serverPerf = (response as any)._performance;
-      if (serverPerf) {
-        console.log(`[Client Performance] Total: ${clientFetchTime}ms | Parse: ${parseTime}ms | Media: ${mediaTime}ms`);
-        console.log(`[Server Performance] Flowise Fetch: ${serverPerf.flowiseFetchTime}ms | Parse: ${serverPerf.parsingTime}ms | Payload: ${serverPerf.payloadSizeKB}KB`);
-        console.log(`[End-to-End] Total user-visible latency: ${clientFetchTime}ms`);
-      }
+          if (onInfoDataUpdate && metadata) {
+            const infoData: any = {};
+            if (metadata.theme) infoData.theme = metadata.theme;
+            if (metadata.nombre_d_indices) infoData.nombre_d_indices = metadata.nombre_d_indices;
+            if (metadata.score_globale) infoData.score_globale = metadata.score_globale;
 
-      // Non-blocking analytics tracking to prevent UI delays
-      if (allVideos.length > 0 || allLinks.length > 0) {
-        setTimeout(() => {
-          allVideos.forEach(video => analytics.trackVideoOpened(video));
-          allLinks.forEach(link => analytics.trackLinkOpened(link));
-        }, 0);
-      }
+            if (Object.keys(infoData).length > 0) {
+              onInfoDataUpdate(infoData);
+            }
+          }
+        },
+        (fullText: string, metadata: any) => {
+          console.log('[use-flowise] Stream complete');
+
+          const { cleanText, videos, links } = extractMediaFromText(fullText);
+
+          setMessages(prev => prev.map(msg =>
+            msg.id === peterMessageId
+              ? {
+                  ...msg,
+                  content: fullText,
+                  isStreaming: false,
+                  metadata: {
+                    hasVideo: videos.length > 0,
+                    hasLinks: links.length > 0,
+                    videoUrl: videos[0],
+                    links: links,
+                  }
+                }
+              : msg
+          ));
+
+          setIsLoading(false);
+
+          if (videos.length > 0 || links.length > 0) {
+            setTimeout(() => {
+              videos.forEach(video => analytics.trackVideoOpened(video));
+              links.forEach(link => analytics.trackLinkOpened(link));
+            }, 0);
+          }
+        },
+        (error: Error) => {
+          console.error('[use-flowise] Stream error:', error);
+
+          const errorMessage: ChatMessage = {
+            id: `error_${Date.now()}`,
+            content: "Désolé, je rencontre des difficultés techniques. Pouvez-vous réessayer votre message ?",
+            sender: 'peter',
+            timestamp: new Date().toISOString(),
+          };
+
+          setMessages(prev => prev.map(msg =>
+            msg.id === peterMessageId ? errorMessage : msg
+          ));
+
+          setIsLoading(false);
+        }
+      );
 
     } catch (error) {
       console.error("Error sending message:", error);
-      
+
       const errorMessage: ChatMessage = {
         id: `error_${Date.now()}`,
         content: "Désolé, je rencontre des difficultés techniques. Pouvez-vous réessayer votre message ?",
@@ -189,11 +205,13 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
         timestamp: new Date().toISOString(),
       };
 
-      setMessages(prev => [...prev, errorMessage]);
-    } finally {
+      setMessages(prev => prev.map(msg =>
+        msg.id === peterMessageId ? errorMessage : msg
+      ));
+
       setIsLoading(false);
     }
-  }, [client]);
+  }, [client, onInfoDataUpdate]);
 
   const resetSession = useCallback(() => {
     setMessages([]);
