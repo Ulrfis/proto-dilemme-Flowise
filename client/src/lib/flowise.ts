@@ -6,16 +6,120 @@ export class FlowiseClient {
 
   constructor(chatflowId: string) {
     this.chatflowId = chatflowId;
-    // Generate cryptographically secure session ID
     this.sessionId = `session_${Date.now()}_${crypto.randomUUID().replace(/-/g, '')}`;
+  }
+
+  async sendMessageStreaming(
+    message: string,
+    onToken: (token: string) => void,
+    onMetadata: (metadata: any) => void,
+    onComplete: (fullText: string, metadata: any) => void,
+    onError: (error: Error) => void
+  ): Promise<void> {
+    let fullText = '';
+    let accumulatedMetadata: any = {};
+
+    try {
+      console.log('[Flowise Client] Starting SSE stream...');
+      const perfStart = Date.now();
+      let firstTokenTime = 0;
+
+      const url = `/api/flowise/prediction/${this.chatflowId}/stream`;
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream',
+        },
+        body: JSON.stringify({
+          question: message,
+          chatId: this.sessionId,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('No response body');
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          console.log('[Flowise Client] Stream complete');
+          break;
+        }
+
+        const chunk = decoder.decode(value, { stream: true });
+        buffer += chunk;
+
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6).trim();
+
+            if (!data || data === '[DONE]') continue;
+
+            try {
+              const parsed = JSON.parse(data);
+
+              if (parsed.error) {
+                console.error('[Flowise Client] Stream error:', parsed.error);
+                throw new Error(parsed.error);
+              }
+
+              if (parsed.event === 'token') {
+                const token = parsed.data || '';
+                fullText += token;
+                onToken(token);
+
+                if (firstTokenTime === 0) {
+                  firstTokenTime = Date.now() - perfStart;
+                  console.log(`[Flowise Client] First token in ${firstTokenTime}ms`);
+                }
+              } else if (parsed.event === 'metadata') {
+                accumulatedMetadata = { ...accumulatedMetadata, ...parsed.data };
+                onMetadata(parsed.data);
+              } else if (parsed.event === 'end') {
+                console.log(`[Flowise Client] Stream ended. Total time: ${Date.now() - perfStart}ms`);
+                if (parsed.metadata) {
+                  accumulatedMetadata = { ...accumulatedMetadata, ...parsed.metadata };
+                }
+              } else {
+                const token = parsed.data || JSON.stringify(parsed);
+                fullText += token;
+                onToken(token);
+              }
+            } catch (parseError) {
+              console.warn('[Flowise Client] Failed to parse SSE data:', data);
+            }
+          }
+        }
+      }
+
+      onComplete(fullText, accumulatedMetadata);
+
+    } catch (error) {
+      console.error('[Flowise Client] Streaming error:', error);
+      onError(error instanceof Error ? error : new Error(String(error)));
+    }
   }
 
   async sendMessage(message: string): Promise<FlowiseResponse> {
     try {
-      // Add timeout and request optimization
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout for complex Flowise responses
-      
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
       const response = await fetch(`/api/flowise/prediction/${this.chatflowId}`, {
         method: "POST",
         headers: {
@@ -29,7 +133,7 @@ export class FlowiseClient {
         }),
         signal: controller.signal
       });
-      
+
       clearTimeout(timeoutId);
 
       if (!response.ok) {
@@ -45,7 +149,6 @@ export class FlowiseClient {
   }
 
   resetSession() {
-    // Generate cryptographically secure session ID
     this.sessionId = `session_${Date.now()}_${crypto.randomUUID().replace(/-/g, '')}`;
   }
 
@@ -54,36 +157,29 @@ export class FlowiseClient {
   }
 }
 
-// Optimized URL cleaning function
 function cleanUrl(url: string): string {
   return url.replace(/[.,;:!?)\]}\s]+$/, '').replace(/\)+\.?\s*$/, '').replace(/\.$/, '').trim();
 }
 
-// Pre-compiled regex patterns for optimal performance
 const MEDIA_REGEX = /(https?:\/\/[^\s]+)/gi;
 const VIDEO_DOMAINS = /(?:gumlet\.io|youtube\.com\/watch|youtu\.be|vimeo\.com)/;
 
-// Ultra-optimized single-pass media extraction with early exit
-export function extractMediaFromText(text: string): { 
-  cleanText: string; 
-  videos: string[]; 
-  links: string[]; 
+export function extractMediaFromText(text: string): {
+  cleanText: string;
+  videos: string[];
+  links: string[];
 } {
   const videos: string[] = [];
   const links: string[] = [];
-  
-  // Quick check: if no http in text, skip expensive regex
+
   if (!text.includes('http://') && !text.includes('https://')) {
     return { cleanText: text, videos, links };
   }
-  
-  // Single regex pass - much faster than multiple passes
+
   MEDIA_REGEX.lastIndex = 0;
   const cleanText = text.replace(MEDIA_REGEX, (match) => {
-    // Quick URL cleaning - minimal operations
     const cleanedUrl = match.replace(/[.,;:!?)\]}\s]+$/, '').trim();
-    
-    // Fast domain check without complex regex
+
     if (VIDEO_DOMAINS.test(cleanedUrl)) {
       videos.push(cleanedUrl);
       return `[Vidéo disponible dans le panneau média]`;
@@ -92,6 +188,6 @@ export function extractMediaFromText(text: string): {
       return `[Lien disponible dans le panneau média]`;
     }
   });
-  
+
   return { cleanText, videos, links };
 }
