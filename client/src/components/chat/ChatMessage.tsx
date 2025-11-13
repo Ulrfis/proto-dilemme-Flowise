@@ -25,6 +25,7 @@ export function ChatMessage({
 }: ChatMessageProps) {
   const isPeter = message.sender === 'peter';
   const isDebug = message.sender === 'debug';
+  const isStreaming = message.isStreaming || false;
 
   const handleMediaClick = (url: string, type: 'video' | 'link') => {
     // Comprehensive URL cleaning
@@ -240,6 +241,9 @@ export function ChatMessage({
           ) : (
             <p className="text-sm leading-relaxed whitespace-pre-wrap">
               {message.content}
+              {isStreaming && isPeter && (
+                <span className="inline-block w-1.5 h-4 ml-1 bg-white animate-pulse" />
+              )}
             </p>
           )}
         </div>
