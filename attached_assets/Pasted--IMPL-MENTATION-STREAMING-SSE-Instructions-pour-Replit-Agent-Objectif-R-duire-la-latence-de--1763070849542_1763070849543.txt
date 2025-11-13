@@ -1,0 +1,586 @@
+# 🚀 IMPLÉMENTATION STREAMING SSE - Instructions pour Replit Agent
+
+Objectif: Réduire la latence de Peter de 10 secondes à 500ms en implémentant le streaming SSE.
+
+---
+
+## MODIFICATION 1: server/routes.ts
+
+**Localisation**: Trouver la ligne ~237 qui contient `app.post("/api/flowise/prediction/:chatflowId"`
+
+**Action**: AJOUTER ce code JUSTE AVANT cette ligne (ne pas supprimer l'endpoint existant)
+
+```typescript
+  // NOUVEAU: Flowise streaming endpoint with SSE
+  app.post("/api/flowise/prediction/:chatflowId/stream", async (req, res) => {
+    const perfStart = Date.now();
+
+    try {
+      const { chatflowId } = req.params;
+      const { question, chatId } = req.body;
+
+      console.log(`[Flowise Stream] Starting stream for chatId: ${chatId}`);
+
+      // Configuration SSE
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+
+      const actualChatflowId = process.env.FLOWISE_CHATFLOW_ID || chatflowId;
+      const flowiseHost = process.env.FLOWISE_HOST;
+      const flowiseApiKey = process.env.FLOWISE_API_KEY;
+
+      if (!flowiseHost) {
+        res.write(`data: ${JSON.stringify({ error: 'FLOWISE_HOST not configured' })}\n\n`);
+        return res.end();
+      }
+
+      if (!actualChatflowId) {
+        res.write(`data: ${JSON.stringify({ error: 'FLOWISE_CHATFLOW_ID not configured' })}\n\n`);
+        return res.end();
+      }
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream',
+      };
+
+      if (flowiseApiKey) {
+        headers['Authorization'] = `Bearer ${flowiseApiKey}`;
+      }
+
+      const requestBody = {
+        question,
+        chatId: chatId || `session_${Date.now()}`,
+        streaming: true,
+        returnSourceDocuments: false,
+      };
+
+      console.log(`[Flowise Stream] Requesting stream from Flowise...`);
+
+      const response = await fetch(`${flowiseHost}/api/v1/prediction/${actualChatflowId}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Flowise Stream] Error: ${response.status} ${errorText}`);
+        res.write(`data: ${JSON.stringify({ error: `Flowise API error: ${response.status}` })}\n\n`);
+        return res.end();
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        res.write(`data: ${JSON.stringify({ error: 'No response body from Flowise' })}\n\n`);
+        return res.end();
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let firstTokenTime = 0;
+      let tokenCount = 0;
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+
+          if (done) {
+            console.log(`[Flowise Stream] Stream complete. Tokens: ${tokenCount}, First token: ${firstTokenTime}ms`);
+            break;
+          }
+
+          const chunk = decoder.decode(value, { stream: true });
+          buffer += chunk;
+
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6).trim();
+
+              if (data === '[DONE]') {
+                continue;
+              }
+
+              try {
+                const parsed = JSON.parse(data);
+
+                if (tokenCount === 0 && parsed.event === 'token') {
+                  firstTokenTime = Date.now() - perfStart;
+                  console.log(`[Flowise Stream] First token received in ${firstTokenTime}ms`);
+                }
+
+                if (parsed.event === 'token') {
+                  tokenCount++;
+                }
+
+                res.write(`data: ${data}\n\n`);
+              } catch (parseError) {
+                if (data) {
+                  tokenCount++;
+                  res.write(`data: ${JSON.stringify({ event: 'token', data: data })}\n\n`);
+                }
+              }
+            }
+          }
+        }
+
+        const totalTime = Date.now() - perfStart;
+        res.write(`data: ${JSON.stringify({
+          event: 'end',
+          metadata: {
+            totalTime,
+            firstTokenTime,
+            tokenCount
+          }
+        })}\n\n`);
+
+      } catch (streamError) {
+        console.error('[Flowise Stream] Stream error:', streamError);
+        res.write(`data: ${JSON.stringify({ error: 'Stream interrupted' })}\n\n`);
+      } finally {
+        reader.releaseLock();
+        res.end();
+      }
+
+    } catch (error) {
+      console.error('[Flowise Stream] Error:', error);
+      res.write(`data: ${JSON.stringify({
+        error: 'Erreur lors du streaming',
+        details: error instanceof Error ? error.message : String(error)
+      })}\n\n`);
+      res.end();
+    }
+  });
+```
+
+---
+
+## MODIFICATION 2: client/src/lib/flowise.ts
+
+**Action**: REMPLACER TOUT LE CONTENU du fichier par ce code
+
+```typescript
+import { FlowiseResponse } from "@shared/schema";
+
+export class FlowiseClient {
+  private chatflowId: string;
+  private sessionId: string;
+
+  constructor(chatflowId: string) {
+    this.chatflowId = chatflowId;
+    this.sessionId = `session_${Date.now()}_${crypto.randomUUID().replace(/-/g, '')}`;
+  }
+
+  async sendMessageStreaming(
+    message: string,
+    onToken: (token: string) => void,
+    onMetadata: (metadata: any) => void,
+    onComplete: (fullText: string, metadata: any) => void,
+    onError: (error: Error) => void
+  ): Promise<void> {
+    let fullText = '';
+    let accumulatedMetadata: any = {};
+
+    try {
+      console.log('[Flowise Client] Starting SSE stream...');
+      const perfStart = Date.now();
+      let firstTokenTime = 0;
+
+      const url = `/api/flowise/prediction/${this.chatflowId}/stream`;
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream',
+        },
+        body: JSON.stringify({
+          question: message,
+          chatId: this.sessionId,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('No response body');
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          console.log('[Flowise Client] Stream complete');
+          break;
+        }
+
+        const chunk = decoder.decode(value, { stream: true });
+        buffer += chunk;
+
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6).trim();
+
+            if (!data || data === '[DONE]') continue;
+
+            try {
+              const parsed = JSON.parse(data);
+
+              if (parsed.error) {
+                console.error('[Flowise Client] Stream error:', parsed.error);
+                throw new Error(parsed.error);
+              }
+
+              if (parsed.event === 'token') {
+                const token = parsed.data || '';
+                fullText += token;
+                onToken(token);
+
+                if (firstTokenTime === 0) {
+                  firstTokenTime = Date.now() - perfStart;
+                  console.log(`[Flowise Client] First token in ${firstTokenTime}ms`);
+                }
+              } else if (parsed.event === 'metadata') {
+                accumulatedMetadata = { ...accumulatedMetadata, ...parsed.data };
+                onMetadata(parsed.data);
+              } else if (parsed.event === 'end') {
+                console.log(`[Flowise Client] Stream ended. Total time: ${Date.now() - perfStart}ms`);
+                if (parsed.metadata) {
+                  accumulatedMetadata = { ...accumulatedMetadata, ...parsed.metadata };
+                }
+              } else {
+                const token = parsed.data || JSON.stringify(parsed);
+                fullText += token;
+                onToken(token);
+              }
+            } catch (parseError) {
+              console.warn('[Flowise Client] Failed to parse SSE data:', data);
+            }
+          }
+        }
+      }
+
+      onComplete(fullText, accumulatedMetadata);
+
+    } catch (error) {
+      console.error('[Flowise Client] Streaming error:', error);
+      onError(error instanceof Error ? error : new Error(String(error)));
+    }
+  }
+
+  async sendMessage(message: string): Promise<FlowiseResponse> {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+      const response = await fetch(`/api/flowise/prediction/${this.chatflowId}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "Connection": "keep-alive"
+        },
+        body: JSON.stringify({
+          question: message,
+          chatId: this.sessionId,
+        }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error("Flowise client error:", error);
+      throw new Error("Impossible de communiquer avec Peter. Vérifiez votre connexion et réessayez.");
+    }
+  }
+
+  resetSession() {
+    this.sessionId = `session_${Date.now()}_${crypto.randomUUID().replace(/-/g, '')}`;
+  }
+
+  getSessionId() {
+    return this.sessionId;
+  }
+}
+
+function cleanUrl(url: string): string {
+  return url.replace(/[.,;:!?)\]}\s]+$/, '').replace(/\)+\.?\s*$/, '').replace(/\.$/, '').trim();
+}
+
+const MEDIA_REGEX = /(https?:\/\/[^\s]+)/gi;
+const VIDEO_DOMAINS = /(?:gumlet\.io|youtube\.com\/watch|youtu\.be|vimeo\.com)/;
+
+export function extractMediaFromText(text: string): {
+  cleanText: string;
+  videos: string[];
+  links: string[];
+} {
+  const videos: string[] = [];
+  const links: string[] = [];
+
+  if (!text.includes('http://') && !text.includes('https://')) {
+    return { cleanText: text, videos, links };
+  }
+
+  MEDIA_REGEX.lastIndex = 0;
+  const cleanText = text.replace(MEDIA_REGEX, (match) => {
+    const cleanedUrl = match.replace(/[.,;:!?)\]}\s]+$/, '').trim();
+
+    if (VIDEO_DOMAINS.test(cleanedUrl)) {
+      videos.push(cleanedUrl);
+      return `[Vidéo disponible dans le panneau média]`;
+    } else {
+      links.push(cleanedUrl);
+      return `[Lien disponible dans le panneau média]`;
+    }
+  });
+
+  return { cleanText, videos, links };
+}
+```
+
+---
+
+## MODIFICATION 3: client/src/types/chat.ts
+
+**Localisation**: Trouver l'interface `ChatMessage`
+
+**Action**: AJOUTER cette propriété dans l'interface
+
+```typescript
+  isStreaming?: boolean; // Indique si le message est en cours de streaming
+```
+
+**Résultat attendu**:
+```typescript
+export interface ChatMessage {
+  id: string;
+  content: string;
+  sender: 'user' | 'peter' | 'debug';
+  timestamp: string;
+  rawJson?: any;
+  metadata?: {
+    hasVideo?: boolean;
+    hasLinks?: boolean;
+    videoUrl?: string;
+    links?: string[];
+  };
+  isStreaming?: boolean; // ← AJOUTER CETTE LIGNE
+}
+```
+
+---
+
+## MODIFICATION 4: client/src/hooks/use-flowise.ts
+
+**Localisation**: Trouver la fonction `sendMessage` (ligne ~95)
+
+**Action**: REMPLACER TOUTE LA FONCTION `sendMessage` par ce code
+
+```typescript
+  const sendMessage = useCallback(async (content: string) => {
+    if (!content.trim()) return;
+
+    const userMessage: ChatMessage = {
+      id: `user_${Date.now()}`,
+      content: content.trim(),
+      sender: 'user',
+      timestamp: new Date().toISOString(),
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    setIsLoading(true);
+    setTimeout(() => analytics.trackMessageSent(content.length), 0);
+
+    const peterMessageId = `peter_${Date.now()}`;
+    const peterMessage: ChatMessage = {
+      id: peterMessageId,
+      content: '',
+      sender: 'peter',
+      timestamp: new Date().toISOString(),
+      isStreaming: true,
+    };
+
+    setMessages(prev => [...prev, peterMessage]);
+
+    try {
+      console.log('[use-flowise] Starting streaming...');
+      let accumulatedText = '';
+      let streamMetadata: any = {};
+
+      await client.sendMessageStreaming(
+        content.trim(),
+        (token: string) => {
+          accumulatedText += token;
+          setMessages(prev => prev.map(msg =>
+            msg.id === peterMessageId
+              ? { ...msg, content: accumulatedText, isStreaming: true }
+              : msg
+          ));
+        },
+        (metadata: any) => {
+          streamMetadata = { ...streamMetadata, ...metadata };
+          console.log('[use-flowise] Metadata received:', metadata);
+
+          if (onInfoDataUpdate && metadata) {
+            const infoData: any = {};
+            if (metadata.theme) infoData.theme = metadata.theme;
+            if (metadata.nombre_d_indices) infoData.nombre_d_indices = metadata.nombre_d_indices;
+            if (metadata.score_globale) infoData.score_globale = metadata.score_globale;
+
+            if (Object.keys(infoData).length > 0) {
+              onInfoDataUpdate(infoData);
+            }
+          }
+        },
+        (fullText: string, metadata: any) => {
+          console.log('[use-flowise] Stream complete');
+
+          const { cleanText, videos, links } = extractMediaFromText(fullText);
+
+          setMessages(prev => prev.map(msg =>
+            msg.id === peterMessageId
+              ? {
+                  ...msg,
+                  content: fullText,
+                  isStreaming: false,
+                  metadata: {
+                    hasVideo: videos.length > 0,
+                    hasLinks: links.length > 0,
+                    videoUrl: videos[0],
+                    links: links,
+                  }
+                }
+              : msg
+          ));
+
+          setIsLoading(false);
+
+          if (videos.length > 0 || links.length > 0) {
+            setTimeout(() => {
+              videos.forEach(video => analytics.trackVideoOpened(video));
+              links.forEach(link => analytics.trackLinkOpened(link));
+            }, 0);
+          }
+        },
+        (error: Error) => {
+          console.error('[use-flowise] Stream error:', error);
+
+          const errorMessage: ChatMessage = {
+            id: `error_${Date.now()}`,
+            content: "Désolé, je rencontre des difficultés techniques. Pouvez-vous réessayer votre message ?",
+            sender: 'peter',
+            timestamp: new Date().toISOString(),
+          };
+
+          setMessages(prev => prev.map(msg =>
+            msg.id === peterMessageId ? errorMessage : msg
+          ));
+
+          setIsLoading(false);
+        }
+      );
+
+    } catch (error) {
+      console.error("Error sending message:", error);
+
+      const errorMessage: ChatMessage = {
+        id: `error_${Date.now()}`,
+        content: "Désolé, je rencontre des difficultés techniques. Pouvez-vous réessayer votre message ?",
+        sender: 'peter',
+        timestamp: new Date().toISOString(),
+      };
+
+      setMessages(prev => prev.map(msg =>
+        msg.id === peterMessageId ? errorMessage : msg
+      ));
+
+      setIsLoading(false);
+    }
+  }, [client, onInfoDataUpdate]);
+```
+
+---
+
+## MODIFICATION 5: client/src/components/chat/ChatMessage.tsx
+
+### Modification 5A: Ajouter la variable isStreaming
+
+**Localisation**: Ligne ~26, après `const isDebug = message.sender === 'debug';`
+
+**Action**: AJOUTER cette ligne
+
+```typescript
+  const isStreaming = message.isStreaming || false;
+```
+
+### Modification 5B: Ajouter le curseur clignotant
+
+**Localisation**: Ligne ~240, dans la section qui affiche le contenu du message
+
+**Chercher**:
+```typescript
+            <p className="text-sm leading-relaxed whitespace-pre-wrap">
+              {message.content}
+            </p>
+```
+
+**REMPLACER par**:
+```typescript
+            <p className="text-sm leading-relaxed whitespace-pre-wrap">
+              {message.content}
+              {isStreaming && isPeter && (
+                <span className="inline-block w-1.5 h-4 ml-1 bg-white animate-pulse" />
+              )}
+            </p>
+```
+
+---
+
+## 🧪 TESTS
+
+Après les modifications:
+
+1. Redémarrer l'application
+2. Ouvrir la console (F12)
+3. Envoyer un message à Peter
+4. Vérifier dans la console:
+   - `[Flowise Stream] Starting stream...`
+   - `[Flowise Client] First token in XXXms` (doit être < 1000ms)
+   - `[use-flowise] Stream complete`
+5. Vérifier visuellement:
+   - Message apparaît progressivement ✅
+   - Curseur blanc clignote pendant l'écriture ✅
+
+---
+
+## 📊 RÉSULTAT ATTENDU
+
+| Métrique | Avant | Après |
+|----------|-------|-------|
+| Premier token | 10s | 500ms |
+| UX | Frustrant | Instantané |
+| Amélioration | - | **-95%** 🎉 |
+
+Peter répondra comme ChatGPT ! 🚀
