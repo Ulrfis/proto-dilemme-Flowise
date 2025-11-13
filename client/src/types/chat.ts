@@ -10,6 +10,7 @@ export interface ChatMessage {
     videoUrl?: string;
     links?: string[];
   };
+  isStreaming?: boolean; // Indique si le message est en cours de streaming
 }
 
 export interface FlowiseConfig {
