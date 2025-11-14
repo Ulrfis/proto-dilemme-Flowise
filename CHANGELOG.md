@@ -2,6 +2,32 @@
 
 Tous les changements notables de ce projet seront documentés dans ce fichier.
 
+## [2025-11-14] 07:55:00
+
+### 🔧 CORRECTION ULTIME : Extraction serveur du champ Response et architecture simplifiée
+- **Bug critique résolu : Bulles vides ou JSON partiel lors de tokens JSON fragmentés**
+  - **Cause** : Flowise peut envoyer `{"Response": "texte..."}` en plusieurs tokens (`{`, puis `"Response"...`, puis `}`)
+  - **Problème précédent** : Client tentait de parser chaque token individuellement → échec sur fragments incomplets → texte manquant
+  - **Solution** : Architecture à trois couches pour garantir zéro JSON visible
+- **Couche 1 - Client (flowise.ts)** : Accumulation simple sans filtrage
+  - Accumule tous les tokens reçus dans fullText local sans parsing ni filtrage
+  - Évite de perdre des fragments de JSON ou de texte
+  - Envoie tout au serveur et au hook
+- **Couche 2 - Serveur (routes.ts)** : Extraction du champ Response après accumulation complète
+  - Après avoir accumulé fullText complet, détecte si c'est du JSON
+  - Extrait le champ Response si présent : `JSON.parse(fullText).Response`
+  - Envoie le texte nettoyé dans `metadata.fullText` de l'événement 'end'
+  - Logging clair : `[Flowise Stream] ✅ Extracted Response field from JSON (X chars)`
+- **Couche 3 - Hook (use-flowise.ts)** : Utilisation prioritaire du texte serveur nettoyé
+  - Utilise `metadata.fullText` du serveur en priorité (texte nettoyé)
+  - Fallback sur `fullText` local si metadata absent (compatibilité)
+  - Log pour debug : indique si texte vient du serveur ou local
+- **Tests E2E réussis** : Conversation complète sans JSON visible
+  - Message de 208 caractères en français lisible
+  - Aucun marqueur JSON ('{', 'Response', etc.) affiché
+  - Streaming fonctionnel avec boutons apparaissant après complétion
+- **Résultat** : **ZÉRO JSON brut visible** même quand Flowise envoie des tokens fragmentés ou JSON complets
+
 ## [2025-11-14] 07:24:00
 
 ### 🔧 CORRECTION CRITIQUE : Format SSE Flowise et affichage des boutons
