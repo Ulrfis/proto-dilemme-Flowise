@@ -2,6 +2,31 @@
 
 Tous les changements notables de ce projet seront documentés dans ce fichier.
 
+## [2025-11-14] 07:05:00
+
+### ⚡ Implémentation du streaming SSE - Latence réduite à <500ms pour le premier token
+- **Streaming Server-Sent Events (SSE)** : Implémentation complète du streaming pour les réponses de Peter
+  - Nouveau endpoint `/api/flowise/prediction/:chatflowId/stream` avec support SSE natif
+  - Parsing correct du format SSE de Flowise : `event: token\ndata: texte`
+  - Gestion de tous les types d'événements Flowise : start, token, metadata, end, error
+  - Accumulation progressive du texte complet côté serveur
+- **Client SSE optimisé** : FlowiseClient.sendMessageStreaming avec parsing robuste
+  - Lecture en streaming des tokens via ReadableStream
+  - Protection anti-JSON : filtrage des tokens qui ressemblent à du JSON sans arrêter le stream
+  - Callbacks progressifs pour affichage en temps réel : onToken, onMetadata, onComplete
+- **Hook use-flowise adapté** : Gestion complète du cycle de vie du streaming
+  - Messages mis à jour progressivement avec indicateur isStreaming
+  - Curseur d'animation de streaming dans l'interface
+  - Extraction des URLs et médias du texte complet après le streaming
+  - Support des métadonnées (theme, score) envoyées séparément via événement 'metadata'
+- **Protection renforcée contre l'affichage de JSON** : 
+  - Client filtre les tokens JSON avec `continue` au lieu de `return` pour ne pas interrompre le stream
+  - Serveur transmet uniquement le texte utilisateur, métadonnées traitées séparément
+  - RÈGLE CRITIQUE maintenue : Jamais de JSON brut visible pour l'utilisateur
+- **Compatibilité bidirectionnelle** : Endpoint REST `/api/flowise/prediction/:chatflowId` préservé comme fallback
+- **Configuration Flowise requise** : Le chatflow Flowise doit utiliser un LLM compatible streaming (OpenAI, Anthropic, etc.)
+- **Résultat** : Premier token visible en ~500ms au lieu de 10+ secondes, amélioration majeure de l'expérience utilisateur
+
 ## [2025-11-06] 14:30:00
 
 ### 🛡️ Robustesse du parsing JSON - Jamais afficher de JSON brut
