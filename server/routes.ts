@@ -306,7 +306,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let firstTokenTime = 0;
       let tokenCount = 0;
       let fullText = '';
-      let currentEvent = '';
       let metadata: any = {};
 
       try {
@@ -332,57 +331,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
               continue;
             }
 
-            // Parse SSE format: "event: type" and "data: content"
-            if (trimmedLine.startsWith('event:')) {
-              currentEvent = trimmedLine.slice(6).trim();
-            } else if (trimmedLine.startsWith('data:')) {
-              const data = trimmedLine.slice(5).trim();
+            // Flowise SSE format: data: {"event":"token","data":"text"}
+            if (trimmedLine.startsWith('data:')) {
+              const payload = trimmedLine.slice(5).trim();
               
-              if (!data || data === '[DONE]') {
+              if (!payload || payload === '[DONE]' || payload === '"[DONE]"') {
                 continue;
               }
 
-              // Handle different event types
-              if (currentEvent === 'token') {
-                // Token event: send the text content directly to client
-                if (tokenCount === 0) {
-                  firstTokenTime = Date.now() - perfStart;
-                  console.log(`[Flowise Stream] First token received in ${firstTokenTime}ms`);
-                }
+              try {
+                const obj = JSON.parse(payload);
                 
-                fullText += data;
-                tokenCount++;
-                res.write(`data: ${JSON.stringify({ event: 'token', data })}\n\n`);
-                
-              } else if (currentEvent === 'start') {
-                console.log(`[Flowise Stream] Stream started`);
-                res.write(`data: ${JSON.stringify({ event: 'start' })}\n\n`);
-                
-              } else if (currentEvent === 'metadata') {
-                // Parse metadata (theme, score, etc.)
-                try {
-                  metadata = JSON.parse(data);
+                if (obj.event === 'token') {
+                  // Token event: accumulate and forward
+                  if (tokenCount === 0) {
+                    firstTokenTime = Date.now() - perfStart;
+                    console.log(`[Flowise Stream] First token received in ${firstTokenTime}ms`);
+                  }
+                  
+                  fullText += obj.data;
+                  tokenCount++;
+                  res.write(`data: ${JSON.stringify({ event: 'token', data: obj.data })}\n\n`);
+                  
+                } else if (obj.event === 'start') {
+                  console.log(`[Flowise Stream] Stream started`);
+                  res.write(`data: ${JSON.stringify({ event: 'start' })}\n\n`);
+                  
+                } else if (obj.event === 'metadata') {
+                  metadata = obj.data || {};
                   console.log(`[Flowise Stream] Metadata received:`, metadata);
                   res.write(`data: ${JSON.stringify({ event: 'metadata', data: metadata })}\n\n`);
-                } catch (e) {
-                  console.warn(`[Flowise Stream] Failed to parse metadata:`, data);
+                  
+                } else if (obj.event === 'end') {
+                  console.log(`[Flowise Stream] End event received`);
+                  // Don't send end yet, we'll send our own with performance metrics
+                  
+                } else if (obj.event === 'error') {
+                  console.error(`[Flowise Stream] Error event:`, obj.data);
+                  res.write(`data: ${JSON.stringify({ event: 'error', data: obj.data })}\n\n`);
                 }
                 
-              } else if (currentEvent === 'end') {
-                console.log(`[Flowise Stream] End event received`);
-                // Don't send end yet, we'll send our own with performance metrics
-                
-              } else if (currentEvent === 'error') {
-                console.error(`[Flowise Stream] Error event:`, data);
-                res.write(`data: ${JSON.stringify({ event: 'error', data })}\n\n`);
-                
-              } else if (currentEvent === 'sourceDocuments' || currentEvent === 'usedTools') {
-                // Optional: log these but don't send to client (we disabled sourceDocuments)
-                console.log(`[Flowise Stream] ${currentEvent}:`, data.substring(0, 100));
+              } catch (parseError) {
+                // Not JSON or malformed - skip it
+                console.warn(`[Flowise Stream] Failed to parse SSE data:`, payload.substring(0, 100));
               }
-              
-              // Reset currentEvent after processing
-              currentEvent = '';
             }
           }
         }
