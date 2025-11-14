@@ -150,14 +150,19 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
         (fullText: string, metadata: any) => {
           console.log('[use-flowise] Stream complete, processing final message...');
 
+          // CRITICAL: Use metadata.fullText from server if available (server extracts JSON Response field)
+          // Otherwise fall back to locally accumulated fullText
+          const finalText = metadata?.fullText || fullText;
+          console.log('[use-flowise] Using text:', finalText.length, 'chars (from', metadata?.fullText ? 'server metadata' : 'local accumulation', ')');
+
           // Extract media from the full streamed text
-          const { cleanText, videos, links } = extractMediaFromText(fullText);
+          const { cleanText, videos, links } = extractMediaFromText(finalText);
 
           setMessages(prev => prev.map(msg =>
             msg.id === peterMessageId
               ? {
                   ...msg,
-                  content: fullText,
+                  content: finalText,
                   isStreaming: false,
                   metadata: {
                     hasVideo: videos.length > 0,
