@@ -59,6 +59,17 @@ A desktop-only French educational web app integrating Flowise chatbot "Peter" fo
   - Disabled caching to preserve conversational context
   - Peter now maintains memory throughout conversation (remembers user's name, etc.)
   - Fixed conversation loop bug where Peter would forget previous context
+- **SSE Streaming Implementation (Nov 14, 2025)** : Real-time progressive text display
+  - Implemented Server-Sent Events (SSE) streaming for Peter's responses
+  - New endpoint `/api/flowise/prediction/:chatflowId/stream` with native SSE support
+  - Correct parsing of Flowise SSE format: `event: token\ndata: text`
+  - First token appears in ~500ms instead of waiting 10+ seconds for full response
+  - Progressive word-by-word display with streaming cursor animation
+  - Separate metadata handling (theme, score) sent via dedicated event
+  - Multiple layers of protection to never display raw JSON to users
+  - Client-side token filtering with stream continuation (no abort on JSON-like tokens)
+  - **Result**: Dramatically improved perceived latency and user experience
+  - **Flowise Configuration**: Chatflow must use streaming-compatible LLM (OpenAI, Anthropic, etc.)
 
 ## Development Guidelines
 Following fullstack_js blueprint with:

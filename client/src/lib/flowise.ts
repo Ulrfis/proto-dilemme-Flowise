@@ -80,6 +80,15 @@ export class FlowiseClient {
 
               if (parsed.event === 'token') {
                 const token = parsed.data || '';
+                
+                // CRITICAL: Never display JSON to users
+                // If token looks like JSON, skip it (don't add to fullText)
+                // But continue processing other events - don't abort the stream
+                if (token.trim().startsWith('{') || token.trim().startsWith('[')) {
+                  console.warn('[Flowise Client] Skipping JSON token:', token.substring(0, 50));
+                  continue; // Skip this token but continue processing stream
+                }
+                
                 fullText += token;
                 onToken(token);
 
@@ -95,10 +104,10 @@ export class FlowiseClient {
                 if (parsed.metadata) {
                   accumulatedMetadata = { ...accumulatedMetadata, ...parsed.metadata };
                 }
+              } else if (parsed.event === 'start') {
+                console.log('[Flowise Client] Stream started');
               } else {
-                const token = parsed.data || JSON.stringify(parsed);
-                fullText += token;
-                onToken(token);
+                console.warn('[Flowise Client] Unknown event type:', parsed.event);
               }
             } catch (parseError) {
               console.warn('[Flowise Client] Failed to parse SSE data:', data);

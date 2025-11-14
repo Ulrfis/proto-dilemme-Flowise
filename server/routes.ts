@@ -306,6 +306,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let firstTokenTime = 0;
       let tokenCount = 0;
       let fullText = '';
+      let currentEvent = '';
+      let metadata: any = {};
 
       try {
         while (true) {
@@ -318,53 +320,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
 
           const chunk = decoder.decode(value, { stream: true });
-          console.log(`[Flowise Stream] Received chunk (${chunk.length} chars):`, chunk.substring(0, 50));
-          
-          fullText += chunk;
           buffer += chunk;
 
           const lines = buffer.split('\n');
           buffer = lines.pop() || '';
 
           for (const line of lines) {
-            // Handle SSE format if Flowise sends it
-            if (line.startsWith('data: ')) {
-              const data = line.slice(6).trim();
+            const trimmedLine = line.trim();
+            
+            if (!trimmedLine) {
+              continue;
+            }
 
-              if (data === '[DONE]') {
+            // Parse SSE format: "event: type" and "data: content"
+            if (trimmedLine.startsWith('event:')) {
+              currentEvent = trimmedLine.slice(6).trim();
+            } else if (trimmedLine.startsWith('data:')) {
+              const data = trimmedLine.slice(5).trim();
+              
+              if (!data || data === '[DONE]') {
                 continue;
               }
 
-              try {
-                const parsed = JSON.parse(data);
-
+              // Handle different event types
+              if (currentEvent === 'token') {
+                // Token event: send the text content directly to client
                 if (tokenCount === 0) {
                   firstTokenTime = Date.now() - perfStart;
-                  console.log(`[Flowise Stream] First SSE token received in ${firstTokenTime}ms`);
+                  console.log(`[Flowise Stream] First token received in ${firstTokenTime}ms`);
                 }
-
+                
+                fullText += data;
                 tokenCount++;
-                res.write(`data: ${data}\n\n`);
-              } catch (parseError) {
-                if (data) {
-                  if (tokenCount === 0) {
-                    firstTokenTime = Date.now() - perfStart;
-                  }
-                  tokenCount++;
-                  res.write(`data: ${JSON.stringify({ event: 'token', data: data })}\n\n`);
+                res.write(`data: ${JSON.stringify({ event: 'token', data })}\n\n`);
+                
+              } else if (currentEvent === 'start') {
+                console.log(`[Flowise Stream] Stream started`);
+                res.write(`data: ${JSON.stringify({ event: 'start' })}\n\n`);
+                
+              } else if (currentEvent === 'metadata') {
+                // Parse metadata (theme, score, etc.)
+                try {
+                  metadata = JSON.parse(data);
+                  console.log(`[Flowise Stream] Metadata received:`, metadata);
+                  res.write(`data: ${JSON.stringify({ event: 'metadata', data: metadata })}\n\n`);
+                } catch (e) {
+                  console.warn(`[Flowise Stream] Failed to parse metadata:`, data);
                 }
-              }
-            }
-            // Handle plain text chunks (more common with Flowise)
-            else if (line.trim()) {
-              if (tokenCount === 0) {
-                firstTokenTime = Date.now() - perfStart;
-                console.log(`[Flowise Stream] First text chunk received in ${firstTokenTime}ms`);
+                
+              } else if (currentEvent === 'end') {
+                console.log(`[Flowise Stream] End event received`);
+                // Don't send end yet, we'll send our own with performance metrics
+                
+              } else if (currentEvent === 'error') {
+                console.error(`[Flowise Stream] Error event:`, data);
+                res.write(`data: ${JSON.stringify({ event: 'error', data })}\n\n`);
+                
+              } else if (currentEvent === 'sourceDocuments' || currentEvent === 'usedTools') {
+                // Optional: log these but don't send to client (we disabled sourceDocuments)
+                console.log(`[Flowise Stream] ${currentEvent}:`, data.substring(0, 100));
               }
               
-              // Send each line as a token event
-              tokenCount++;
-              res.write(`data: ${JSON.stringify({ event: 'token', data: line })}\n\n`);
+              // Reset currentEvent after processing
+              currentEvent = '';
             }
           }
         }
@@ -373,9 +391,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.write(`data: ${JSON.stringify({
           event: 'end',
           metadata: {
+            ...metadata,
             totalTime,
             firstTokenTime,
-            tokenCount
+            tokenCount,
+            fullText
           }
         })}\n\n`);
 

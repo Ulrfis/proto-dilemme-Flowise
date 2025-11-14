@@ -148,8 +148,9 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
           }
         },
         (fullText: string, metadata: any) => {
-          console.log('[use-flowise] Stream complete');
+          console.log('[use-flowise] Stream complete, processing final message...');
 
+          // Extract media from the full streamed text
           const { cleanText, videos, links } = extractMediaFromText(fullText);
 
           setMessages(prev => prev.map(msg =>
@@ -170,11 +171,25 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
 
           setIsLoading(false);
 
+          // Analytics tracking
           if (videos.length > 0 || links.length > 0) {
             setTimeout(() => {
               videos.forEach(video => analytics.trackVideoOpened(video));
               links.forEach(link => analytics.trackLinkOpened(link));
             }, 0);
+          }
+
+          // Update info panel with final metadata if available
+          if (onInfoDataUpdate && metadata) {
+            const infoData: any = {};
+            if (metadata.theme) infoData.theme = metadata.theme;
+            if (metadata.nombre_d_indices) infoData.nombre_d_indices = metadata.nombre_d_indices;
+            if (metadata.score_globale) infoData.score_globale = metadata.score_globale;
+
+            if (Object.keys(infoData).length > 0) {
+              console.log('[use-flowise] Final metadata update:', infoData);
+              onInfoDataUpdate(infoData);
+            }
           }
         },
         (error: Error) => {
