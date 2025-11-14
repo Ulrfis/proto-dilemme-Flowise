@@ -79,14 +79,32 @@ export class FlowiseClient {
               }
 
               if (parsed.event === 'token') {
-                const token = parsed.data || '';
+                let token = parsed.data || '';
                 
-                // CRITICAL: Never display JSON to users
-                // If token looks like JSON, skip it (don't add to fullText)
-                // But continue processing other events - don't abort the stream
-                if (token.trim().startsWith('{') || token.trim().startsWith('[')) {
-                  console.warn('[Flowise Client] Skipping JSON token:', token.substring(0, 50));
-                  continue; // Skip this token but continue processing stream
+                // CRITICAL: Never display raw JSON to users
+                // Sometimes Flowise sends the entire response as a single JSON token: {"Response": "text..."}
+                // Try to extract the Response field if it's JSON
+                if (token.trim().startsWith('{')) {
+                  try {
+                    const jsonToken = JSON.parse(token);
+                    if (jsonToken.Response && typeof jsonToken.Response === 'string') {
+                      // Extract the Response field
+                      token = jsonToken.Response;
+                      console.log('[Flowise Client] Extracted Response from JSON token');
+                    } else {
+                      // Unknown JSON structure - skip it
+                      console.warn('[Flowise Client] Skipping unknown JSON token:', token.substring(0, 50));
+                      continue;
+                    }
+                  } catch {
+                    // Not valid JSON or incomplete JSON - skip it
+                    console.warn('[Flowise Client] Skipping malformed JSON token:', token.substring(0, 50));
+                    continue;
+                  }
+                } else if (token.trim().startsWith('[')) {
+                  // Skip array tokens
+                  console.warn('[Flowise Client] Skipping array token:', token.substring(0, 50));
+                  continue;
                 }
                 
                 fullText += token;
