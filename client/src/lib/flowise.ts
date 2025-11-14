@@ -79,34 +79,11 @@ export class FlowiseClient {
               }
 
               if (parsed.event === 'token') {
-                let token = parsed.data || '';
+                const token = parsed.data || '';
                 
-                // CRITICAL: Never display raw JSON to users
-                // Sometimes Flowise sends the entire response as a single JSON token: {"Response": "text..."}
-                // Try to extract the Response field if it's JSON
-                if (token.trim().startsWith('{')) {
-                  try {
-                    const jsonToken = JSON.parse(token);
-                    if (jsonToken.Response && typeof jsonToken.Response === 'string') {
-                      // Extract the Response field
-                      token = jsonToken.Response;
-                      console.log('[Flowise Client] Extracted Response from JSON token');
-                    } else {
-                      // Unknown JSON structure - skip it
-                      console.warn('[Flowise Client] Skipping unknown JSON token:', token.substring(0, 50));
-                      continue;
-                    }
-                  } catch {
-                    // Not valid JSON or incomplete JSON - skip it
-                    console.warn('[Flowise Client] Skipping malformed JSON token:', token.substring(0, 50));
-                    continue;
-                  }
-                } else if (token.trim().startsWith('[')) {
-                  // Skip array tokens
-                  console.warn('[Flowise Client] Skipping array token:', token.substring(0, 50));
-                  continue;
-                }
-                
+                // NOTE: We accumulate all tokens as-is without filtering
+                // The server will extract the Response field from JSON after full accumulation
+                // This prevents issues with fragmented JSON tokens
                 fullText += token;
                 onToken(token);
 

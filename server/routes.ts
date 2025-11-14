@@ -380,6 +380,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         const totalTime = Date.now() - perfStart;
+        
+        // CRITICAL: Extract Response field from JSON if present
+        // Sometimes Flowise returns entire response as JSON: {"Response": "text..."}
+        let finalText = fullText;
+        const trimmedFullText = fullText.trim();
+        if (trimmedFullText.startsWith('{')) {
+          try {
+            const jsonResponse = JSON.parse(trimmedFullText);
+            if (jsonResponse.Response && typeof jsonResponse.Response === 'string') {
+              finalText = jsonResponse.Response;
+              console.log(`[Flowise Stream] ✅ Extracted Response field from JSON (${jsonResponse.Response.length} chars)`);
+            }
+          } catch {
+            // Not JSON or malformed - use fullText as-is
+            console.log(`[Flowise Stream] fullText is not valid JSON, using as-is`);
+          }
+        }
+        
         res.write(`data: ${JSON.stringify({
           event: 'end',
           metadata: {
@@ -387,7 +405,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             totalTime,
             firstTokenTime,
             tokenCount,
-            fullText
+            fullText: finalText
           }
         })}\n\n`);
 
