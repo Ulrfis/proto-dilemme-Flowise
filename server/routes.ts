@@ -385,16 +385,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Sometimes Flowise returns entire response as JSON: {"Response": "text..."}
         let finalText = fullText;
         const trimmedFullText = fullText.trim();
+        
+        console.log(`[Flowise Stream DEBUG] fullText length: ${trimmedFullText.length}, starts with: ${trimmedFullText.substring(0, 50)}`);
+        
         if (trimmedFullText.startsWith('{')) {
           try {
+            // Try to parse as JSON
             const jsonResponse = JSON.parse(trimmedFullText);
+            console.log(`[Flowise Stream DEBUG] Successfully parsed JSON, keys:`, Object.keys(jsonResponse));
+            
             if (jsonResponse.Response && typeof jsonResponse.Response === 'string') {
               finalText = jsonResponse.Response;
               console.log(`[Flowise Stream] ✅ Extracted Response field from JSON (${jsonResponse.Response.length} chars)`);
+            } else {
+              console.log(`[Flowise Stream] JSON parsed but no Response field found`);
             }
-          } catch {
-            // Not JSON or malformed - use fullText as-is
-            console.log(`[Flowise Stream] fullText is not valid JSON, using as-is`);
+          } catch (parseError) {
+            // Parsing failed - log the error and the problematic JSON
+            console.error(`[Flowise Stream] ❌ JSON parsing failed:`, parseError);
+            console.error(`[Flowise Stream] Problematic JSON preview (first 200 chars):`, trimmedFullText.substring(0, 200));
+            console.error(`[Flowise Stream] Problematic JSON preview (last 200 chars):`, trimmedFullText.substring(Math.max(0, trimmedFullText.length - 200)));
+            
+            // Try regex extraction as fallback
+            const responseMatch = trimmedFullText.match(/"Response"\s*:\s*"([^"]*(?:\\.[^"]*)*)"/);
+            if (responseMatch && responseMatch[1]) {
+              finalText = responseMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
+              console.log(`[Flowise Stream] ✅ Extracted Response via regex fallback (${finalText.length} chars)`);
+            } else {
+              console.log(`[Flowise Stream] Using fullText as-is (regex extraction also failed)`);
+            }
           }
         }
         
