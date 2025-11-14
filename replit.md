@@ -62,13 +62,17 @@ A desktop-only French educational web app integrating Flowise chatbot "Peter" fo
 - **SSE Streaming Implementation (Nov 14, 2025)** : Real-time progressive text display
   - Implemented Server-Sent Events (SSE) streaming for Peter's responses
   - New endpoint `/api/flowise/prediction/:chatflowId/stream` with native SSE support
-  - Correct parsing of Flowise SSE format: `event: token\ndata: text`
+  - **CRITICAL FIX (Nov 14, 7:24)**: Corrected SSE format parsing based on Flowise documentation
+    - Flowise uses: `data: {"event":"token","data":"text"}` (JSON payload in data line)
+    - NOT the standard SSE format: `event: token\ndata: text`
+    - Server now correctly parses JSON from each `data:` line
   - First token appears in ~500ms instead of waiting 10+ seconds for full response
   - Progressive word-by-word display with streaming cursor animation
   - Separate metadata handling (theme, score) sent via dedicated event
   - Multiple layers of protection to never display raw JSON to users
   - Client-side token filtering with stream continuation (no abort on JSON-like tokens)
-  - **Result**: Dramatically improved perceived latency and user experience
+  - **UI FIX**: Response buttons (OK, choices, etc.) hidden during streaming, appear only after completion
+  - **Result**: Peter's responses now display correctly with proper streaming
   - **Flowise Configuration**: Chatflow must use streaming-compatible LLM (OpenAI, Anthropic, etc.)
 
 ## Development Guidelines
