@@ -367,8 +367,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   // Don't send end yet, we'll send our own with performance metrics
                   
                 } else if (obj.event === 'error') {
-                  console.error(`[Flowise Stream] Error event:`, obj.data);
+                  console.error(`[Flowise Stream] ❌ Error event from Flowise:`, obj.data);
                   res.write(`data: ${JSON.stringify({ event: 'error', data: obj.data })}\n\n`);
+                } else {
+                  console.log(`[Flowise Stream] Unknown event type:`, obj.event);
                 }
                 
               } catch (parseError) {
