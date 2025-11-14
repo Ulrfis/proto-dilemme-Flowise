@@ -66,13 +66,17 @@ A desktop-only French educational web app integrating Flowise chatbot "Peter" fo
     - Flowise uses: `data: {"event":"token","data":"text"}` (JSON payload in data line)
     - NOT the standard SSE format: `event: token\ndata: text`
     - Server now correctly parses JSON from each `data:` line
+  - **ULTIMATE FIX (Nov 14, 7:55)**: Three-layer architecture for zero JSON display
+    - **Layer 1 (Client)**: Accumulates all tokens without filtering (prevents fragment loss)
+    - **Layer 2 (Server)**: Extracts Response field from complete JSON after full accumulation
+    - **Layer 3 (Hook)**: Uses server-cleaned metadata.fullText with fallback to local fullText
+    - Handles fragmented JSON tokens sent by Flowise (`{`, then `"Response"...`, then `}`)
+    - Server-side extraction ensures no JSON ever reaches the UI
   - First token appears in ~500ms instead of waiting 10+ seconds for full response
   - Progressive word-by-word display with streaming cursor animation
   - Separate metadata handling (theme, score) sent via dedicated event
-  - Multiple layers of protection to never display raw JSON to users
-  - Client-side token filtering with stream continuation (no abort on JSON-like tokens)
   - **UI FIX**: Response buttons (OK, choices, etc.) hidden during streaming, appear only after completion
-  - **Result**: Peter's responses now display correctly with proper streaming
+  - **Result**: Peter's responses display correctly with zero JSON visible, even with fragmented tokens
   - **Flowise Configuration**: Chatflow must use streaming-compatible LLM (OpenAI, Anthropic, etc.)
 
 ## Development Guidelines
