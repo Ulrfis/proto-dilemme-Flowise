@@ -2,12 +2,27 @@
 
 Tous les changements notables de ce projet seront documentés dans ce fichier.
 
+## [2025-11-14] 07:24:00
+
+### 🔧 CORRECTION CRITIQUE : Format SSE Flowise et affichage des boutons
+- **Bug critique résolu : Bulle de Peter vide** (0 tokens reçus)
+  - **Cause** : Mauvaise compréhension du format SSE de Flowise
+  - **Format incorrect utilisé** : `event: token\ndata: texte` (format SSE standard)
+  - **Format correct de Flowise** : `data: {"event":"token","data":"texte"}` (JSON dans la ligne data)
+  - **Solution** : Refonte complète du parsing SSE pour extraire event et data du JSON
+  - Le serveur parse maintenant correctement chaque ligne `data:` comme du JSON contenant {event, data}
+- **Bug résolu : Boutons de réponse apparaissaient pendant le streaming**
+  - Boutons (👍 OK, choix, liens, vidéos) masqués pendant `isStreaming === true`
+  - Les boutons n'apparaissent qu'après la fin complète du streaming
+  - Amélioration de l'UX : l'utilisateur attend que Peter finisse avant de répondre
+- **Résultat** : Les réponses de Peter s'affichent maintenant correctement avec streaming progressif, et les boutons apparaissent au bon moment
+
 ## [2025-11-14] 07:05:00
 
 ### ⚡ Implémentation du streaming SSE - Latence réduite à <500ms pour le premier token
 - **Streaming Server-Sent Events (SSE)** : Implémentation complète du streaming pour les réponses de Peter
   - Nouveau endpoint `/api/flowise/prediction/:chatflowId/stream` avec support SSE natif
-  - Parsing correct du format SSE de Flowise : `event: token\ndata: texte`
+  - Documentation officielle Flowise consultée pour format SSE correct
   - Gestion de tous les types d'événements Flowise : start, token, metadata, end, error
   - Accumulation progressive du texte complet côté serveur
 - **Client SSE optimisé** : FlowiseClient.sendMessageStreaming avec parsing robuste
