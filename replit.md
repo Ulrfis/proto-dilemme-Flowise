@@ -39,6 +39,10 @@ A desktop-only French educational web app integrating Flowise chatbot "Peter" fo
 - Focus on simple chat integration with media embedding
 - Updated Peter's initial message to match specified 2025 futuristic tone
 - Flowise integration fully operational and tested
+- **Chatflow Migration (Nov 14, 2025)** : Updated to chatflow `d7b33ea2-941b-4b8c-b390-8bbb09ddd63c`
+  - Migrated from previous chatflow to use correct endpoint
+  - Enhanced error logging and JSON extraction with regex fallback
+  - Identified temperature parameter configuration issue requiring Flowise adjustment
 - Implemented split-screen layout: chat (1/3) + media panel (2/3) always visible
 - Enhanced media panel with improved video player and webview components
 - Added independent chat scrolling system - chat scrolls without affecting media panel
