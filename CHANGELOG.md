@@ -2,6 +2,29 @@
 
 Tous les changements notables de ce projet seront documentés dans ce fichier.
 
+## [2025-11-14] 14:40:00
+
+### 🔄 MIGRATION CHATFLOW : Passage au nouveau chatflow Flowise
+- **Migration vers nouveau chatflow** : Changement de `f00bd6a9-4b37-4e9f-af73-9311be99ae9b` vers `d7b33ea2-941b-4b8c-b390-8bbb09ddd63c`
+  - Mise à jour des secrets d'environnement `FLOWISE_CHATFLOW_ID` et `VITE_FLOWISE_CHATFLOW_ID`
+  - Objectif : Utiliser le chatflow qui retourne du texte brut au lieu de JSON structuré
+- **Problème identifié : Paramètre temperature non supporté**
+  - Le nouveau chatflow est configuré avec `temperature: 0.9` dans Flowise
+  - Le modèle LLM utilisé n'accepte que `temperature: 1` (valeur par défaut)
+  - Erreur : "400 Unsupported value: 'temperature' does not support 0.9 with this model"
+  - **Action requise** : Ajuster la configuration dans Flowise (retirer temperature ou mettre à 1)
+- **Améliorations du logging et gestion d'erreur**
+  - Ajout de logs détaillés pour le debug de l'extraction JSON
+  - Affichage des 200 premiers et derniers caractères en cas d'échec de parsing
+  - Meilleure identification des erreurs Flowise avec emoji ❌
+  - Log des clés JSON trouvées lors du parsing réussi
+- **Extraction JSON renforcée avec fallback regex**
+  - Tentative de parsing JSON standard en premier
+  - Si échec : extraction via regex du champ "Response"
+  - Gestion des caractères échappés (\", \n) dans le regex
+  - Triple niveau de protection contre l'affichage de JSON brut
+- **Résultat** : Architecture prête à gérer les deux formats de réponse (texte brut ou JSON avec champ Response)
+
 ## [2025-11-14] 07:55:00
 
 ### 🔧 CORRECTION ULTIME : Extraction serveur du champ Response et architecture simplifiée
