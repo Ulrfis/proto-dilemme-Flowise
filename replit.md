@@ -91,6 +91,14 @@ Following fullstack_js blueprint with:
 - Tailwind CSS for styling
 - TypeScript for type safety
 
+### STORY DOCUMENTATION RULE
+**After completing any feature (major or minor), update STORY.md following its internal structure:**
+- **Major features** (new capability, significant UI change, integration): Add full entry in "Feature Chronicle" + trigger a "Pulse Check" question
+- **Minor features** (bug fixes, tweaks, small improvements): Add brief entry in "Feature Chronicle"
+- **On errors/pivots**: Document immediately in "Pivots & Breakages" section
+- **Every 3-5 features**: Ask the creator one "Pulse Check" question about their current state
+- **Update** "Last Updated" date at top of STORY.md after each entry
+
 ## Integration Priorities
 1. Flowise chatbot API integration with proxy for security
 2. Gumlet video player for video URLs in chat
