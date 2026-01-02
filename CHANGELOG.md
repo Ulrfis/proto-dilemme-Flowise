@@ -2,27 +2,17 @@
 
 Tous les changements notables de ce projet seront documentés dans ce fichier.
 
-## [2026-01-02] 08:30:00
+## [2026-01-02] 09:00:00
 
-### 🎬 ONBOARDING VIDÉO : Séquence multi-vidéo avec détection d'appareil
-- **Nouveau composant OnboardingVideo** : Séquence immersive de 2 vidéos avant l'écran d'accueil
-  - Vidéo initiale (16/9) : `69577dbaf3928b38fc32c32b` - affichée sur tous les appareils
-  - Vidéo desktop (16/9) : `69577d67d73a53e69e607fbf` - pour les utilisateurs desktop
-  - Vidéo smartphone (9/16) : `69577d67f3928b38fc32bb95` - pour les utilisateurs mobile
-- **Hook useDeviceType** : Détection d'appareil basée sur :
-  - Largeur d'écran (< 768px = mobile)
-  - Capacité tactile (ontouchstart, maxTouchPoints)
-  - User agent (Android, iPhone, iPad, etc.)
-  - Orientation (portrait/landscape)
+### 🎬 ONBOARDING VIDÉO : Vidéo d'intro après l'écran d'accueil
+- **Composant OnboardingVideo simplifié** : Une seule vidéo d'intro (16/9)
+  - Vidéo unique : `69577dbaf3928b38fc32c32b`
+  - Flux : Écran d'accueil → "Démarrer l'aventure" → Vidéo → Chat avec Peter
 - **Fonctionnalités** :
-  - Transitions fluides avec fondu de 300ms entre vidéos
-  - Auto-play pour les vidéos suivantes après première interaction
-  - Indicateurs de progression (dots) en bas de l'écran
-  - Bouton "Passer" toujours visible pour skip l'onboarding
-  - Bouton "Suivant" après démarrage de la première vidéo
-  - Vidéo 16/9 centrée verticalement sur téléphones en mode portrait
-- **Intégration GumletPlayer** : Utilisation du composant @gumlet/react-embed-player pour support HLS (m3u8)
-- **Résultat** : Expérience d'onboarding immersive adaptée à l'appareil de l'utilisateur
+  - Bouton "Passer/Commencer" pour skip la vidéo
+  - Auto-transition vers le chat à la fin de la vidéo
+- **Intégration GumletPlayer** : Support HLS (m3u8) pour streaming fluide
+- **Résultat** : Introduction vidéo optionnelle avant de commencer la conversation
 
 ---
 
