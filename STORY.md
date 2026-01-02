@@ -1,9 +1,9 @@
 # Dilemme Plastique — Development Story
 
-> **Status**: 🟡 In Progress | 🟢 Complete | 🔴 Paused  
-> **Creator**: Team Dilemme Plastique  
+> **Status**: 🟡 In Progress  
+> **Creator**: Ulrich Fischer  
 > **Started**: 2025-11-06  
-> **Last Updated**: 2025-11-14  
+> **Last Updated**: 2026-01-02  
 
 ---
 
@@ -91,6 +91,45 @@ How Peter helps: Conversational guide who asks questions, shares surprising fact
 ## Feature Chronicle
 
 *Each feature gets an entry. Major features (🔷) get full treatment. Minor features (🔹) get brief notes.*
+
+### [2026-01-02] — Multi-Video Onboarding Sequence with Device Detection 🔷
+
+**Intent**: Replace static welcome screen with immersive video onboarding sequence that adapts to user's device type
+
+**Prompt(s)**: 
+```
+- Implement three-video sequence with device-adaptive playback
+- Initial video (16/9) plays on all devices, centered on vertical phones
+- Second video varies: desktop gets 16/9, smartphone gets 9/16
+- Seamless auto-play transitions between videos
+- Device detection based on screen width, touch capability, and user agent
+```
+
+**Tool**: Replit Agent (OnboardingVideo.tsx, use-device-type.ts, homepage.tsx)
+
+**Outcome**: 
+- Created `useDeviceType` hook detecting desktop vs smartphone with orientation tracking
+- Built `OnboardingVideo` component with GumletPlayer for HLS streaming support
+- Implemented 2-video sequence with progress indicators and skip/next controls
+- Auto-play works for subsequent videos after first interaction
+- Smooth 300ms fade transition between videos
+
+**Surprise**: 
+Native HTML5 `<video>` element doesn't support HLS (m3u8) format natively. 
+Had to switch from raw video element to GumletPlayer component which handles HLS decoding.
+
+**Friction**: 
+Initial implementation using `<video src="...m3u8">` failed with "NotSupportedError: no supported sources".
+GumletPlayer needs video IDs not URLs, required extracting IDs from the HLS URLs.
+
+**Resolution**: 
+Used `@gumlet/react-embed-player` which is already installed and handles HLS streaming natively.
+Extracted video IDs from URLs (e.g., `69577dbaf3928b38fc32c32b` from `.../69577dbaf3928b38fc32c32b/main.m3u8`).
+GumletPlayer fires `onEnded` event for seamless auto-advance.
+
+**Time**: ~45 minutes
+
+---
 
 ### [2025-11-14] — SSE Streaming with Three-Layer JSON Extraction Architecture 🔷
 

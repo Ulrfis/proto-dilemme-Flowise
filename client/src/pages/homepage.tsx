@@ -5,6 +5,7 @@ import peterAvatarImage from "@assets/Peter Avatar_1756372265537.jpg";
 import { ChatInterface } from "../components/chat/ChatInterface";
 import { MediaPanel } from "../components/media/MediaPanel";
 import { ConfettiEffect } from "../components/effects/ConfettiEffect";
+import { OnboardingVideo } from "../components/onboarding/OnboardingVideo";
 import { useFlowise } from "../hooks/use-flowise";
 import { useMediaPanel } from "../hooks/use-media-panel";
 import { analytics } from "../lib/analytics";
@@ -20,6 +21,7 @@ interface HomepageProps {
 }
 
 export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
+  const [showOnboarding, setShowOnboarding] = useState(true);
   const [showChat, setShowChat] = useState(false);
   const [infoData, setInfoData] = useState<InfoPanelData | null>(null);
   const [showConfetti, setShowConfetti] = useState(false);
@@ -130,6 +132,16 @@ export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
     setShowConfetti(false);
     console.log('[Confetti] Effet terminé');
   };
+
+  const handleOnboardingComplete = () => {
+    console.log('[Onboarding] Video sequence completed');
+    setShowOnboarding(false);
+    analytics.trackPageView('welcome_screen');
+  };
+
+  if (showOnboarding) {
+    return <OnboardingVideo onComplete={handleOnboardingComplete} />;
+  }
 
   return (
     <main className="flex-1 flex overflow-hidden relative">
