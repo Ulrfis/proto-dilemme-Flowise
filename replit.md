@@ -82,12 +82,11 @@ A desktop-only French educational web app integrating Flowise chatbot "Peter" fo
   - **UI FIX**: Response buttons (OK, choices, etc.) hidden during streaming, appear only after completion
   - **Result**: Peter's responses display correctly with zero JSON visible, even with fragmented tokens
   - **Flowise Configuration**: Chatflow must use streaming-compatible LLM (OpenAI, Anthropic, etc.)
-- **Multi-Video Onboarding (Jan 2, 2026)**: Immersive video onboarding sequence
-  - Device detection via `useDeviceType` hook (desktop vs smartphone)
-  - 2-video sequence: Initial (16/9 all devices) → Device-specific (16/9 desktop, 9/16 smartphone)
+- **Video Onboarding (Jan 2, 2026)**: Intro video after welcome screen
+  - Single video (16/9): ID `69577dbaf3928b38fc32c32b`
+  - Flow: Welcome screen → "Démarrer l'aventure" → Video → Chat
   - GumletPlayer for HLS streaming support
-  - Progress indicators, skip/next controls, 300ms fade transitions
-  - Video IDs: initial=69577dbaf3928b38fc32c32b, desktop=69577d67d73a53e69e607fbf, smartphone=69577d67f3928b38fc32bb95
+  - Skip button available during playback
 
 ## Development Guidelines
 Following fullstack_js blueprint with:

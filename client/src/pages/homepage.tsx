@@ -21,7 +21,8 @@ interface HomepageProps {
 }
 
 export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
-  const [showOnboarding, setShowOnboarding] = useState(true);
+  const [showWelcome, setShowWelcome] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [infoData, setInfoData] = useState<InfoPanelData | null>(null);
   const [showConfetti, setShowConfetti] = useState(false);
@@ -88,10 +89,15 @@ export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
     switchTab,
   } = useMediaPanel();
 
+  const handleStartAdventure = () => {
+    setShowWelcome(false);
+    setShowOnboarding(true);
+    analytics.trackPageView('onboarding_video');
+  };
+
   const handleStartChat = () => {
     setShowChat(true);
     initializeChat();
-    // Media panel is always visible in the new split layout
     analytics.trackPageView('chat_interface');
   };
 
@@ -134,9 +140,9 @@ export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
   };
 
   const handleOnboardingComplete = () => {
-    console.log('[Onboarding] Video sequence completed');
+    console.log('[Onboarding] Video completed');
     setShowOnboarding(false);
-    analytics.trackPageView('welcome_screen');
+    handleStartChat();
   };
 
   if (showOnboarding) {
@@ -151,7 +157,7 @@ export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
         onComplete={handleConfettiComplete}
       />
       
-      {!showChat ? (
+      {showWelcome && !showChat ? (
         /* Welcome Screen - Full Width */
         <div className="flex-1 flex items-center justify-center p-8 bg-white">
           <div className="text-center max-w-2xl">
@@ -174,7 +180,7 @@ export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
             <div className="mb-8">
               <Button
                 size="lg"
-                onClick={handleStartChat}
+                onClick={handleStartAdventure}
                 data-testid="button-start-chat"
                 className="bg-accent hover:bg-accent/80 text-accent-foreground font-semibold py-4 px-8 rounded-xl transition-all transform hover:scale-105 text-lg"
               >
@@ -210,7 +216,7 @@ export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
             </div>
           </div>
         </div>
-      ) : (
+      ) : showChat ? (
         /* Chat Interface - Split Layout */
         <>
           {/* Left Side - Chat (1/3 width) */}
@@ -240,7 +246,7 @@ export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
             />
           </div>
         </>
-      )}
+      ) : null}
     </main>
   );
 }
