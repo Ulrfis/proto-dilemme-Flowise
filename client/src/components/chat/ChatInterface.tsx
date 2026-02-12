@@ -3,7 +3,7 @@ import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { PanelsRightBottom, Loader2, Copy, Check } from "lucide-react";
+import { PanelsRightBottom, Copy, Check } from "lucide-react";
 import { ChatMessage as ChatMessageType } from "../../types/chat";
 import { cn } from "@/lib/utils";
 import { AvatarSelector } from "../avatar/AvatarSelector";
@@ -140,37 +140,27 @@ export function ChatInterface({
       
       {/* Chat Messages - Scrollable */}
       <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-3 space-y-3 chat-messages">
-        {messages.map((message) => (
-          <ChatMessage
-            key={message.id}
-            message={message}
-            onVideoClick={onVideoClick}
-            onLinkClick={onLinkClick}
-            onThumbsUp={onThumbsUp}
-            onChoiceClick={onChoiceClick}
-            userAvatarUrl={userAvatar.avatarUrl}
-            userName={userAvatar.name}
-          />
-        ))}
+        {messages.map((message, index) => {
+          const isLastPeterMessage = message.sender === 'peter' && 
+            !messages.slice(index + 1).some(m => m.sender === 'peter');
+          const showThinking = isLoading && isLastPeterMessage && !message.isStreaming;
+          
+          return (
+            <ChatMessage
+              key={message.id}
+              message={message}
+              onVideoClick={onVideoClick}
+              onLinkClick={onLinkClick}
+              onThumbsUp={onThumbsUp}
+              onChoiceClick={onChoiceClick}
+              userAvatarUrl={userAvatar.avatarUrl}
+              userName={userAvatar.name}
+              showThinking={showThinking}
+            />
+          );
+        })}
         
-        {isLoading && (
-          <div className="flex items-end space-x-3 mb-4">
-            <Avatar className="w-8 h-8 flex-shrink-0 mb-1">
-              <AvatarImage src={peterAvatarImage} alt="Peter" />
-              <AvatarFallback className="bg-primary text-white text-sm font-semibold">
-                P
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1 mr-16">
-              <div className="relative px-4 py-3 max-w-sm shadow-sm inline-block bg-teal-500 text-white rounded-2xl rounded-bl-md">
-                <div className="flex items-center space-x-2">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span className="text-sm">Peter réfléchit...</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        
         
         <div ref={messagesEndRef} />
       </div>
