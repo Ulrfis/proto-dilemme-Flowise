@@ -2,6 +2,7 @@ import { ChatMessage as ChatMessageType } from "../../types/chat";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import peterAvatarImage from "@assets/Peter Avatar_1756370825342.jpg";
 import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ChatMessageProps {
@@ -12,6 +13,7 @@ interface ChatMessageProps {
   onChoiceClick?: (choice: string) => void;
   userAvatarUrl?: string;
   userName?: string;
+  showThinking?: boolean;
 }
 
 export function ChatMessage({ 
@@ -21,7 +23,8 @@ export function ChatMessage({
   onThumbsUp, 
   onChoiceClick,
   userAvatarUrl,
-  userName = 'Utilisateur'
+  userName = 'Utilisateur',
+  showThinking = false
 }: ChatMessageProps) {
   const isPeter = message.sender === 'peter';
   const isDebug = message.sender === 'debug';
@@ -282,6 +285,13 @@ export function ChatMessage({
                 <span className="inline-block w-1.5 h-4 ml-1 bg-white animate-pulse" />
               )}
             </p>
+          )}
+          
+          {showThinking && (
+            <div className="flex items-center space-x-2 mt-2 pt-2 border-t border-white/20">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <span className="text-xs opacity-80">Peter réfléchit...</span>
+            </div>
           )}
         </div>
         
