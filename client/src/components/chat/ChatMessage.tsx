@@ -4,7 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import peterAvatarImage from "@assets/Peter Avatar_1756370825342.jpg";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Code } from "lucide-react";
+import { Code, MessageSquare } from "lucide-react";
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -217,10 +217,19 @@ export function ChatMessage({
           {isPeter && message.rawJson && !isStreaming && (
             <button
               onClick={() => setShowRawJson(!showRawJson)}
-              className="absolute top-2 right-2 p-1 hover:bg-white/20 rounded transition-colors"
-              title={showRawJson ? "Voir le message formaté" : "Voir le JSON brut"}
+              className={cn(
+                "absolute top-2 right-2 p-1.5 rounded transition-all",
+                showRawJson 
+                  ? "bg-white/30 hover:bg-white/40" 
+                  : "hover:bg-white/20"
+              )}
+              title={showRawJson ? "Afficher le message formaté" : "Afficher le JSON brut de l'API"}
             >
-              <Code className="w-3.5 h-3.5" />
+              {showRawJson ? (
+                <MessageSquare className="w-3.5 h-3.5" />
+              ) : (
+                <Code className="w-3.5 h-3.5" />
+              )}
             </button>
           )}
           
