@@ -3,7 +3,7 @@
 > **Status**: 🟡 In Progress  
 > **Creator**: Ulrich Fischer  
 > **Started**: 2025-11-06  
-> **Last Updated**: 2026-01-02  
+> **Last Updated**: 2026-02-12  
 
 ---
 
@@ -92,27 +92,52 @@ How Peter helps: Conversational guide who asks questions, shares surprising fact
 
 *Each feature gets an entry. Major features (🔷) get full treatment. Minor features (🔹) get brief notes.*
 
-### [2026-01-02] — Multi-Video Onboarding Sequence with Device Detection 🔷
+### [2026-02-12] — Video Onboarding Simplified to Single Video After Welcome 🔹
 
-**Intent**: Replace static welcome screen with immersive video onboarding sequence that adapts to user's device type
+**Intent**: Correct onboarding flow — video must play AFTER welcome screen, not before. Simplify to single video.
+
+**Outcome**: 
+- Removed multi-video sequence, device detection hook, and device-specific videos
+- Single video (16/9): `69577dbaf3928b38fc32c32b` via GumletPlayer
+- Flow corrected: Welcome screen → "Démarrer l'aventure" → Video → Chat
+- Skip button ("Passer"/"Commencer") always available during playback
+- Auto-transition to chat when video ends
+
+**Time**: ~15 minutes
+
+---
+
+### [2026-02-12] — STORY.md Template for Reuse 🔹
+
+**Intent**: Create a reusable, project-agnostic template of STORY.md for other projects
+
+**Outcome**: 
+- Created `STORY-template.md` with all structure preserved and project content replaced by placeholders
+- Includes AI Instructions section for automatic maintenance protocol
+
+**Time**: ~10 minutes
+
+---
+
+### [2026-01-02] — Video Onboarding with GumletPlayer 🔷
+
+**Intent**: Add intro video onboarding before starting the chat conversation
 
 **Prompt(s)**: 
 ```
-- Implement three-video sequence with device-adaptive playback
-- Initial video (16/9) plays on all devices, centered on vertical phones
-- Second video varies: desktop gets 16/9, smartphone gets 9/16
-- Seamless auto-play transitions between videos
-- Device detection based on screen width, touch capability, and user agent
+- Single intro video (16/9) plays after welcome screen
+- GumletPlayer for HLS streaming support
+- Skip button available during playback
+- Auto-transition to chat when video ends
 ```
 
-**Tool**: Replit Agent (OnboardingVideo.tsx, use-device-type.ts, homepage.tsx)
+**Tool**: Replit Agent (OnboardingVideo.tsx, homepage.tsx)
 
 **Outcome**: 
-- Created `useDeviceType` hook detecting desktop vs smartphone with orientation tracking
 - Built `OnboardingVideo` component with GumletPlayer for HLS streaming support
-- Implemented 2-video sequence with progress indicators and skip/next controls
-- Auto-play works for subsequent videos after first interaction
-- Smooth 300ms fade transition between videos
+- Video plays after user clicks "Démarrer l'aventure" on welcome screen
+- Skip button allows bypassing the video at any time
+- Auto-transition to chat interface on video completion
 
 **Surprise**: 
 Native HTML5 `<video>` element doesn't support HLS (m3u8) format natively. 
@@ -121,13 +146,13 @@ Had to switch from raw video element to GumletPlayer component which handles HLS
 **Friction**: 
 Initial implementation using `<video src="...m3u8">` failed with "NotSupportedError: no supported sources".
 GumletPlayer needs video IDs not URLs, required extracting IDs from the HLS URLs.
+Initial flow had video BEFORE welcome screen — corrected to play AFTER.
 
 **Resolution**: 
 Used `@gumlet/react-embed-player` which is already installed and handles HLS streaming natively.
-Extracted video IDs from URLs (e.g., `69577dbaf3928b38fc32c32b` from `.../69577dbaf3928b38fc32c32b/main.m3u8`).
-GumletPlayer fires `onEnded` event for seamless auto-advance.
+Extracted video ID `69577dbaf3928b38fc32c32b` from URL.
 
-**Time**: ~45 minutes
+**Time**: ~1 hour (including corrections)
 
 ---
 
@@ -395,6 +420,7 @@ Accomplissement.
 - **[2025-11-06]**: Educational tech needs conversational context persistence; stateless chat loses learning opportunities
 - **[2025-11-06]**: Media rich learning requires synchronizing UI state across chat/video/article panels without blocking scrolling
 - **[2025-11-06]**: French localization goes beyond translation—cultural context matters for education
+- **[2026-02-12]**: Start simple with onboarding (one video, clear flow) — complexity can always be added later but rarely needs to be
 
 ---
 
@@ -408,6 +434,8 @@ Accomplissement.
 | 2025-11-14 | Code | client/src/hooks/use-flowise.ts, lines 153-170 | Hook-side text selection logic |
 | 2025-11-14 | Logs | CHANGELOG.md | Complete technical changelog of all changes |
 | 2025-11-06 | Code | client/src/components/media/MediaPanel.tsx | Split-screen media panel component |
+| 2026-01-02 | Code | client/src/components/onboarding/OnboardingVideo.tsx | Video onboarding component |
+| 2026-02-12 | File | STORY-template.md | Reusable STORY template for other projects |
 
 ---
 
@@ -421,6 +449,7 @@ Accomplissement.
 - "Video without distraction: Gumlet player clean of related-video suggestions, pure learning"
 - "The real friction isn't the code—it's making 14-year-olds care about plastic chemistry"
 - "Froze when streaming stopped working, unfroze when architecture clicked into place"
+- "Sometimes the simplest solution is the right one: one video, after the welcome, skip if you want"
 
 ---
 
