@@ -197,6 +197,7 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
                   ...msg,
                   content: finalText,
                   isStreaming: false,
+                  rawJson: metadata, // Store raw Flowise metadata for debugging
                   metadata: {
                     hasVideo: videos.length > 0,
                     hasLinks: links.length > 0,
