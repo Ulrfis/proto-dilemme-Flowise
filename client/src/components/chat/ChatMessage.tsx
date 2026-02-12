@@ -1,9 +1,10 @@
+import { useState } from "react";
 import { ChatMessage as ChatMessageType } from "../../types/chat";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import peterAvatarImage from "@assets/Peter Avatar_1756370825342.jpg";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Code, MessageSquare } from "lucide-react";
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -13,7 +14,6 @@ interface ChatMessageProps {
   onChoiceClick?: (choice: string) => void;
   userAvatarUrl?: string;
   userName?: string;
-  showThinking?: boolean;
 }
 
 export function ChatMessage({ 
@@ -23,12 +23,12 @@ export function ChatMessage({
   onThumbsUp, 
   onChoiceClick,
   userAvatarUrl,
-  userName = 'Utilisateur',
-  showThinking = false
+  userName = 'Utilisateur'
 }: ChatMessageProps) {
   const isPeter = message.sender === 'peter';
   const isDebug = message.sender === 'debug';
   const isStreaming = message.isStreaming || false;
+  const [showRawJson, setShowRawJson] = useState(false);
 
   const handleMediaClick = (url: string, type: 'video' | 'link') => {
     // Comprehensive URL cleaning
@@ -213,7 +213,34 @@ export function ChatMessage({
               ? "bg-teal-500 text-white rounded-2xl rounded-bl-md chat-bubble-left" 
               : "bg-white text-gray-800 rounded-2xl rounded-br-md border border-gray-200 chat-bubble-right float-right"
         )}>
-          {messageType === 'debug' ? (
+          {/* Debug toggle button for Peter's messages with rawJson */}
+          {isPeter && message.rawJson && !isStreaming && (
+            <button
+              onClick={() => setShowRawJson(!showRawJson)}
+              className={cn(
+                "absolute top-2 right-2 p-1.5 rounded transition-all",
+                showRawJson 
+                  ? "bg-white/30 hover:bg-white/40" 
+                  : "hover:bg-white/20"
+              )}
+              title={showRawJson ? "Afficher le message formaté" : "Afficher le JSON brut de l'API"}
+            >
+              {showRawJson ? (
+                <MessageSquare className="w-3.5 h-3.5" />
+              ) : (
+                <Code className="w-3.5 h-3.5" />
+              )}
+            </button>
+          )}
+          
+          {showRawJson && message.rawJson ? (
+            <div className="text-xs font-mono leading-tight">
+              <div className="mb-2 font-bold text-xs opacity-90">JSON BRUT DE FLOWISE:</div>
+              <pre className="whitespace-pre-wrap overflow-x-auto text-xs bg-black/20 p-2 rounded max-h-96 overflow-y-auto">
+                {JSON.stringify(message.rawJson, null, 2)}
+              </pre>
+            </div>
+          ) : messageType === 'debug' ? (
             <div className="text-xs font-mono leading-tight">
               <div className="mb-1 text-gray-500 font-bold text-xs">DEBUG - JSON BRUT FLOWISE:</div>
               <pre className="whitespace-pre-wrap overflow-x-auto text-xs">
@@ -285,13 +312,6 @@ export function ChatMessage({
                 <span className="inline-block w-1.5 h-4 ml-1 bg-white animate-pulse" />
               )}
             </p>
-          )}
-          
-          {showThinking && (
-            <div className="flex items-center space-x-2 mt-2 pt-2 border-t border-white/20">
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              <span className="text-xs opacity-80">Peter réfléchit...</span>
-            </div>
           )}
         </div>
         
