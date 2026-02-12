@@ -56,7 +56,7 @@ The application is published and functional with the following complete features
 - Endpoint: `/api/flowise/prediction/:chatflowId/stream`
 - Flowise SSE format: `data: {"event":"token","data":"text"}` (JSON payload in data line)
 - Three-layer architecture prevents raw JSON from ever reaching the UI
-- Chatflow: `d7b33ea2-941b-4b8c-b390-8bbb09ddd63c`
+- Chatflow: `1a7e3c86-6cbd-4fcf-ac01-bbf8b59a5bd9`
 - Chatflow must use streaming-compatible LLM (OpenAI, Anthropic, etc.)
 
 ### Performance

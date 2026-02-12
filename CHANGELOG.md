@@ -31,7 +31,7 @@ Tous les changements notables de ce projet seront documentés dans ce fichier.
 ## [2025-11-14] 14:40:00
 
 ### 🔄 MIGRATION CHATFLOW : Passage au nouveau chatflow Flowise
-- **Migration vers nouveau chatflow** : Changement de `f00bd6a9-4b37-4e9f-af73-9311be99ae9b` vers `d7b33ea2-941b-4b8c-b390-8bbb09ddd63c`
+- **Migration vers nouveau chatflow** : Changement vers `1a7e3c86-6cbd-4fcf-ac01-bbf8b59a5bd9` (précédemment `d7b33ea2-941b-4b8c-b390-8bbb09ddd63c`)
   - Mise à jour des secrets d'environnement `FLOWISE_CHATFLOW_ID` et `VITE_FLOWISE_CHATFLOW_ID`
   - Objectif : Utiliser le chatflow qui retourne du texte brut au lieu de JSON structuré
 - **Problème identifié : Paramètre temperature non supporté**

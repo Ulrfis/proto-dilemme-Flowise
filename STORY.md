@@ -197,7 +197,7 @@ Added regex fallback in server for extraction if standard JSON.parse fails.
 
 **Prompt(s)**: 
 ```
-Update to chatflow d7b33ea2-941b-4b8c-b390-8bbb09ddd63c
+Update to chatflow 1a7e3c86-6cbd-4fcf-ac01-bbf8b59a5bd9
 Enhanced logging for JSON parsing debugging
 Better error identification for Flowise API responses
 ```
@@ -327,7 +327,7 @@ Set up proper error logging to help diagnose similar issues in future.
 ### [2025-11-14] — Chatflow Response Format Incompatibility
 
 **What broke / What changed**: 
-New chatflow `d7b33ea2...` returns error "temperature does not support 0.9 with this model"
+Previous chatflow `d7b33ea2...` returned error "temperature does not support 0.9 with this model"
 This breaks entire conversation flow—Peter never responds.
 
 **Why**: 
