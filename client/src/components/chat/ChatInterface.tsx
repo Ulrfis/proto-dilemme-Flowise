@@ -154,16 +154,20 @@ export function ChatInterface({
         ))}
         
         {isLoading && (
-          <div className="flex items-center space-x-3">
-            <Avatar className="w-8 h-8">
+          <div className="flex items-end space-x-3 mb-4">
+            <Avatar className="w-8 h-8 flex-shrink-0 mb-1">
               <AvatarImage src={peterAvatarImage} alt="Peter" />
               <AvatarFallback className="bg-primary text-white text-sm font-semibold">
                 P
               </AvatarFallback>
             </Avatar>
-            <div className="flex items-center space-x-2 bg-gray-100 rounded-lg p-3">
-              <Loader2 className="w-4 h-4 animate-spin text-gray-500" />
-              <span className="text-sm text-gray-500">Peter réfléchit...</span>
+            <div className="flex-1 mr-16">
+              <div className="relative px-4 py-3 max-w-sm shadow-sm inline-block bg-teal-500 text-white rounded-2xl rounded-bl-md">
+                <div className="flex items-center space-x-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span className="text-sm">Peter réfléchit...</span>
+                </div>
+              </div>
             </div>
           </div>
         )}

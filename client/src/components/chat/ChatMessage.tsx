@@ -132,6 +132,41 @@ export function ChatMessage({
     return filteredLines.join('\n').trim();
   };
 
+  // Render markdown formatting (bold, italic)
+  const renderMarkdown = (text: string) => {
+    const parts: (string | JSX.Element)[] = [];
+    let currentIndex = 0;
+    
+    // Regex to match **bold** and *italic* (but not bullet points at line start)
+    const markdownRegex = /(\*\*([^*]+)\*\*)|((?<!^|\n)\*([^*\n]+)\*)/g;
+    let match;
+    
+    while ((match = markdownRegex.exec(text)) !== null) {
+      // Add text before the match
+      if (match.index > currentIndex) {
+        parts.push(text.substring(currentIndex, match.index));
+      }
+      
+      // Check if it's bold or italic
+      if (match[1]) {
+        // Bold: **text**
+        parts.push(<strong key={match.index}>{match[2]}</strong>);
+      } else if (match[3]) {
+        // Italic: *text*
+        parts.push(<em key={match.index}>{match[4]}</em>);
+      }
+      
+      currentIndex = match.index + match[0].length;
+    }
+    
+    // Add remaining text
+    if (currentIndex < text.length) {
+      parts.push(text.substring(currentIndex));
+    }
+    
+    return parts.length > 0 ? parts : text;
+  };
+
   return (
     <div 
       className={cn(
@@ -184,7 +219,7 @@ export function ChatMessage({
             </div>
           ) : messageType === 'with-choices' ? (
             <div className="text-sm leading-relaxed whitespace-pre-wrap">
-              {formatChoiceContent(message.content)}
+              {renderMarkdown(formatChoiceContent(message.content))}
             </div>
           ) : messageType === 'with-links' ? (
             <div className="text-sm leading-relaxed">
@@ -201,9 +236,10 @@ export function ChatMessage({
                   lineLinks.forEach((link, linkIndex) => {
                     const titleIndex = processedLine.indexOf(link.title, lastIndex);
                     if (titleIndex !== -1) {
-                      // Add text before the link
+                      // Add text before the link (with markdown rendering)
                       if (titleIndex > lastIndex) {
-                        parts.push(processedLine.substring(lastIndex, titleIndex));
+                        const textBefore = processedLine.substring(lastIndex, titleIndex);
+                        parts.push(...(Array.isArray(renderMarkdown(textBefore)) ? renderMarkdown(textBefore) : [renderMarkdown(textBefore)]));
                       }
                       
                       // Determine if this is a video or regular link
@@ -227,20 +263,21 @@ export function ChatMessage({
                     }
                   });
                   
-                  // Add remaining text after the last link
+                  // Add remaining text after the last link (with markdown rendering)
                   if (lastIndex < processedLine.length) {
-                    parts.push(processedLine.substring(lastIndex));
+                    const textAfter = processedLine.substring(lastIndex);
+                    parts.push(...(Array.isArray(renderMarkdown(textAfter)) ? renderMarkdown(textAfter) : [renderMarkdown(textAfter)]));
                   }
                   
                   return <div key={lineIndex}>{parts}</div>;
                 }
                 
-                return <div key={lineIndex}>{line}</div>;
+                return <div key={lineIndex}>{renderMarkdown(line)}</div>;
               })}
             </div>
           ) : (
             <p className="text-sm leading-relaxed whitespace-pre-wrap">
-              {message.content}
+              {renderMarkdown(message.content)}
               {isStreaming && isPeter && (
                 <span className="inline-block w-1.5 h-4 ml-1 bg-white animate-pulse" />
               )}
