@@ -2,17 +2,29 @@
 
 Tous les changements notables de ce projet seront documentés dans ce fichier.
 
+## [2026-02-12] 10:00:00
+
+### 🔧 CORRECTION ONBOARDING : Vidéo après l'écran d'accueil + simplification
+- **Correction du flux** : La vidéo s'affiche désormais APRÈS l'écran d'accueil (pas avant)
+  - Flux corrigé : Écran d'accueil → "Démarrer l'aventure" → Vidéo → Chat avec Peter
+- **Simplification** : Une seule vidéo d'intro (16/9)
+  - Suppression de la séquence multi-vidéo et de la détection d'appareil
+  - Vidéo unique : `69577dbaf3928b38fc32c32b`
+- **Bouton "Passer/Commencer"** pour skip la vidéo à tout moment
+- **Auto-transition** vers le chat à la fin de la vidéo
+- **Résultat** : Flux simplifié et intuitif pour l'utilisateur
+
+### 📄 STORY-template.md : Template réutilisable
+- Création d'un template vierge de STORY.md pour réutilisation dans d'autres projets
+- Structure complète préservée avec placeholders à remplir
+
+---
+
 ## [2026-01-02] 09:00:00
 
-### 🎬 ONBOARDING VIDÉO : Vidéo d'intro après l'écran d'accueil
-- **Composant OnboardingVideo simplifié** : Une seule vidéo d'intro (16/9)
-  - Vidéo unique : `69577dbaf3928b38fc32c32b`
-  - Flux : Écran d'accueil → "Démarrer l'aventure" → Vidéo → Chat avec Peter
-- **Fonctionnalités** :
-  - Bouton "Passer/Commencer" pour skip la vidéo
-  - Auto-transition vers le chat à la fin de la vidéo
-- **Intégration GumletPlayer** : Support HLS (m3u8) pour streaming fluide
-- **Résultat** : Introduction vidéo optionnelle avant de commencer la conversation
+### 🎬 ONBOARDING VIDÉO : Première implémentation
+- Composant OnboardingVideo avec GumletPlayer pour support HLS (m3u8)
+- Intégration dans le flux d'accueil de l'application
 
 ---
 

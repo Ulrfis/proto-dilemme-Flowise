@@ -32,61 +32,37 @@ A desktop-only French educational web app integrating Flowise chatbot "Peter" fo
 - Session duration: 20-30 minutes typical usage
 - No audio components in first version (text-only conversations)
 
-## Recent Changes
-- Initial project setup completed
-- Removed branching conversation paths feature
-- Removed interactive scenario-driven conversations feature
-- Focus on simple chat integration with media embedding
-- Updated Peter's initial message to match specified 2025 futuristic tone
-- Flowise integration fully operational and tested
-- **Chatflow Migration (Nov 14, 2025)** : Updated to chatflow `d7b33ea2-941b-4b8c-b390-8bbb09ddd63c`
-  - Migrated from previous chatflow to use correct endpoint
-  - Enhanced error logging and JSON extraction with regex fallback
-  - Identified temperature parameter configuration issue requiring Flowise adjustment
-- Implemented split-screen layout: chat (1/3) + media panel (2/3) always visible
-- Enhanced media panel with improved video player and webview components
-- Added independent chat scrolling system - chat scrolls without affecting media panel
-- Implemented message type handling: information messages (thumbs up button), open questions, and messages with links (bold formatting)
-- Fixed URL cleaning to remove trailing punctuation from all links
-- YouTube video integration with clean embed player - no distracting overlays or related videos
-- **Rectify Analytics Integration** : Widget fully integrated across the application for user analytics
-- **Visual Consistency** : Unified green color (#14B8A7) across Peter's message bubbles, guide text, and header info box
-- **Changelog System** : Added CHANGELOG.md file for tracking all project changes with timestamps
-- **Performance Optimizations (Nov 2025)** : Major Flowise API performance improvements
-  - Disabled sourceDocuments for 50-90% payload reduction
-  - Streamlined JSON parsing without expensive regex fallbacks
-  - Conditional media extraction only when URLs present
-  - Comprehensive performance metrics logging
-  - **Result**: Response time reduced from 7-12s to 3-5s
-- **UX Fixes (Nov 2025)** : Critical conversation experience improvements
-  - Removed debug JSON messages from chat interface
-  - Disabled caching to preserve conversational context
-  - Peter now maintains memory throughout conversation (remembers user's name, etc.)
-  - Fixed conversation loop bug where Peter would forget previous context
-- **SSE Streaming Implementation (Nov 14, 2025)** : Real-time progressive text display
-  - Implemented Server-Sent Events (SSE) streaming for Peter's responses
-  - New endpoint `/api/flowise/prediction/:chatflowId/stream` with native SSE support
-  - **CRITICAL FIX (Nov 14, 7:24)**: Corrected SSE format parsing based on Flowise documentation
-    - Flowise uses: `data: {"event":"token","data":"text"}` (JSON payload in data line)
-    - NOT the standard SSE format: `event: token\ndata: text`
-    - Server now correctly parses JSON from each `data:` line
-  - **ULTIMATE FIX (Nov 14, 7:55)**: Three-layer architecture for zero JSON display
-    - **Layer 1 (Client)**: Accumulates all tokens without filtering (prevents fragment loss)
-    - **Layer 2 (Server)**: Extracts Response field from complete JSON after full accumulation
-    - **Layer 3 (Hook)**: Uses server-cleaned metadata.fullText with fallback to local fullText
-    - Handles fragmented JSON tokens sent by Flowise (`{`, then `"Response"...`, then `}`)
-    - Server-side extraction ensures no JSON ever reaches the UI
-  - First token appears in ~500ms instead of waiting 10+ seconds for full response
-  - Progressive word-by-word display with streaming cursor animation
-  - Separate metadata handling (theme, score) sent via dedicated event
-  - **UI FIX**: Response buttons (OK, choices, etc.) hidden during streaming, appear only after completion
-  - **Result**: Peter's responses display correctly with zero JSON visible, even with fragmented tokens
-  - **Flowise Configuration**: Chatflow must use streaming-compatible LLM (OpenAI, Anthropic, etc.)
-- **Video Onboarding (Jan 2, 2026)**: Intro video after welcome screen
-  - Single video (16/9): ID `69577dbaf3928b38fc32c32b`
-  - Flow: Welcome screen → "Démarrer l'aventure" → Video → Chat
-  - GumletPlayer for HLS streaming support
-  - Skip button available during playback
+## Current State (Feb 2026)
+The application is published and functional with the following complete features:
+
+### Core Features
+- **Split-screen layout**: Chat (1/3) + Media panel (2/3) always visible
+- **Flowise chatbot "Peter"**: SSE streaming with ~500ms first-token latency
+- **Three-layer JSON protection**: Client accumulation → Server extraction → Hook rendering (zero raw JSON displayed)
+- **Gumlet video player**: HLS streaming for educational videos in media panel
+- **YouTube integration**: Clean embed player without distracting overlays
+- **In-app webview**: External links open within the app
+- **Message types**: Information (thumbs up), open questions, choices, links (bold formatting)
+- **Rectify Analytics**: Session recording and behavior tracking
+- **Visual consistency**: Unified teal color (#14B8A7) throughout UI
+
+### Video Onboarding
+- Single intro video (16/9): ID `69577dbaf3928b38fc32c32b`
+- Flow: Welcome screen → "Démarrer l'aventure" → Video → Chat
+- GumletPlayer for HLS streaming support
+- Skip button available during playback
+
+### SSE Streaming Architecture
+- Endpoint: `/api/flowise/prediction/:chatflowId/stream`
+- Flowise SSE format: `data: {"event":"token","data":"text"}` (JSON payload in data line)
+- Three-layer architecture prevents raw JSON from ever reaching the UI
+- Chatflow: `d7b33ea2-941b-4b8c-b390-8bbb09ddd63c`
+- Chatflow must use streaming-compatible LLM (OpenAI, Anthropic, etc.)
+
+### Performance
+- Response time: 3-5s (down from 7-12s)
+- First token latency: ~500ms
+- Payload optimized: sourceDocuments disabled, conditional media extraction
 
 ## Development Guidelines
 Following fullstack_js blueprint with:
