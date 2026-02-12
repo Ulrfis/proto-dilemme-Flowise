@@ -1,7 +1,10 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { ChatMessage } from "../types/chat";
 import { FlowiseClient, extractMediaFromText } from "../lib/flowise";
 import { analytics } from "../lib/analytics";
+
+// Token batching configuration for smoother streaming
+const TOKEN_BATCH_INTERVAL_MS = 50; // Update UI every 50ms max
 
 interface InfoPanelData {
   theme?: string;
@@ -91,6 +94,11 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [client] = useState(() => new FlowiseClient(chatflowId));
+  
+  // Refs for token batching - reduces re-renders from 200+ to ~60-80 per response
+  const tokenBufferRef = useRef<string>('');
+  const batchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currentMessageIdRef = useRef<string>('');
 
   const sendMessage = useCallback(async (content: string) => {
     if (!content.trim()) return;
@@ -119,18 +127,37 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
 
     try {
       console.log('[use-flowise] Starting streaming...');
-      let accumulatedText = '';
       let streamMetadata: any = {};
+      
+      // Reset token buffer for new message
+      tokenBufferRef.current = '';
+      currentMessageIdRef.current = peterMessageId;
+      if (batchTimeoutRef.current) {
+        clearTimeout(batchTimeoutRef.current);
+        batchTimeoutRef.current = null;
+      }
 
       await client.sendMessageStreaming(
         content.trim(),
+        // Token callback with batching - updates UI every 50ms instead of every token
         (token: string) => {
-          accumulatedText += token;
-          setMessages(prev => prev.map(msg =>
-            msg.id === peterMessageId
-              ? { ...msg, content: accumulatedText, isStreaming: true }
-              : msg
-          ));
+          tokenBufferRef.current += token;
+          
+          // Only schedule a new batch update if one isn't pending
+          if (!batchTimeoutRef.current) {
+            batchTimeoutRef.current = setTimeout(() => {
+              const bufferedContent = tokenBufferRef.current;
+              const messageId = currentMessageIdRef.current;
+              
+              setMessages(prev => prev.map(msg =>
+                msg.id === messageId
+                  ? { ...msg, content: bufferedContent, isStreaming: true }
+                  : msg
+              ));
+              
+              batchTimeoutRef.current = null;
+            }, TOKEN_BATCH_INTERVAL_MS);
+          }
         },
         (metadata: any) => {
           streamMetadata = { ...streamMetadata, ...metadata };
@@ -149,10 +176,16 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
         },
         (fullText: string, metadata: any) => {
           console.log('[use-flowise] Stream complete, processing final message...');
+          
+          // Clear any pending batch update
+          if (batchTimeoutRef.current) {
+            clearTimeout(batchTimeoutRef.current);
+            batchTimeoutRef.current = null;
+          }
 
           // CRITICAL: Use metadata.fullText from server if available (server extracts JSON Response field)
-          // Otherwise fall back to locally accumulated fullText
-          const finalText = metadata?.fullText || fullText;
+          // Otherwise fall back to locally accumulated fullText (from tokenBufferRef)
+          const finalText = metadata?.fullText || tokenBufferRef.current || fullText;
           console.log('[use-flowise] Using text:', finalText.length, 'chars (from', metadata?.fullText ? 'server metadata' : 'local accumulation', ')');
 
           // Extract media from the full streamed text
