@@ -11,6 +11,7 @@ export interface ChatMessage {
     links?: string[];
   };
   isStreaming?: boolean; // Indique si le message est en cours de streaming
+  noActions?: boolean;  // Désactive les boutons d'action (👍, choix, liens)
 }
 
 export interface FlowiseConfig {

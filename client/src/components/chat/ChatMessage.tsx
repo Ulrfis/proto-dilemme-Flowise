@@ -370,8 +370,8 @@ export function ChatMessage({
           </div>{/* end px-4 py-3 */}
         </div>{/* end bubble */}
         
-        {/* Action buttons based on message type - only show when NOT streaming */}
-        {isPeter && !isStreaming && (
+        {/* Action buttons based on message type - only show when NOT streaming and actions allowed */}
+        {isPeter && !isStreaming && !message.noActions && (
           <div className="mt-2 flex flex-wrap gap-2">
             {/* Choice buttons for menu messages */}
             {messageType === 'with-choices' && onChoiceClick && extractedChoices.map((choice, index) => (
