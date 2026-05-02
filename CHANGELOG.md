@@ -2,6 +2,60 @@
 
 Tous les changements notables de ce projet seront documentés dans ce fichier.
 
+## [2026-05-02] — Cache TTS LRU (réduction latence + coût)
+
+### ⚡ Cache mémoire pour les synthèses vocales
+- **Module** : `server/providers/tts/cache.ts` — LRU simple (Map + suivi de récence) clé = SHA-256 de `provider + voiceId + text`
+- **Capacité** : 100 entrées par défaut, surchargeable via `TTS_CACHE_MAX_ENTRIES`
+- **Auto-invalidation** : signature dérivée de `TTS_PROVIDER` + `ELEVENLABS_VOICE_ID` ; tout changement vide intégralement le cache au prochain accès
+- **Endpoint** : `POST /api/tts` résout le voiceId effectif (requête ou défaut provider), interroge le cache, puis :
+  - **Hit** : renvoie le MP3 mis en cache avec en-tête `X-TTS-Cache: hit` (~40 ms mesurés en local)
+  - **Miss** : appel provider, stockage, en-tête `X-TTS-Cache: miss` (~1.1 s sur premier appel ElevenLabs)
+- **Vérification** : MD5 identique entre miss et hit, latence ÷ 28 sur les répétitions
+
+## [2026-05-02] — Sélecteur de voix Peter au runtime
+
+### 🎙️ L'enseignant choisit la voix sans toucher aux secrets
+- **Backend** :
+  - Interface `ITTSProvider` étendue avec `listVoices()` et `getDefaultVoiceId()` optionnels + type partagé `TTSVoice` (id, name, description, language, isDefault)
+  - ElevenLabs : `listVoices()` appelle `/v1/voices` avec cache mémoire 5 min, mappe vers `TTSVoice`, marque la voix configurée par défaut comme `isDefault`. Types stricts (`ElevenLabsRawVoice`, `ElevenLabsVoicesResponse`, `ElevenLabsVoiceLabels`, `ElevenLabsFineTuning`) — aucun `any`
+  - OpenAI : `listVoices()` retourne le set statique (alloy/echo/fable/onyx/nova/shimmer) avec descriptions FR
+  - Nouveau endpoint `GET /api/tts/voices` → `{ provider, defaultVoiceId, voices }` ; gère proprement `none` et providers sans `listVoices`
+- **Frontend** :
+  - `useTTS({ voiceId })` propage la voix choisie dans `POST /api/tts`
+  - `ChatMessage` accepte un prop `ttsVoiceId` pour que le bouton replay utilise la même voix
+  - Nouveau `<Select>` dans l'en-tête du chat (icône `Mic2`) à côté du toggle Lecture auto
+  - Sélection persistée dans `localStorage:tts-voice-id` ; fallback automatique sur la voix par défaut si la voix mémorisée disparaît du provider
+  - Sélecteur masqué quand TTS désactivé ou liste vide
+
+## [2026-05-02] — Pipeline TTS/STT multi-providers
+
+### 🗣️ Couche d'abstraction backend pour la voix de Peter
+- **TTS** : interface `ITTSProvider` (`synthesize`) + factory paresseuse pilotée par `TTS_PROVIDER` (`elevenlabs` | `openai` | `none`)
+  - Implémentations : `server/providers/tts/elevenlabs.ts` (modèle `eleven_multilingual_v2` adapté au français), `openai.ts` (voix typée strictement union `"alloy" | "echo" | "fable" | "onyx" | "nova" | "shimmer"`), `none.ts` (fallback proprement désactivé)
+  - Nouvel endpoint `POST /api/tts` (`{ text, voiceId? }` → audio MP3, gestion d'erreurs FR)
+- **STT** : interface `ISTTProvider` (`transcribe`) + factory pilotée par `STT_PROVIDER` (`openai` | `elevenlabs` | `deepgram`)
+  - Refacto Whisper existant dans `server/providers/stt/openai.ts`, ajout `elevenlabs.ts` (Scribe) et `deepgram.ts` (Nova-3 multilingue)
+  - `POST /api/transcribe` conserve sa signature publique — délègue simplement au provider actif
+- **Introspection** : nouvel endpoint `GET /api/providers` → `{ tts: { active, available }, stt: { active, available } }`
+- **Frontend** :
+  - Hook `useTTS` à instance Audio unique avec annulation globale automatique de la lecture précédente
+  - Bouton haut-parleur (icône `Volume2`) sur chaque bulle Peter, à côté du bouton debug JSON
+  - Toggle "Lecture auto" dans l'en-tête du chat, persisté dans `localStorage:tts-autoplay`
+  - Moteur autoplay unique côté `ChatInterface` (`firstMountRef` + `lastAnnouncedIdRef`) : déclenche la lecture exactement une fois sur l'arête `isStreaming: true → false` du dernier message Peter — pas de rejouage de l'historique au reload, à l'activation du toggle ou au premier mount
+  - Boutons TTS et toggle masqués automatiquement quand `/api/providers` rapporte `tts.active === "none"`
+- **Sécurité/CSP** : `media-src` autorise `blob:` et `data:` ; toutes les clés provider restent côté serveur
+- **Code review (2 itérations)** : élimination complète de `any` (DOMException narrowing pour `AbortError`, `unknown` + `instanceof Error` partout, `"status" in error` guard pour OpenAI, `DeepgramResponse` typé pour le parsing JSON)
+
+### Tests E2E
+- `ttsCount=0` au chargement (autoplay off)
+- `ttsCount=0` après activation du toggle (pas de rejouage de l'historique)
+- `ttsCount=1` après chaque nouvelle réponse Peter terminée
+- `ttsCount=0` après reload (autoplay persisté), `ttsCount=1` à la nouvelle réponse, +1 sur clic manuel du bouton haut-parleur
+- `/api/providers` renvoie `tts=elevenlabs`, `stt=openai`
+
+---
+
 ## [2026-02-12] 10:00:00
 
 ### 🔧 CORRECTION ONBOARDING : Vidéo après l'écran d'accueil + simplification
