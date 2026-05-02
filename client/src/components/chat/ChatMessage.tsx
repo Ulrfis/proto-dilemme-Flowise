@@ -155,21 +155,34 @@ export function ChatMessage({
     return filteredLines.join('\n').trim();
   };
 
-  // Render markdown formatting (bold, italic)
+  // Render markdown formatting (bold, italic, ATX-style headings).
+  // Headings (## / ### / …) are stripped of their `#` markers and styled larger,
+  // so the user never sees raw `##` characters in the chat bubble.
   const renderMarkdown = (text: string) => {
+    // Detect a leading ATX heading marker (1-6 `#` followed by a space).
+    // We only allow this at the very start of the rendered chunk because each
+    // call-site already feeds us a single line.
+    let headingLevel = 0;
+    let body = text;
+    const headingMatch = body.match(/^\s{0,3}(#{1,6})\s+(.*)$/);
+    if (headingMatch) {
+      headingLevel = headingMatch[1].length;
+      body = headingMatch[2];
+    }
+
     const parts: (string | JSX.Element)[] = [];
     let currentIndex = 0;
-    
+
     // Regex to match **bold** and *italic* (but not bullet points at line start)
     const markdownRegex = /(\*\*([^*]+)\*\*)|((?<!^|\n)\*([^*\n]+)\*)/g;
     let match;
-    
-    while ((match = markdownRegex.exec(text)) !== null) {
+
+    while ((match = markdownRegex.exec(body)) !== null) {
       // Add text before the match
       if (match.index > currentIndex) {
-        parts.push(text.substring(currentIndex, match.index));
+        parts.push(body.substring(currentIndex, match.index));
       }
-      
+
       // Check if it's bold or italic
       if (match[1]) {
         // Bold: **text**
@@ -178,16 +191,28 @@ export function ChatMessage({
         // Italic: *text*
         parts.push(<em key={match.index}>{match[4]}</em>);
       }
-      
+
       currentIndex = match.index + match[0].length;
     }
-    
+
     // Add remaining text
-    if (currentIndex < text.length) {
-      parts.push(text.substring(currentIndex));
+    if (currentIndex < body.length) {
+      parts.push(body.substring(currentIndex));
     }
-    
-    return parts.length > 0 ? parts : text;
+
+    const inner = parts.length > 0 ? parts : body;
+
+    if (headingLevel > 0) {
+      // Visually demote slightly: ## should feel like a section title inside a
+      // chat bubble, not a page-level h2.
+      const headingClass =
+        headingLevel <= 2
+          ? "block font-bold text-base mt-1 mb-0.5"
+          : "block font-semibold text-sm mt-1 mb-0.5";
+      return [<span key="h" className={headingClass}>{inner}</span>];
+    }
+
+    return inner;
   };
 
   return (
