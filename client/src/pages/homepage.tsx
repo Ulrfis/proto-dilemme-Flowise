@@ -5,10 +5,10 @@ import peterAvatarImage from "@assets/Peter_Avatar_white_1777751289628.jpeg";
 import { ChatInterface } from "../components/chat/ChatInterface";
 import { MediaPanel } from "../components/media/MediaPanel";
 import { ConfettiEffect } from "../components/effects/ConfettiEffect";
-import { OnboardingVideo } from "../components/onboarding/OnboardingVideo";
 import { useFlowise } from "../hooks/use-flowise";
 import { useMediaPanel } from "../hooks/use-media-panel";
 import { analytics } from "../lib/analytics";
+import { INTRO_VIDEO_URL } from "../../../shared/welcome-message";
 
 interface InfoPanelData {
   theme?: string;
@@ -20,58 +20,48 @@ interface HomepageProps {
   onInfoDataUpdate?: (data: InfoPanelData | null) => void;
 }
 
+// After this many ms of being paused, Peter continues without the video
+const PAUSE_TIMEOUT_MS = 5000;
+
 export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
   const [showWelcome, setShowWelcome] = useState(true);
-  const [showOnboarding, setShowOnboarding] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [infoData, setInfoData] = useState<InfoPanelData | null>(null);
   const [showConfetti, setShowConfetti] = useState(false);
   const previousIndicesRef = useRef<number>(0);
-  
-  // Get Flowise config from environment variables (VITE_ prefix required for frontend access)
+  const pauseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Guard: welcome message added at most once per session
+  const welcomeAddedRef = useRef(false);
+
   const chatflowId = import.meta.env.VITE_FLOWISE_CHATFLOW_ID;
-  
-  // Callback to update info panel data from Flowise responses
+
   const handleInfoDataUpdate = (newData: InfoPanelData | null) => {
-    if (!newData) return; // Skip if null
-    
+    if (!newData) return;
+
     setInfoData(prevData => {
-      // Merge with existing data (keep previous values if new ones are not provided)
       const updatedData = {
         theme: newData.theme !== undefined ? newData.theme : prevData?.theme,
         nombre_d_indices: newData.nombre_d_indices !== undefined ? newData.nombre_d_indices : prevData?.nombre_d_indices,
         score_globale: newData.score_globale !== undefined ? newData.score_globale : prevData?.score_globale,
       };
-      
-      // Détecter si le nombre d'indices a augmenté pour déclencher l'effet confetti
+
       const currentIndices = parseInt(updatedData.nombre_d_indices || '0', 10);
       const previousIndices = previousIndicesRef.current;
-      
-      console.log('[Confetti] Vérification indices:', {
-        previous: previousIndices,
-        current: currentIndices,
-        increased: currentIndices > previousIndices && currentIndices > 0
-      });
-      
+
       if (currentIndices > previousIndices && currentIndices > 0) {
-        console.log('[Confetti] Indice trouvé ! Déclenchement de l\'effet confetti');
         setShowConfetti(true);
       }
-      
+
       previousIndicesRef.current = currentIndices;
-      
-      // Also update parent component
+
       if (onInfoDataUpdate) {
         onInfoDataUpdate(updatedData);
       }
-      
+
       return updatedData;
     });
   };
 
-  // Bridge between use-flowise (which emits sentences as Peter streams them)
-  // and ChatInterface (which owns the TTS queue). The ref is filled by
-  // ChatInterface when it mounts.
   const ttsEnqueueRef = useRef<((text: string) => void) | null>(null);
   const handleSentenceComplete = useCallback((sentence: string) => {
     ttsEnqueueRef.current?.(sentence);
@@ -84,6 +74,7 @@ export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
     sendMessage,
     resetSession,
     initializeChat,
+    addWelcomeMessage,
   } = useFlowise(chatflowId, handleInfoDataUpdate, {
     onSentenceComplete: handleSentenceComplete,
   });
@@ -100,32 +91,63 @@ export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
     switchTab,
   } = useMediaPanel();
 
+  // Called once to add PETER_WELCOME_MESSAGE — idempotent via ref guard
+  const triggerWelcome = useCallback(() => {
+    if (welcomeAddedRef.current) return;
+    welcomeAddedRef.current = true;
+    if (pauseTimerRef.current) {
+      clearTimeout(pauseTimerRef.current);
+      pauseTimerRef.current = null;
+    }
+    addWelcomeMessage();
+  }, [addWelcomeMessage]);
+
+  // Video ended → Peter continues immediately
+  const handleVideoEnded = useCallback(() => {
+    console.log('[Intro] Video ended → Peter continues');
+    triggerWelcome();
+  }, [triggerWelcome]);
+
+  // Video paused → start 5s timer
+  const handleVideoPaused = useCallback(() => {
+    if (welcomeAddedRef.current) return;
+    console.log('[Intro] Video paused → starting 5s timer');
+    if (pauseTimerRef.current) clearTimeout(pauseTimerRef.current);
+    pauseTimerRef.current = setTimeout(() => {
+      console.log('[Intro] 5s elapsed after pause → Peter continues');
+      triggerWelcome();
+    }, PAUSE_TIMEOUT_MS);
+  }, [triggerWelcome]);
+
+  // Clear pause timer if video resumes (play event is not exposed by GumletPlayer
+  // but onPause fires on each pause so the timer resets correctly on each pause)
+  useEffect(() => {
+    return () => {
+      if (pauseTimerRef.current) clearTimeout(pauseTimerRef.current);
+    };
+  }, []);
+
   const handleStartAdventure = () => {
     setShowWelcome(false);
-    setShowOnboarding(true);
-    analytics.trackPageView('onboarding_video');
-  };
-
-  const handleStartChat = () => {
     setShowChat(true);
     initializeChat();
+    // Load intro video immediately in the panel
+    showVideo(INTRO_VIDEO_URL, "Introduction — Dilemme Plastique", "Regarde cette vidéo pour démarrer l'aventure");
     analytics.trackPageView('chat_interface');
   };
 
   const handleResetSession = () => {
-    // Refresh the browser to completely reset the session
     window.location.reload();
   };
 
   const handleVideoClick = (videoUrl: string) => {
-    // Determine video source for better title
     let title = "Vidéo éducative";
     if (videoUrl.includes('youtube.com') || videoUrl.includes('youtu.be')) {
       title = "Vidéo YouTube";
-    } else if (videoUrl.includes('gumlet.io')) {
+    } else if (videoUrl.includes('gumlet.io') || videoUrl.includes('gumlet.tv')) {
       title = "Vidéo Gumlet";
     }
-    
+
     showVideo(videoUrl, title, "Ressource partagée par Peter");
     analytics.trackVideoOpened(videoUrl);
   };
@@ -136,47 +158,32 @@ export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
   };
 
   const handleThumbsUp = async () => {
-    // Send "OK" message to trigger next message from Peter
     await sendMessage("OK");
   };
 
   const handleChoiceClick = async (choice: string) => {
-    // Send the selected choice as a message to Peter
     await sendMessage(choice);
   };
 
   const handleConfettiComplete = () => {
     setShowConfetti(false);
-    console.log('[Confetti] Effet terminé');
   };
-
-  const handleOnboardingComplete = () => {
-    console.log('[Onboarding] Video completed');
-    setShowOnboarding(false);
-    handleStartChat();
-  };
-
-  if (showOnboarding) {
-    return <OnboardingVideo onComplete={handleOnboardingComplete} />;
-  }
 
   return (
     <main className="flex-1 flex overflow-hidden relative">
-      {/* Effet confetti futuriste */}
-      <ConfettiEffect 
-        isTriggered={showConfetti} 
+      <ConfettiEffect
+        isTriggered={showConfetti}
         onComplete={handleConfettiComplete}
       />
-      
+
       {showWelcome && !showChat ? (
-        /* Welcome Screen - Full Width */
         <div className="flex-1 flex items-center justify-center p-8 bg-white">
           <div className="text-center max-w-2xl">
             <div className="mb-8">
               <div className="w-40 h-40 mx-auto mb-4">
-                <img 
-                  src={peterAvatarImage} 
-                  alt="Peter - Guide écologique" 
+                <img
+                  src={peterAvatarImage}
+                  alt="Peter - Guide écologique"
                   className="w-40 h-40 object-contain"
                 />
               </div>
@@ -187,7 +194,7 @@ export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
                 Explorez les dilemmes du plastique à travers des scénarios interactifs, avec de la vidéo et des documents.
               </p>
             </div>
-            
+
             <div className="mb-8">
               <Button
                 size="lg"
@@ -201,7 +208,7 @@ export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
                 Session d'apprentissage : 20-30 minutes
               </p>
             </div>
-            
+
             <div className="grid grid-cols-3 gap-6 text-sm text-gray-600">
               <div className="flex flex-col items-center">
                 <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-2">
@@ -228,7 +235,6 @@ export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
           </div>
         </div>
       ) : showChat ? (
-        /* Chat Interface - Split Layout */
         <>
           {/* Left Side - Chat (1/3 width) */}
           <div className="w-1/3 flex flex-col bg-white border-r border-gray-200 chat-container chat-sidebar">
@@ -254,8 +260,10 @@ export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
               activeTab={activeTab}
               currentVideo={currentVideo}
               currentWebpage={currentWebpage}
-              onClose={() => {}} // No close functionality needed since always visible
+              onClose={() => {}}
               onTabChange={switchTab}
+              onVideoEnded={handleVideoEnded}
+              onVideoPaused={handleVideoPaused}
             />
           </div>
         </>

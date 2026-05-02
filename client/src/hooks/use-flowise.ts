@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { ChatMessage } from "../types/chat";
 import { FlowiseClient, extractMediaFromText, type FlowiseProgressLabel } from "../lib/flowise";
 import { analytics } from "../lib/analytics";
-import { PETER_WELCOME_MESSAGE } from "../../../shared/welcome-message";
+import { PETER_WELCOME_MESSAGE, PETER_INTRO_MESSAGE } from "../../../shared/welcome-message";
 
 // Token batching configuration for smoother streaming
 const TOKEN_BATCH_INTERVAL_MS = 50; // Update UI every 50ms max
@@ -257,15 +257,29 @@ export function useFlowise(
   }, [client]);
 
   const initializeChat = useCallback(() => {
-    const welcomeMessage: ChatMessage = {
-      id: 'peter_welcome',
-      content: PETER_WELCOME_MESSAGE,
+    const introMessage: ChatMessage = {
+      id: 'peter_intro',
+      content: PETER_INTRO_MESSAGE,
       sender: 'peter',
       timestamp: new Date().toISOString(),
     };
 
-    setMessages([welcomeMessage]);
+    setMessages([introMessage]);
     setTimeout(() => analytics.trackChatStart(), 0);
+  }, []);
+
+  const addWelcomeMessage = useCallback(() => {
+    setMessages(prev => {
+      // Guard: don't add if welcome already present
+      if (prev.some(m => m.id === 'peter_welcome')) return prev;
+      const welcomeMessage: ChatMessage = {
+        id: 'peter_welcome',
+        content: PETER_WELCOME_MESSAGE,
+        sender: 'peter',
+        timestamp: new Date().toISOString(),
+      };
+      return [...prev, welcomeMessage];
+    });
   }, []);
 
   return {
@@ -275,6 +289,7 @@ export function useFlowise(
     sendMessage,
     resetSession,
     initializeChat,
+    addWelcomeMessage,
     sessionId: client.getSessionId(),
   };
 }

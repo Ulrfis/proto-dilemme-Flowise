@@ -2,6 +2,24 @@
 
 Tous les changements notables de ce projet seront documentés dans ce fichier.
 
+## [2026-05-02] — Nouveau flow d'entrée : direct au chat + vidéo intro + Peter en deux temps
+
+### 🎬 Suppression de l'onboarding vidéo plein écran — flow simplifié
+- **Suppression de l'écran intermédiaire** : "Démarrer l'aventure !" amène désormais directement à l'interface conversationnelle split-screen (chat + panneau média). L'ancien écran noir plein écran avec `OnboardingVideo` est supprimé du parcours.
+- **Nouveau premier message Peter** : "Bienvenue dans l'expérience du Dilemme Plastique. Regarde en premier cette vidéo, puis une fois que c'est fait, je reviens vers toi !" — constante `PETER_INTRO_MESSAGE` dans `shared/welcome-message.ts`.
+- **Vidéo intro chargée automatiquement** dans l'onglet Vidéos du panneau média au démarrage (`https://gumlet.tv/watch/69a5bb9c9c8c64404a782d85`). Constante `INTRO_VIDEO_URL` dans `shared/welcome-message.ts`.
+- **Peter continue en deux temps** :
+  - Vidéo terminée → Peter ajoute immédiatement `PETER_WELCOME_MESSAGE` ("Salut, c'est toi l'enquêteur…")
+  - Vidéo mise en pause → timer 5 s → si pas reprise, Peter ajoute le même message
+  - Guard idempotent (`welcomeAddedRef`) : le message est ajouté au plus une fois quelle que soit la combinaison de déclencheurs
+- **Support URL `gumlet.tv/watch/`** : `VideoPlayer.tsx` reconnaît désormais les URLs `gumlet.tv/watch/ID` en plus de `gumlet.io` et `play.gumlet.io` — extraction du videoID par regex.
+- **Callbacks vidéo bout en bout** : `onVideoEnded` + `onVideoPaused` ajoutés aux interfaces de `VideoPlayer`, `MediaPanel` (nouvelles props optionnelles), et transmis au `GumletPlayer` via `onEnded` / `onPause`.
+- **Nouveau hook `addWelcomeMessage()`** dans `useFlowise` : idempotent (guard sur `id: 'peter_welcome'`), retourne la méthode séparément de `initializeChat()`.
+- **`initializeChat()` modifié** : ne pose plus que le message intro (plus `PETER_WELCOME_MESSAGE` immédiat).
+- **Pré-warm TTS étendu** : `server/index.ts` précauffe maintenant les deux messages au boot (`PETER_INTRO_MESSAGE` en premier, puis `PETER_WELCOME_MESSAGE`).
+- **Fichiers modifiés** : `shared/welcome-message.ts`, `client/src/hooks/use-flowise.ts`, `client/src/pages/homepage.tsx`, `client/src/components/media/VideoPlayer.tsx`, `client/src/components/media/MediaPanel.tsx`, `server/index.ts`.
+- **Vérifié e2e** : clic "Démarrer" → split-screen immédiat, message intro visible, vidéo Gumlet chargée dans le panneau, aucune régression.
+
 ## [2026-05-02] — Console debug interne `/debug` : services, latences, tooltips solutions
 
 ### 🩺 Diagnostic visuel en un coup d'œil
