@@ -234,7 +234,14 @@ export function ChatMessage({
               {ttsEnabled && onToggleMute && (
                 <button
                   onClick={onToggleMute}
-                  className="p-1.5 rounded transition-all hover:bg-white/20 text-teal-100 hover:text-white"
+                  className={cn(
+                    "p-1.5 rounded transition-all",
+                    isMuted
+                      // Muted = clearly alarming: solid red badge with white icon.
+                      ? "bg-red-500 text-white hover:bg-red-600 ring-1 ring-red-300/60"
+                      // Unmuted = blends with the teal action bar (transparent).
+                      : "bg-transparent text-teal-100 hover:bg-white/20 hover:text-white",
+                  )}
                   data-testid={`button-mute-toggle-${message.id}`}
                   title={
                     isMuted
