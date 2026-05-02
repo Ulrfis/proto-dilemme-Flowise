@@ -3,7 +3,7 @@
 > **Status**: 🟡 In Progress  
 > **Creator**: Ulrich Fischer  
 > **Started**: 2025-11-06  
-> **Last Updated**: 2026-02-12  
+> **Last Updated**: 2026-05-02  
 
 ---
 
@@ -91,6 +91,30 @@ How Peter helps: Conversational guide who asks questions, shares surprising fact
 ## Feature Chronicle
 
 *Each feature gets an entry. Major features (🔷) get full treatment. Minor features (🔹) get brief notes.*
+
+### [2026-05-02] — Code Quality Audit: Security, Performance & Reliability 🔷
+
+**Intent**: Systematic audit to improve latency, reactivity, security, and reliability without breaking anything ("ne rien casser, optimiser").
+
+**Problems found & fixed**:
+
+1. **SSRF vulnerability** (Security) — `/api/proxy` was an open proxy accepting any URL, including `localhost`, private IP ranges (10.x, 192.168.x…). Added: HTTPS-only enforcement, private IP blocklist, and an explicit domain allowlist of 20+ known French educational sites. Non-allowlisted domains now return 403.
+
+2. **Layout thrashing during streaming** (Performance) — `scrollToBottom` was called synchronously after every React state update (~20 updates/second during SSE). Now uses `requestAnimationFrame` with deduplication: at most 1 scroll per animation frame, regardless of how many tokens arrive.
+
+3. **No stream cancellation** (Reliability) — If a user sent a 2nd message while Peter was still streaming a response, two SSE streams ran in parallel. Added `AbortController` with a ref: each new `sendMessage` call cancels any in-flight stream. Also added cleanup on component unmount. `AbortError` is silently swallowed (expected cancellation).
+
+4. **Dead code removed** (Code quality) — `parseFlowiseResponse()` function was defined but never called (3-layer architecture made it obsolete). `flowiseCache` Map and `generateCacheKey()` were explicitly disabled but still allocated memory. `crypto` import became unused after cache removal. All removed cleanly.
+
+5. **Broken env var fallback** (Bug) — `import.meta.env.FLOWISE_CHATFLOW_ID` (without `VITE_` prefix) is never available on the Vite frontend — Vite only exposes variables prefixed with `VITE_`. The fallback was silently returning `undefined` and masking misconfiguration. Simplified to just `import.meta.env.VITE_FLOWISE_CHATFLOW_ID`.
+
+6. **URL cleaning now applied to displayed message** (Bug fix) — `extractMediaFromText()` was returning `cleanText` with URLs replaced by `[Vidéo disponible dans le panneau média]` placeholders, but the message was storing `finalText` (raw). Now stores `cleanText` so URLs don't show as plain text in bubbles.
+
+**Outcome**: No visible behavior change — all fixes are internal/defensive. App is more secure, smoother during streaming, and cleaner in memory.
+
+**Time**: ~45 minutes
+
+---
 
 ### [2026-02-12] — Video Onboarding Simplified to Single Video After Welcome 🔹
 

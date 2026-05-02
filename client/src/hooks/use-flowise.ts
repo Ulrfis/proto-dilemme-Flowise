@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { ChatMessage } from "../types/chat";
 import { FlowiseClient, extractMediaFromText } from "../lib/flowise";
 import { analytics } from "../lib/analytics";
@@ -12,84 +12,6 @@ interface InfoPanelData {
   score_globale?: string | number;
 }
 
-interface ParsedFlowiseResponse {
-  displayText: string;
-  infoData?: InfoPanelData;
-  flowiseURL?: string;
-  flowiseYouTubeURL?: string;
-}
-
-function parseFlowiseResponse(response: any): ParsedFlowiseResponse {
-  // Ultra-fast parsing - server already processed the data
-  if (response.parsedContent) {
-    const parsed = response.parsedContent;
-    
-    const result: ParsedFlowiseResponse = {
-      displayText: parsed.Response || response.text || 'Réponse non disponible',
-    };
-    
-    // Direct assignment - no additional processing needed
-    if (parsed.URL) result.flowiseURL = parsed.URL;
-    if (parsed.URLYOUTUBE) result.flowiseYouTubeURL = parsed.URLYOUTUBE;
-    
-    // Build info data object in one pass
-    const infoData: InfoPanelData = {};
-    if (parsed.theme) infoData.theme = parsed.theme;
-    if (parsed.nombre_d_indices) infoData.nombre_d_indices = parsed.nombre_d_indices;
-    if (parsed.score_globale) infoData.score_globale = parsed.score_globale;
-    
-    if (Object.keys(infoData).length > 0) {
-      result.infoData = infoData;
-    }
-    
-    return result;
-  }
-  
-  // Fallback: Try to parse JSON from response.text if server parsing failed
-  if (response.text && typeof response.text === 'string') {
-    const textField = response.text.trim();
-    
-    // Check if text looks like JSON
-    if (textField.startsWith('{') || textField.includes('"Response"')) {
-      try {
-        console.log('[Client] Attempting to parse JSON fallback...');
-        const parsed = JSON.parse(textField);
-        
-        const result: ParsedFlowiseResponse = {
-          displayText: parsed.Response || textField,
-        };
-        
-        // Extract URLs
-        if (parsed.URL) result.flowiseURL = parsed.URL;
-        if (parsed.URLYOUTUBE) result.flowiseYouTubeURL = parsed.URLYOUTUBE;
-        
-        // Extract info data
-        const infoData: InfoPanelData = {};
-        if (parsed.theme) infoData.theme = parsed.theme;
-        if (parsed.nombre_d_indices) infoData.nombre_d_indices = parsed.nombre_d_indices;
-        if (parsed.score_globale) infoData.score_globale = parsed.score_globale;
-        
-        if (Object.keys(infoData).length > 0) {
-          result.infoData = infoData;
-        }
-        
-        console.log('[Client] Successfully parsed JSON fallback');
-        return result;
-      } catch (parseError) {
-        console.error('[Client] Failed to parse JSON fallback:', parseError);
-        // If JSON parse fails, just use the text as-is (but this shouldn't show JSON)
-      }
-    }
-  }
-  
-  // Last resort fallback - NEVER show raw JSON to users
-  // If we get here, parsing failed both server and client-side
-  console.error('[Client] All parsing attempts failed, showing error message');
-  return {
-    displayText: "Je rencontre des difficultés à traiter cette réponse. Pouvez-vous réessayer ?",
-  };
-}
-
 export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPanelData | null) => void) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -99,9 +21,30 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
   const tokenBufferRef = useRef<string>('');
   const batchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentMessageIdRef = useRef<string>('');
+  // AbortController ref - cancels in-flight SSE stream on new message or unmount
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Cancel any active stream on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      if (batchTimeoutRef.current) {
+        clearTimeout(batchTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const sendMessage = useCallback(async (content: string) => {
     if (!content.trim()) return;
+
+    // Cancel any previous in-flight stream
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
     const userMessage: ChatMessage = {
       id: `user_${Date.now()}`,
@@ -127,7 +70,6 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
 
     try {
       console.log('[use-flowise] Starting streaming...');
-      let streamMetadata: any = {};
       
       // Reset token buffer for new message
       tokenBufferRef.current = '';
@@ -160,7 +102,6 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
           }
         },
         (metadata: any) => {
-          streamMetadata = { ...streamMetadata, ...metadata };
           console.log('[use-flowise] Metadata received:', metadata);
 
           if (onInfoDataUpdate && metadata) {
@@ -195,9 +136,9 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
             msg.id === peterMessageId
               ? {
                   ...msg,
-                  content: finalText,
+                  content: cleanText,
                   isStreaming: false,
-                  rawJson: metadata, // Store raw Flowise metadata for debugging
+                  rawJson: metadata,
                   metadata: {
                     hasVideo: videos.length > 0,
                     hasLinks: links.length > 0,
@@ -232,35 +173,46 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
           }
         },
         (error: Error) => {
+          // Ignore AbortError — it means we intentionally cancelled the stream
+          if (error.name === 'AbortError') {
+            console.log('[use-flowise] Stream aborted (new message started)');
+            return;
+          }
+
           console.error('[use-flowise] Stream error:', error);
 
-          const errorMessage: ChatMessage = {
-            id: `error_${Date.now()}`,
-            content: "Désolé, je rencontre des difficultés techniques. Pouvez-vous réessayer votre message ?",
-            sender: 'peter',
-            timestamp: new Date().toISOString(),
-          };
-
           setMessages(prev => prev.map(msg =>
-            msg.id === peterMessageId ? errorMessage : msg
+            msg.id === peterMessageId
+              ? {
+                  ...msg,
+                  id: `error_${Date.now()}`,
+                  content: "Désolé, je rencontre des difficultés techniques. Pouvez-vous réessayer votre message ?",
+                  isStreaming: false,
+                }
+              : msg
           ));
 
           setIsLoading(false);
-        }
+        },
+        abortController.signal
       );
 
     } catch (error) {
+      if ((error as any)?.name === 'AbortError') {
+        console.log('[use-flowise] Fetch aborted');
+        return;
+      }
       console.error("Error sending message:", error);
 
-      const errorMessage: ChatMessage = {
-        id: `error_${Date.now()}`,
-        content: "Désolé, je rencontre des difficultés techniques. Pouvez-vous réessayer votre message ?",
-        sender: 'peter',
-        timestamp: new Date().toISOString(),
-      };
-
       setMessages(prev => prev.map(msg =>
-        msg.id === peterMessageId ? errorMessage : msg
+        msg.id === peterMessageId
+          ? {
+              ...msg,
+              id: `error_${Date.now()}`,
+              content: "Désolé, je rencontre des difficultés techniques. Pouvez-vous réessayer votre message ?",
+              isStreaming: false,
+            }
+          : msg
       ));
 
       setIsLoading(false);
@@ -270,7 +222,6 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
   const resetSession = useCallback(() => {
     setMessages([]);
     client.resetSession();
-    // Non-blocking analytics
     setTimeout(() => analytics.trackSessionReset(), 0);
   }, [client]);
 
@@ -283,7 +234,6 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
     };
 
     setMessages([welcomeMessage]);
-    // Non-blocking analytics
     setTimeout(() => analytics.trackChatStart(), 0);
   }, []);
 

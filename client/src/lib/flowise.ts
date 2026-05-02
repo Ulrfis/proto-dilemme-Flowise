@@ -14,7 +14,8 @@ export class FlowiseClient {
     onToken: (token: string) => void,
     onMetadata: (metadata: any) => void,
     onComplete: (fullText: string, metadata: any) => void,
-    onError: (error: Error) => void
+    onError: (error: Error) => void,
+    signal?: AbortSignal
   ): Promise<void> {
     let fullText = '';
     let accumulatedMetadata: any = {};
@@ -36,6 +37,7 @@ export class FlowiseClient {
           question: message,
           chatId: this.sessionId,
         }),
+        signal,
       });
 
       if (!response.ok) {
