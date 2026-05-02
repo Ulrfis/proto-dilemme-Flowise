@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useCallback, useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { MessageCircle, Lightbulb, Video, CheckCircle } from "lucide-react";
 import peterAvatarImage from "@assets/Peter Avatar_1756372265537.jpg";
@@ -69,13 +69,24 @@ export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
     });
   };
 
+  // Bridge between use-flowise (which emits sentences as Peter streams them)
+  // and ChatInterface (which owns the TTS queue). The ref is filled by
+  // ChatInterface when it mounts.
+  const ttsEnqueueRef = useRef<((text: string) => void) | null>(null);
+  const handleSentenceComplete = useCallback((sentence: string) => {
+    ttsEnqueueRef.current?.(sentence);
+  }, []);
+
   const {
     messages,
     isLoading,
+    currentStepLabel,
     sendMessage,
     resetSession,
     initializeChat,
-  } = useFlowise(chatflowId, handleInfoDataUpdate);
+  } = useFlowise(chatflowId, handleInfoDataUpdate, {
+    onSentenceComplete: handleSentenceComplete,
+  });
 
   const {
     isOpen: isMediaPanelOpen,
@@ -231,6 +242,8 @@ export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
               onChoiceClick={handleChoiceClick}
               isLoading={isLoading}
               messageCount={messages.length}
+              currentStepLabel={currentStepLabel}
+              ttsEnqueueRef={ttsEnqueueRef}
             />
           </div>
 

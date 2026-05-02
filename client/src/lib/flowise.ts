@@ -1,4 +1,10 @@
 import { FlowiseResponse } from "@shared/schema";
+import { extractNewCompleteSentences } from "./sentence-split";
+
+export interface FlowiseProgressLabel {
+  step: string;
+  label: string;
+}
 
 export class FlowiseClient {
   private chatflowId: string;
@@ -15,10 +21,22 @@ export class FlowiseClient {
     onMetadata: (metadata: any) => void,
     onComplete: (fullText: string, metadata: any) => void,
     onError: (error: Error) => void,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    onProgress?: (label: FlowiseProgressLabel) => void,
+    onSentence?: (sentence: string) => void,
   ): Promise<void> {
     let fullText = '';
     let accumulatedMetadata: any = {};
+    let sentenceConsumedUpTo = 0;
+
+    const flushSentences = () => {
+      if (!onSentence) return;
+      const { sentences, consumedUpTo } = extractNewCompleteSentences(fullText, sentenceConsumedUpTo);
+      sentenceConsumedUpTo = consumedUpTo;
+      for (const s of sentences) {
+        try { onSentence(s); } catch (err) { console.warn('[Flowise Client] onSentence threw', err); }
+      }
+    };
 
     try {
       console.log('[Flowise Client] Starting SSE stream...');
@@ -82,12 +100,19 @@ export class FlowiseClient {
 
               if (parsed.event === 'token') {
                 const token = parsed.data || '';
-                
+
                 // NOTE: We accumulate all tokens as-is without filtering
                 // The server will extract the Response field from JSON after full accumulation
                 // This prevents issues with fragmented JSON tokens
                 fullText += token;
                 onToken(token);
+
+                // Cheap fast-path: only attempt sentence extraction if the new
+                // token contains a sentence-ending punctuation. Saves a regex
+                // scan on every single token.
+                if (onSentence && /[.!?]/.test(token)) {
+                  flushSentences();
+                }
 
                 if (firstTokenTime === 0) {
                   firstTokenTime = Date.now() - perfStart;
@@ -96,6 +121,11 @@ export class FlowiseClient {
               } else if (parsed.event === 'metadata') {
                 accumulatedMetadata = { ...accumulatedMetadata, ...parsed.data };
                 onMetadata(parsed.data);
+              } else if (parsed.event === 'progress') {
+                if (onProgress && parsed.data) {
+                  try { onProgress(parsed.data as FlowiseProgressLabel); }
+                  catch (err) { console.warn('[Flowise Client] onProgress threw', err); }
+                }
               } else if (parsed.event === 'end') {
                 console.log(`[Flowise Client] Stream ended. Total time: ${Date.now() - perfStart}ms`);
                 if (parsed.metadata) {
@@ -110,6 +140,37 @@ export class FlowiseClient {
               console.warn('[Flowise Client] Failed to parse SSE data:', data);
             }
           }
+        }
+      }
+
+      // Final flush: emit any remaining sentence (the server-extracted
+      // `fullText` from metadata may differ from the accumulated raw stream;
+      // if so, we feed the remainder through the splitter).
+      const serverFullText = accumulatedMetadata?.fullText;
+      if (onSentence && typeof serverFullText === 'string' && serverFullText !== fullText) {
+        // Replace and re-extract from scratch for the part not yet consumed
+        // to avoid duplicate sentences. We compute how much of the server text
+        // matches what we already played.
+        // Simpler approach: extract any sentence we haven't consumed yet from
+        // the server text by checking if it adds new complete sentences.
+        const remainder = serverFullText.slice(Math.min(sentenceConsumedUpTo, serverFullText.length));
+        if (remainder.trim()) {
+          // Only send what's truly new and was never streamed
+          const trimmed = remainder.trim();
+          // Skip if this is just the trailing fragment we already streamed
+          if (trimmed.length > 5) {
+            onSentence(trimmed);
+          }
+        }
+      } else {
+        // Flush any final sentence still buffered
+        flushSentences();
+        // If there's leftover text without a final terminator, emit it as a
+        // sentence too so it gets spoken.
+        const leftover = fullText.slice(sentenceConsumedUpTo).trim();
+        if (onSentence && leftover) {
+          onSentence(leftover);
+          sentenceConsumedUpTo = fullText.length;
         }
       }
 
