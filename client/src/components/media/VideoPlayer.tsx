@@ -27,68 +27,71 @@ export function VideoPlayer({ video, onVideoEnded, onVideoPaused, onVideoPlay }:
   onPausedRef.current = onVideoPaused;
   onPlayRef.current = onVideoPlay;
 
-  // ---- Gumlet state polling ------------------------------------------------
-  // The GumletPlayer's onPause/onEnded callbacks suffer from a stale-closure
-  // bug in the library: they only see props captured the first time the
-  // "ready" event fires. Instead we poll the imperative API every 500ms and
-  // detect transitions ourselves — this is rock-solid and never misses an
-  // event.
+  // ---- Gumlet state tracking via postMessage ------------------------------
+  // The GumletPlayer's React callbacks (onPause/onEnded) have a stale-closure
+  // bug AND the imperative ref API (getPaused/getCurrentTime) returns Promises
+  // that never resolve when the player isn't fully ready. We bypass both by
+  // listening directly to the `player.js` protocol messages the iframe posts.
+  // The lib already subscribes to play/pause/ended/timeupdate internally, so
+  // these messages flow on the window — we just need to read them.
   useEffect(() => {
     if (playerType !== 'gumlet' || !videoData.gumletVideoId) return;
 
-    let cancelled = false;
-    let prevPaused: boolean | null = null;
     let endFired = false;
+    let lastDuration = 0;
+    let lastTime = 0;
 
-    const interval = setInterval(async () => {
-      const player = gumletPlayerRef.current;
-      if (!player || cancelled) return;
+    const handler = (ev: MessageEvent) => {
+      // Only listen to messages from our specific iframe
+      const iframe = document.querySelector<HTMLIFrameElement>(
+        `iframe[src*="${videoData.gumletVideoId}"]`,
+      );
+      if (iframe && ev.source !== iframe.contentWindow) return;
 
-      try {
-        const [paused, currentTime, duration] = await Promise.all([
-          player.getPaused?.(),
-          player.getCurrentTime?.(),
-          player.getDuration?.(),
-        ]);
-        if (cancelled) return;
+      let data: any = ev.data;
+      if (typeof data === 'string') {
+        try { data = JSON.parse(data); } catch { return; }
+      }
+      if (!data || data.context !== 'player.js') return;
 
-        // End-of-video: head reached (within 0.5s of) duration
+      const event = data.event;
+      const value = data.value;
+
+      if (event === 'timeupdate' && value) {
+        lastTime = value.seconds ?? lastTime;
+        lastDuration = value.duration ?? lastDuration;
+
         if (
           !endFired &&
-          typeof currentTime === 'number' &&
-          typeof duration === 'number' &&
-          duration > 0 &&
-          currentTime >= duration - 0.5
+          lastDuration > 0 &&
+          lastTime >= lastDuration - 0.4
         ) {
           endFired = true;
-          console.log('[VideoPlayer] Polling: end reached', { currentTime, duration });
+          console.log('[VideoPlayer] PM: end reached', { time: lastTime, duration: lastDuration });
           onEndedRef.current?.();
-          return;
         }
-
-        // Pause/play transitions
-        if (typeof paused === 'boolean' && paused !== prevPaused) {
-          if (prevPaused === null) {
-            // First reading — just record it, don't fire (initial state may be paused)
-            prevPaused = paused;
-          } else if (paused) {
-            console.log('[VideoPlayer] Polling: paused');
-            prevPaused = paused;
-            onPausedRef.current?.();
-          } else {
-            console.log('[VideoPlayer] Polling: resumed');
-            prevPaused = paused;
-            onPlayRef.current?.();
-          }
-        }
-      } catch {
-        // Player not ready yet — silent retry next tick
+      } else if (event === 'ended') {
+        if (endFired) return;
+        endFired = true;
+        console.log('[VideoPlayer] PM: ended event');
+        onEndedRef.current?.();
+      } else if (event === 'pause') {
+        if (endFired) return;
+        // Don't fire pause if we're at end of video (player auto-pauses on end)
+        if (lastDuration > 0 && lastTime >= lastDuration - 0.5) return;
+        console.log('[VideoPlayer] PM: paused');
+        onPausedRef.current?.();
+      } else if (event === 'play') {
+        console.log('[VideoPlayer] PM: play');
+        onPlayRef.current?.();
       }
-    }, 500);
+    };
+
+    window.addEventListener('message', handler);
+    console.log('[VideoPlayer] postMessage listener attached for', videoData.gumletVideoId);
 
     return () => {
-      cancelled = true;
-      clearInterval(interval);
+      window.removeEventListener('message', handler);
     };
   }, [playerType, videoData.gumletVideoId]);
 
