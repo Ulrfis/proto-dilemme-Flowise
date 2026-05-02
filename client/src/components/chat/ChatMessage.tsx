@@ -454,16 +454,6 @@ export function ChatMessage({
                 generic "Voir le lien" buttons would just clutter the UI. */}
           </div>
         )}
-        
-        <div className={cn(
-          "mt-1 text-xs text-gray-500",
-          !isPeter && "text-right"
-        )}>
-          {new Date(message.timestamp).toLocaleTimeString('fr-FR', {
-            hour: '2-digit',
-            minute: '2-digit'
-          })}
-        </div>
       </div>
     </div>
   );
