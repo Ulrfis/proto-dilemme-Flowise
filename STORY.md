@@ -92,6 +92,40 @@ How Peter helps: Conversational guide who asks questions, shares surprising fact
 
 *Each feature gets an entry. Major features (🔷) get full treatment. Minor features (🔹) get brief notes.*
 
+### [2026-05-02] — Rendu des messages Peter : liens cliquables, titres markdown, TTS sans URLs 🔷
+
+**Intent** : Les liens dans les réponses de Peter ne s'affichaient pas en tant que liens cliquables — tout s'affichait en texte brut. Les titres `##` étaient montrés tels quels (avec les dièses). Peter lisait à voix haute les URLs et noms de domaine.
+
+**Problèmes racines** :
+1. `getMessageType` dans `ChatMessage.tsx` testait les bullet points AVANT les liens, et utilisait `content.includes('* ')` qui faisait un faux positif sur `**gras** texte` (le `** ` matchait). Résultat : tout message avec du gras retournait `with-choices`, les liens n'étaient jamais rendus inline.
+2. `renderMarkdown` ne gérait pas les titres ATX `## …` — les dièses s'affichaient en brut.
+3. `plainifyForTTS` substituait `[label](url)` par le label uniquement (`vimeo.com`) — ElevenLabs le lisait quand même. Les domaines nus (sans protocole) n'étaient pas du tout filtrés.
+4. Le proxy `/api/proxy` avait un whitelist trop strict (20 domaines) — `frontiersin.org`, `rts.ch`, etc. retournaient 403.
+5. L'iframe du WebView ne détectait pas les erreurs proxy (le navigateur charge le JSON d'erreur silencieusement comme une "réponse réussie").
+6. La regex Vimeo ne couvrait pas les URLs d'admin `vimeo.com/manage/videos/{id}/{hash}` que Peter cite parfois.
+
+**What shipped** :
+- **`getMessageType` réordonné** : liens détectés EN PREMIER via regex `/\[[^\]]+\]\([^)]+\)/` ; bullets vérifiés par `/^\s*\*\s+/m` (début de ligne seulement). Faux positif gras éliminé.
+- **`renderMarkdown` supporte les titres** : détecte `^\s{0,3}(#{1,6})\s+` en début de chunk, strip les `#` et applique `font-bold text-base` (H1/H2) ou `font-semibold text-sm` (H3+). Plus jamais de `## 1) Dans l'océan...` en brut.
+- **`plainifyForTTS` renforcé** : (1) headings strippés, (2) markdown links → phrase FR selon préfixe 📹 (`— vidéo à regarder dans le panneau`) ou non (`— article à consulter dans le panneau`), (3) URLs nues `https://...` → `— lien à consulter dans le panneau`, (4) domaines nus (`vimeo.com`, `rts.ch`, etc.) → même phrase, via regex sur les TLDs publics courants. Peter ne prononce JAMAIS d'URL.
+- **Proxy ouvert** : whitelist retiré ; seul `isPrivateIP` + HTTPS-only subsistent (SSRF bloqué). Peter peut citer frontiersin, plos, rts, bbc, etc. sans 403.
+- **WebView proactive probe** : fetch `/api/proxy?url=…` avant le rendu de l'iframe ; si réponse non-OK → carte ambrée "Le site X refuse l'affichage intégré" + bouton "Ouvrir dans un nouvel onglet" (bleu). Plus de JSON brut affiché.
+- **Vimeo `manage/videos`** : ajout du pattern `vimeo\.com\/manage\/videos\/(\d+)(?:\/([\w]+))?` dans `VideoPlayer.tsx`, avant le fallback `standardMatch`. Le hash de privacy est récupéré et passé en `?h=…`.
+- **Routing vidéo cohérent** : `gumlet.tv` ajouté à la liste `isVideo` dans `ChatMessage.tsx` (déjà présent dans `VIDEO_DOMAINS` de `lib/flowise.ts`).
+
+**Files** : `client/src/components/chat/ChatMessage.tsx` (getMessageType, renderMarkdown, isVideo), `client/src/lib/tts-text.ts` (plainifyForTTS), `client/src/components/media/VideoPlayer.tsx` (Vimeo manage URL), `client/src/components/media/WebView.tsx` (proactive probe + fallback card), `server/routes.ts` (proxy whitelist retiré).
+
+**Time** : ~1h
+
+---
+
+### [2026-05-02] — UX mineures : rotation indicateur 3 s, suppression des horodatages 🔹
+
+- **`ThinkingIndicator`** : `ROTATION_MS` 2000 → 3000 ms. Les phrases tournent plus lentement, moins de distraction pendant l'attente.
+- **Horodatages retirés** : le bloc `00:05` sous chaque bulle chat supprimé de `ChatMessage.tsx`. Interface plus épurée, les horaires ne sont pas pertinents pour un élève en session.
+
+---
+
 ### [2026-05-02] — Console debug interne `/debug` : services, latences, tooltips solutions 🔷
 
 **Intent** : Maintenant que 8 optimisations latence sont en place, donner à Ulrich un outil pour COMPRENDRE visuellement où le temps part quand quelque chose cloche, et identifier rapidement quel service est en cause. Inspiration : panneau "Latence & blocage" du projet "Où est Ava ?" (barres horizontales empilées par session).
