@@ -60,23 +60,28 @@ export function ChatMessage({
     }
   };
 
-  // Detect message type for Peter's messages
+  // Detect message type for Peter's messages.
+  // Order matters:
+  //   1. Links FIRST (markdown links must always render inline, regardless of
+  //      whatever else the message contains).
+  //   2. Bullet points — but ONLY when they appear at the start of a line.
+  //      The previous `content.includes('* ')` was a false positive for bold
+  //      markdown like `**plastique** mer` where the closing `**` followed by
+  //      a space matched, breaking link rendering for any message mixing
+  //      bold + a markdown link.
   const getMessageType = (content: string) => {
     if (isDebug) return 'debug';
     if (!isPeter) return 'user';
-    
-    // Check if message has bullet points that should become buttons
-    const hasBulletPoints = content.includes('*   ') || content.includes('* ');
-    if (hasBulletPoints) return 'with-choices';
-    
-    // Check if message has links
-    const hasLinks = content.includes('[') && content.includes('](');
+
+    const hasLinks = /\[[^\]]+\]\([^)]+\)/.test(content);
     if (hasLinks) return 'with-links';
-    
-    // Check if it's an information message (no question marks, statements)
+
+    const hasBulletPoints = /^\s*\*\s+/m.test(content);
+    if (hasBulletPoints) return 'with-choices';
+
     const hasQuestion = content.includes('?');
     if (!hasQuestion) return 'information';
-    
+
     return 'open-question';
   };
 
@@ -324,10 +329,13 @@ export function ChatMessage({
                         parts.push(...(Array.isArray(beforeResult) ? beforeResult : [beforeResult]));
                       }
                       
-                      // Determine if this is a video or regular link
-                      const isVideo = link.url.includes('youtube.com') || 
-                                     link.url.includes('youtu.be') || 
+                      // Determine if this is a video or regular link.
+                      // Must mirror the VIDEO_DOMAINS list in lib/flowise.ts so
+                      // the inline router and the auto-extractor agree.
+                      const isVideo = link.url.includes('youtube.com') ||
+                                     link.url.includes('youtu.be') ||
                                      link.url.includes('gumlet.io') ||
+                                     link.url.includes('gumlet.tv') ||
                                      link.url.includes('vimeo.com');
                       
                       // Add the clickable link title
