@@ -10,6 +10,7 @@ interface WebViewProps {
 export function WebView({ webpage }: WebViewProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [proxyError, setProxyError] = useState<{ status: number; message: string } | null>(null);
   const [mode, setMode] = useState<'proxy' | 'fallback'>('proxy');
   const [retryCount, setRetryCount] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -35,28 +36,53 @@ export function WebView({ webpage }: WebViewProps) {
     }
   };
 
-  // Reset on URL change
+  // Reset on URL change + proactively probe the proxy. The iframe's `onError`
+  // never fires when the proxy returns a JSON error body with HTTP 4xx/5xx
+  // (the iframe sees a "successful" response and renders the JSON as text).
+  // To give a clean UX we GET /api/proxy ourselves: response is cached for
+  // 5 min server-side so the subsequent iframe load reuses it for free.
   useEffect(() => {
-    if (webpage) {
-      setLoading(true);
-      setError(false);
-      setMode('proxy');
-      setRetryCount(0);
-      
-      // Set timeout to detect loading failures
-      timeoutRef.current = setTimeout(() => {
-        if (loading) {
-          console.log('[WebView] Loading timeout, trying fallback mode');
-          setMode('fallback');
-          setRetryCount(1);
+    if (!webpage) return;
+    setLoading(true);
+    setError(false);
+    setProxyError(null);
+    setMode('proxy');
+    setRetryCount(0);
+
+    const ctrl = new AbortController();
+    const proxyUrl = `/api/proxy?url=${encodeURIComponent(webpage.url)}`;
+    fetch(proxyUrl, { signal: ctrl.signal })
+      .then(async (res) => {
+        if (!res.ok) {
+          let msg = `HTTP ${res.status}`;
+          try {
+            const body = await res.json();
+            if (body?.details) msg = body.details;
+            else if (body?.error) msg = body.error;
+          } catch { /* ignore */ }
+          console.warn(`[WebView] Proxy probe failed: ${msg}`);
+          setProxyError({ status: res.status, message: msg });
+          setLoading(false);
         }
-      }, 15000);
-    }
-    
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
+      })
+      .catch((err) => {
+        if (err.name === 'AbortError') return;
+        console.warn('[WebView] Proxy probe network error:', err);
+        setProxyError({ status: 0, message: String(err.message || err) });
+        setLoading(false);
+      });
+
+    timeoutRef.current = setTimeout(() => {
+      if (loading) {
+        console.log('[WebView] Loading timeout, trying fallback mode');
+        setMode('fallback');
+        setRetryCount(1);
       }
+    }, 15000);
+
+    return () => {
+      ctrl.abort();
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, [webpage?.url]);
 
@@ -156,7 +182,30 @@ export function WebView({ webpage }: WebViewProps) {
       </div>
       
       <div className="flex-1 relative min-h-[500px]">
-        {loading && !error && (
+        {proxyError && (
+          <div className="absolute inset-0 flex items-center justify-center bg-amber-50 border border-amber-200 rounded-lg z-20 p-6">
+            <div className="text-center max-w-md">
+              <AlertCircle className="w-12 h-12 text-amber-500 mx-auto mb-3" />
+              <div className="text-amber-800 font-medium mb-2">
+                Cet article ne peut pas s'afficher ici
+              </div>
+              <div className="text-amber-700 text-sm mb-4">
+                Le site <strong>{(() => { try { return new URL(webpage.url).hostname; } catch { return webpage.url; } })()}</strong> refuse l'affichage intégré
+                {proxyError.status ? ` (erreur ${proxyError.status})` : ''}. Vous pouvez l'ouvrir dans un nouvel onglet pour le consulter.
+              </div>
+              <Button
+                onClick={handleExternalOpen}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+                data-testid="button-open-external-fallback"
+              >
+                <ExternalLink className="w-4 h-4 mr-2" />
+                Ouvrir dans un nouvel onglet
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {loading && !error && !proxyError && (
           <div className="absolute inset-0 flex items-center justify-center bg-gray-50 rounded-lg z-10">
             <div className="text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3"></div>
@@ -182,22 +231,21 @@ export function WebView({ webpage }: WebViewProps) {
           </div>
         )}
         
-        <iframe
-          ref={iframeRef}
-          src={getIframeSrc()}
-          className="w-full h-full border border-gray-200 rounded-lg shadow-lg"
-          title="Webview"
-          sandbox={getSandboxAttributes()}
-          onLoad={handleIframeLoad}
-          onError={handleIframeError}
-          data-testid="iframe-webview"
-          referrerPolicy="no-referrer-when-downgrade"
-          allow="fullscreen; autoplay; encrypted-media; picture-in-picture"
-          style={{ 
-            border: 'none',
-            background: 'white'
-          }}
-        />
+        {!proxyError && (
+          <iframe
+            ref={iframeRef}
+            src={getIframeSrc()}
+            className="w-full h-full border border-gray-200 rounded-lg shadow-lg"
+            title="Webview"
+            sandbox={getSandboxAttributes()}
+            onLoad={handleIframeLoad}
+            onError={handleIframeError}
+            data-testid="iframe-webview"
+            referrerPolicy="no-referrer-when-downgrade"
+            allow="fullscreen; autoplay; encrypted-media; picture-in-picture"
+            style={{ border: 'none', background: 'white' }}
+          />
+        )}
       </div>
     </div>
   );
