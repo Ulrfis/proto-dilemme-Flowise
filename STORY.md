@@ -3,7 +3,7 @@
 > **Status**: 🟡 In Progress  
 > **Creator**: Ulrich Fischer  
 > **Started**: 2025-11-06  
-> **Last Updated**: 2026-05-02 (Nouveau flow d'entrée : direct au chat + vidéo intro + Peter en deux temps)  
+> **Last Updated**: 2026-05-02 (Persistance Postgres + PostHog — conversations relisibles, analytics produit)  
 
 ---
 
@@ -91,6 +91,29 @@ How Peter helps: Conversational guide who asks questions, shares surprising fact
 ## Feature Chronicle
 
 *Each feature gets an entry. Major features (🔷) get full treatment. Minor features (🔹) get brief notes.*
+
+### [2026-05-02] — Persistance Postgres + PostHog : conversations relisibles + analytics produit 🔷
+
+**Intent** : jusqu'ici l'app était entièrement éphémère — Ulrich n'avait aucun moyen de relire ce que ses élèves avaient échangé avec Peter, ni de mesurer comment l'outil était réellement utilisé. Les noms des élèves n'étaient pas non plus capturés. Objectif : pouvoir (1) relire chaque conversation, par élève, depuis n'importe quel hébergement Postgres et (2) brancher PostHog pour les events produit, le tout sans alourdir l'UX.
+
+**What shipped** :
+- **Schéma Postgres minimal** (`shared/schema.ts`) : `conversation_sessions(id, first_name, last_name, created_at)` + `conversation_messages(id, session_id, sender, content, created_at)` avec index `(session_id, created_at)`. Géré par Drizzle, push via `npm run db:push`, portable sur n'importe quel Postgres en changeant `DATABASE_URL`.
+- **`DbStorage`** remplace `MemStorage` (`server/storage.ts`), implémente `IStorage` avec `createConversationSession`, `appendConversationMessage`, `listConversationSessions`, `getConversationSession`, `listSessionMessages`. Client `server/db.ts` (Neon serverless + ws).
+- **Endpoints publics best-effort** : `POST /api/sessions` et `POST /api/sessions/:id/messages` (validés Zod, caps 80/20000 chars). Pas d'auth — un échec ne casse pas l'UX (la persistance est fire-and-forget côté client).
+- **Endpoints admin** : `GET /api/admin/sessions` (liste, limit 500, desc) + `GET /api/admin/sessions/:id` (session + messages asc), Bearer `ADMIN_PASSWORD`. Aucun cookie/JWT volontairement — un Bearer dans le header.
+- **Capture prénom/nom** : `IdentityForm` (`client/src/components/onboarding/IdentityForm.tsx`) remplace le bouton seul. La session est créée en DB AVANT d'ouvrir le chat ; si la création échoue, l'app continue silencieusement (UX prioritaire).
+- **Persistance fil de discussion** : `client/src/lib/conversation-session.ts` expose `recordMessage()`. Branché dans `use-flowise.ts` à 3 endroits — message utilisateur (avant Flowise), message Peter complet (à `onComplete`), message de bienvenue.
+- **Console admin** : routes `/admin/sessions` et `/admin/sessions/:id` (Wouter), montées hors `DesktopValidator` pour rester accessibles partout. Mot de passe en `sessionStorage`. Détail avec bulles colorées (élève teal, Peter gris) et timestamps locaux FR.
+- **PostHog** : `posthog-js` installé, init dans `client/src/main.tsx → initPostHog()`. Désactivé silencieusement sans `VITE_POSTHOG_KEY` — pratique en local. Config sobre : `person_profiles=identified_only`, autocapture/recording off (Rectify s'en charge), pageviews déclenchés à la main. `phIdentify(sessionId, {first_name, last_name})` à la création de session : le `distinct_id` PostHog = l'UUID Postgres → on peut croiser les deux. Tous les events analytics existants sont forwardés ; nouveaux events : `aventure_demarree`, `identity_captured`, `peter_replied {length, ttftMs, totalMs}`.
+- **Coexiste avec Rectify** — les deux outils sont gardés.
+
+**Files** : `shared/schema.ts`, `server/db.ts` (nouveau), `server/storage.ts` (DbStorage), `server/routes.ts` (4 endpoints + auth helper), `client/src/lib/posthog.ts` (nouveau), `client/src/lib/conversation-session.ts` (nouveau), `client/src/lib/analytics.ts` (forward PostHog), `client/src/components/onboarding/IdentityForm.tsx` (nouveau), `client/src/pages/admin-sessions.tsx` (nouveau), `client/src/pages/admin-session-detail.tsx` (nouveau), `client/src/pages/homepage.tsx` (form au lieu du bouton), `client/src/hooks/use-flowise.ts` (recordMessage), `client/src/main.tsx` (initPostHog), `client/src/App.tsx` (routes admin).
+
+**Secrets ajoutés** : `ADMIN_PASSWORD`, `VITE_POSTHOG_KEY`, `VITE_POSTHOG_HOST`.
+
+**Pulse Check trigger** : oui (voir section ci-dessous).
+
+---
 
 ### [2026-05-02] — Rendu des messages Peter : liens cliquables, titres markdown, TTS sans URLs 🔷
 

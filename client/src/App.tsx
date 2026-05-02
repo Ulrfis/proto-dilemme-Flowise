@@ -11,6 +11,8 @@ import Homepage from "./pages/homepage";
 import About from "./pages/about";
 import NotFound from "./pages/not-found";
 import DebugPage from "./pages/debug";
+import AdminSessionsPage from "./pages/admin-sessions";
+import AdminSessionDetailPage from "./pages/admin-session-detail";
 import { analytics } from "./lib/analytics";
 
 interface InfoPanelData {
@@ -77,6 +79,12 @@ function App() {
               usable on any device, even when something is broken in the app. */}
           <Route path="/debug">
             <DebugPage />
+          </Route>
+          <Route path="/admin/sessions">
+            <AdminSessionsPage />
+          </Route>
+          <Route path="/admin/sessions/:id">
+            <AdminSessionDetailPage />
           </Route>
           <Route>
             <RectifyWidget />

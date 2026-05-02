@@ -2,6 +2,31 @@
 
 Tous les changements notables de ce projet seront documentés dans ce fichier.
 
+## [2026-05-02] — Persistance Postgres + PostHog
+
+### 🗃️ Conversations stockées en base
+- Nouveau schéma Drizzle (`shared/schema.ts`) : `conversation_sessions` (id, first_name, last_name, created_at) + `conversation_messages` (id, session_id, sender, content, created_at, index sur (session_id, created_at)).
+- `server/db.ts` (Neon serverless + ws), `server/storage.ts` migré de `MemStorage` → `DbStorage` implémentant `IStorage` avec `createConversationSession`, `appendConversationMessage`, `listConversationSessions`, `getConversationSession`, `listSessionMessages`.
+- Endpoints : `POST /api/sessions`, `POST /api/sessions/:id/messages` (publics, validés Zod), `GET /api/admin/sessions`, `GET /api/admin/sessions/:id` (Bearer `ADMIN_PASSWORD`).
+- Push schéma : `npm run db:push`.
+
+### 👤 Capture prénom/nom à l'entrée
+- Nouveau composant `IdentityForm` affiché à la place du bouton "Démarrer l'aventure". `createConversationSession()` (`client/src/lib/conversation-session.ts`) crée la session AVANT d'ouvrir le chat, conserve l'id pour pousser chaque message. Best-effort : si la DB est down, on continue sans persister.
+- `use-flowise.ts` push chaque message utilisateur (avant l'appel Flowise) et chaque réponse Peter complète (à la fin du stream), plus le message de bienvenue.
+
+### 🛠️ Console admin
+- Routes `/admin/sessions` (liste) + `/admin/sessions/:id` (détail), montées hors `DesktopValidator` pour rester utilisables partout. Mot de passe en `sessionStorage`, Bearer dans le header. Bulles colorées, timestamps locaux FR.
+
+### 📊 PostHog
+- `posthog-js` ajouté ; init dans `client/src/main.tsx → initPostHog()` (`client/src/lib/posthog.ts`). Silencieusement désactivé sans `VITE_POSTHOG_KEY`. `person_profiles=identified_only`, autocapture/recording off, on garde la main sur `trackPageView`.
+- `phIdentify(sessionId, {first_name, last_name})` à la création de session. Chaque event passé à `analytics.track()` est aussi forwardé à PostHog. Nouveaux events : `aventure_demarree`, `identity_captured`, `peter_replied {length, ttftMs, totalMs}`.
+
+### 🔐 Secrets
+- `ADMIN_PASSWORD` (Bearer pour /api/admin/*)
+- `VITE_POSTHOG_KEY`, `VITE_POSTHOG_HOST` (clé navigateur)
+
+
+
 ## [2026-05-02] — Corrections rendu messages, liens, TTS, proxy
 
 ### 🔗 Liens cliquables dans les bulles Peter
