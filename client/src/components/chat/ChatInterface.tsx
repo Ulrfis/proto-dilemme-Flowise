@@ -11,7 +11,7 @@ import { useUserAvatar } from "../../hooks/use-user-avatar";
 import { useTTSQueue } from "../../hooks/use-tts-queue";
 import { plainifyForTTS } from "../../lib/tts-text";
 import { splitIntoSentences } from "../../lib/sentence-split";
-import peterAvatarImage from "@assets/Peter Avatar_1756370825342.jpg";
+import peterAvatarImage from "@assets/Peter_Avatar_white_1777751289628.jpeg";
 
 interface ChatInterfaceProps {
   messages: ChatMessageType[];

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ChatMessage as ChatMessageType } from "../../types/chat";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import peterAvatarImage from "@assets/Peter Avatar_1756370825342.jpg";
+import peterAvatarImage from "@assets/Peter_Avatar_white_1777751289628.jpeg";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";

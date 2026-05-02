@@ -1,7 +1,7 @@
 import { useCallback, useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { MessageCircle, Lightbulb, Video, CheckCircle } from "lucide-react";
-import peterAvatarImage from "@assets/Peter Avatar_1756372265537.jpg";
+import peterAvatarImage from "@assets/Peter_Avatar_white_1777751289628.jpeg";
 import { ChatInterface } from "../components/chat/ChatInterface";
 import { MediaPanel } from "../components/media/MediaPanel";
 import { ConfettiEffect } from "../components/effects/ConfettiEffect";
