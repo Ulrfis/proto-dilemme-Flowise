@@ -80,6 +80,17 @@ Following fullstack_js blueprint with:
 - **Every 3-5 features**: Ask the creator one "Pulse Check" question about their current state
 - **Update** "Last Updated" date at top of STORY.md after each entry
 
+## Providers vocaux (TTS / STT)
+
+Architecture multi-providers pour la voix de Peter, configurable via variables d'environnement.
+
+- **TTS** (lecture des messages) : `TTS_PROVIDER=elevenlabs|openai|none`. Par défaut, auto-détection (ElevenLabs si `ELEVENLABS_API_KEY` + `ELEVENLABS_VOICE_ID` présents, sinon OpenAI, sinon `none` = bouton lecture désactivé).
+- **STT** (transcription du micro) : `STT_PROVIDER=openai|elevenlabs|deepgram` (défaut `openai`/Whisper).
+- **Endpoints** : `POST /api/tts` (`{ text, voiceId? }` → audio MP3), `POST /api/transcribe` (multipart `audio` → `{ text, language }`, signature inchangée), `GET /api/providers` (introspection).
+- **Ajouter un provider** en 3 étapes : 1) créer `server/providers/tts/<name>.ts` (ou `/stt/`) implémentant `ITTSProvider` / `ISTTProvider`, 2) l'enregistrer dans `REGISTRY` du `index.ts` correspondant, 3) ajouter le nom au type union. Les clients sont instanciés paresseusement (pas de warnings au boot).
+- **Secrets requis** : `OPENAI_API_KEY` (existant), `ELEVENLABS_API_KEY` + `ELEVENLABS_VOICE_ID` (TTS ElevenLabs / STT Scribe), `DEEPGRAM_API_KEY` (optionnel, pour Deepgram Nova-3).
+- **UI** : bouton haut-parleur sur chaque message Peter + toggle "Lecture auto" dans l'en-tête (persisté dans `localStorage` sous `tts-autoplay`).
+
 ## Integration Priorities
 1. Flowise chatbot API integration with proxy for security
 2. Gumlet video player for video URLs in chat
