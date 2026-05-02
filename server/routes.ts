@@ -21,6 +21,8 @@ import { OpenAISTTProvider } from "./providers/stt/openai";
 import { DeepgramSTTProvider } from "./providers/stt/deepgram";
 import { flowiseFetch } from "./flowise-fetch";
 import { labelForFlowiseEvent, type ProgressLabel } from "./flowise-progress-labels";
+import { debugTraces, newTraceId } from "./debug-traces";
+import { buildHealthResponse } from "./debug-health";
 
 // Allowed domains for the content proxy (prevents SSRF to internal networks)
 const PROXY_ALLOWED_DOMAINS = new Set([
@@ -170,11 +172,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         provider: provider.name,
       });
 
+      const ttsStart = Date.now();
+      const textPreview = safeText.length > 80 ? safeText.slice(0, 80) + "…" : safeText;
+
       const cached = ttsCache.get(cacheKey);
       if (cached) {
         console.log(
           `[TTS:${provider.name}] Cache HIT (${safeText.length} caractères, ${cached.size} octets)`,
         );
+        debugTraces.recordTTS({
+          id: newTraceId("tts"),
+          textPreview,
+          chars: safeText.length,
+          startedAt: ttsStart,
+          durationMs: Date.now() - ttsStart,
+          cacheHit: true,
+          provider: provider.name,
+          status: "ok",
+        });
         res.setHeader('Content-Type', cached.contentType);
         res.setHeader('Content-Length', String(cached.audio.length));
         res.setHeader('Cache-Control', 'no-store');
@@ -190,6 +205,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         ttsCache.set(cacheKey, result);
 
+        debugTraces.recordTTS({
+          id: newTraceId("tts"),
+          textPreview,
+          chars: safeText.length,
+          startedAt: ttsStart,
+          durationMs: Date.now() - ttsStart,
+          cacheHit: false,
+          provider: provider.name,
+          status: "ok",
+        });
+
         res.setHeader('Content-Type', result.contentType);
         res.setHeader('Content-Length', String(result.audio.length));
         res.setHeader('Cache-Control', 'no-store');
@@ -198,6 +224,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.send(result.audio);
       } catch (providerError) {
         console.error(`[TTS:${provider.name}] Provider error:`, providerError);
+        debugTraces.recordTTS({
+          id: newTraceId("tts"),
+          textPreview,
+          chars: safeText.length,
+          startedAt: ttsStart,
+          durationMs: Date.now() - ttsStart,
+          cacheHit: false,
+          provider: provider.name,
+          status: "error",
+          errorMessage: providerError instanceof Error ? providerError.message : String(providerError),
+        });
         res.status(502).json({
           error: "Erreur lors de la synthèse vocale",
           details: providerError instanceof Error ? providerError.message : "Le service vocal a rencontré un problème",
@@ -697,14 +734,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ` nodes=${nodesExecuted} tools=${toolsCalled} unknownEvents=${unknownEvents}` +
           (errorReason ? ` error="${errorReason.slice(0, 80)}"` : ''),
       );
+
+      debugTraces.recordFlowise({
+        id: newTraceId("fw"),
+        chatId: sessionTag,
+        question: (question || "").slice(0, 120),
+        startedAt: perfStart,
+        finishedAt: Date.now(),
+        connectMs,
+        ttftMs: firstTokenMs,
+        totalMs,
+        tokens: tokenCount,
+        chars: finalText.length,
+        nodes: nodesExecuted,
+        tools: toolsCalled,
+        unknownEvents,
+        status: errorReason ? "error" : "ok",
+        errorMessage: errorReason || undefined,
+      });
     } catch (streamError) {
       const msg = streamError instanceof Error ? streamError.message : String(streamError);
       console.error(`[Flowise] end chatId=${sessionTag} status=stream_error error="${msg}"`);
+      debugTraces.recordFlowise({
+        id: newTraceId("fw"),
+        chatId: sessionTag,
+        question: (question || "").slice(0, 120),
+        startedAt: perfStart,
+        finishedAt: Date.now(),
+        connectMs,
+        ttftMs: firstTokenMs,
+        totalMs: Date.now() - perfStart,
+        tokens: tokenCount,
+        chars: fullText.length,
+        nodes: nodesExecuted,
+        tools: toolsCalled,
+        unknownEvents,
+        status: msg.includes("aborted") ? "aborted" : "error",
+        errorMessage: msg,
+      });
       res.write(`data: ${JSON.stringify({ error: 'Stream interrupted', details: msg })}\n\n`);
     } finally {
       try { reader.releaseLock(); } catch { /* ignore */ }
       res.end();
     }
+  });
+
+  // ────────────────────────────────────────────────────────────────────
+  // Debug endpoints — surface internal state for the /debug panel.
+  // No auth: read-only, no secrets exposed, only aggregated metrics.
+  // ────────────────────────────────────────────────────────────────────
+  const serverStartedAt = Date.now();
+
+  app.get("/api/debug/health", async (_req, res) => {
+    try {
+      const payload = await buildHealthResponse(Date.now() - serverStartedAt);
+      res.setHeader("Cache-Control", "no-store");
+      res.json(payload);
+    } catch (err) {
+      console.error("[debug:health] error:", err);
+      res.status(500).json({
+        error: "health check failed",
+        details: err instanceof Error ? err.message : String(err),
+      });
+    }
+  });
+
+  app.get("/api/debug/traces", (_req, res) => {
+    const snap = debugTraces.snapshot();
+    res.setHeader("Cache-Control", "no-store");
+    res.json({
+      generatedAt: Date.now(),
+      flowise: snap.flowise,
+      tts: snap.tts,
+    });
   });
 
   // Flowise proxy endpoint for secure API calls
