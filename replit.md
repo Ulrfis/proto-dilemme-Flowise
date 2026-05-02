@@ -90,6 +90,8 @@ Architecture multi-providers pour la voix de Peter, configurable via variables d
 - **Ajouter un provider** en 3 étapes : 1) créer `server/providers/tts/<name>.ts` (ou `/stt/`) implémentant `ITTSProvider` / `ISTTProvider`, 2) l'enregistrer dans `REGISTRY` du `index.ts` correspondant, 3) ajouter le nom au type union. Les clients sont instanciés paresseusement (pas de warnings au boot).
 - **Secrets requis** : `OPENAI_API_KEY` (existant), `ELEVENLABS_API_KEY` + `ELEVENLABS_VOICE_ID` (TTS ElevenLabs / STT Scribe), `DEEPGRAM_API_KEY` (optionnel, pour Deepgram Nova-3).
 - **UI** : bouton haut-parleur sur chaque message Peter + toggle "Lecture auto" dans l'en-tête (persisté dans `localStorage` sous `tts-autoplay`).
+- **Sélecteur de voix runtime** : `<Select>` (icône `Mic2`) dans l'en-tête du chat, alimenté par `GET /api/tts/voices`. Choix persisté dans `localStorage:tts-voice-id`, propagé à `POST /api/tts` (clé `voiceId`). Fallback automatique sur la voix par défaut du provider si la voix mémorisée n'existe plus. Implémentation provider via `listVoices()` / `getDefaultVoiceId()` optionnels sur `ITTSProvider`.
+- **Cache TTS** : `server/providers/tts/cache.ts` — LRU mémoire (clé SHA-256 sur `provider + voiceId + text`, 100 entrées par défaut, override via `TTS_CACHE_MAX_ENTRIES`). Auto-invalidation totale dès que `TTS_PROVIDER` ou `ELEVENLABS_VOICE_ID` changent. En-têtes de réponse `X-TTS-Cache: hit|miss` pour observabilité (~40 ms sur hit vs ~1.1 s sur miss).
 
 ## Integration Priorities
 1. Flowise chatbot API integration with proxy for security
