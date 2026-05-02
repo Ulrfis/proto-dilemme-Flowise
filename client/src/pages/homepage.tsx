@@ -137,6 +137,17 @@ export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
     };
   }, []);
 
+  // Garantit qu'au moins un `session_terminee` est émis quand l'élève
+  // ferme l'onglet ou recharge sans cliquer sur "Recommencer". PostHog
+  // utilise un beacon en interne, donc l'event part même pendant unload.
+  useEffect(() => {
+    const onBeforeUnload = () => {
+      try { analytics.trackSessionComplete(); } catch {}
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, []);
+
   const handleStartAdventure = async (identity: { firstName: string; lastName: string }) => {
     // Crée la session côté serveur AVANT d'ouvrir le chat. Si la création
     // échoue (DB indisponible), on continue quand même : la conversation
@@ -170,6 +181,7 @@ export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
   };
 
   const handleResetSession = () => {
+    try { analytics.trackSessionComplete(); } catch {}
     window.location.reload();
   };
 
