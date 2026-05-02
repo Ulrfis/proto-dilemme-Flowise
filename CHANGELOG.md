@@ -2,6 +2,58 @@
 
 Tous les changements notables de ce projet seront documentés dans ce fichier.
 
+## [2026-05-02] — Console debug interne `/debug` : services, latences, tooltips solutions
+
+### 🩺 Diagnostic visuel en un coup d'œil
+- **Accès** : route `/debug` directe + redirect automatique depuis `?debug` ou `?debug=1` ajouté à n'importe quelle URL (composant `DebugQueryRedirect` dans `client/src/App.tsx`). Bypass volontaire de `DesktopValidator` pour rester utilisable sur mobile / quand l'app principale est cassée. Pas d'authentification (panneau interne, ne révèle aucun secret, juste des métriques agrégées).
+- **6 cards de services connectés** avec pastille colorée 🟢 🟠 🔴 + latence + bouton "Solution possible" (tooltip avec remédiation contextuelle) :
+  - Flowise (sondé via HEAD avec `flowiseFetch`, vert <600 ms / orange <1500 ms / rouge / timeout 3s)
+  - ElevenLabs TTS (`GET /v1/voices`, vert <800 ms / orange <2000 ms)
+  - OpenAI + Deepgram (présence de clé seulement, pas de ping pour ne pas brûler de quota)
+  - TTS et STT actifs (depuis `getActiveTTSProviderName()` / `getActiveSTTProviderName()`)
+- **Card "Flowise warmer"** : statut keep-alive (intervalle, pings réussis cumulés, dernier ping en ms, dernière erreur). Exposé via nouveau `getFlowiseWarmerStats()` dans `server/flowise-warmer.ts` (séparé du rolling 5 min des logs).
+- **Card "Cache TTS"** : entrées / max, hits / misses, taux de hit (orange si <30 %), uptime serveur. Compteurs `hits` / `misses` ajoutés à `LRUTTSCache` avec getter `stats()`.
+- **Section "Latence Flowise — sessions récentes"** : pour chaque message envoyé à Peter, **barre horizontale empilée** inspirée du panneau "Latence & blocage" d'Où est Ava ? — 3 phases colorées : Connect (sky), Pré-TTFT (violet), Stream (emerald). Marqueur en pointillés rose = cible 8 s. Total à droite, rouge si dépassement. Tooltip au survol de chaque segment avec explication + suggestion de remédiation conditionnelle (ex : Pré-TTFT >5 s → "vérifier docs/flowise-chatflow-audit-report.md, trop de nœuds séquentiels avant le LLM").
+- **Section "Appels TTS récents"** : liste compacte avec pill `HIT` (vert) / `MISS` (orange) / `ERROR` (rouge), preview texte (80 chars), durée. Tooltips contextuels sur chaque pill expliquant ce que ça veut dire et la suite.
+- **Bandeau d'alerte rouge** en haut quand ≥1 service est en KO, avec la liste des services impactés et leur suggestion.
+- **Auto-refresh** : 5 s pour `/api/debug/health`, 3 s pour `/api/debug/traces`, toggle on/off en haut à droite + bouton "Rafraîchir" manuel.
+- **Endpoints** :
+  - `GET /api/debug/health` — sondes parallèles (≈400 ms), retourne `services[]`, `warmer`, `cache`, `providers`, `uptimeMs`
+  - `GET /api/debug/traces` — instantané, retourne les buffers Flowise (max 50) + TTS (max 200) du plus récent au plus ancien
+- **Architecture** :
+  - Buffer mémoire circulaire (`server/debug-traces.ts`) alimenté par `recordFlowise()` à la fin de chaque appel SSE et `recordTTS()` à la fin de chaque appel `/api/tts`
+  - Sondes de santé centralisées dans `server/debug-health.ts`
+  - Types partagés client + serveur dans `shared/debug-types.ts`
+  - 6 fichiers nouveaux : `shared/debug-types.ts`, `server/debug-traces.ts`, `server/debug-health.ts`, `client/src/components/debug/{LatencyBar,ServiceStatusCard}.tsx`, `client/src/pages/debug.tsx`
+  - 4 fichiers refactor : `server/routes.ts` (instrumentation + 2 endpoints), `server/flowise-warmer.ts` (getter stats), `server/providers/tts/cache.ts` (compteurs hit/miss), `client/src/App.tsx` (route + redirect)
+- **Vérifié** : 6 services tous green/gray au boot (Flowise 384 ms, ElevenLabs 72 ms, OpenAI clé OK, Deepgram non configuré gris). 3 traces TTS de test générées (1 HIT 0 ms + 2 MISS ~1000 ms) → cache stats : 1 hit / 3 miss / 25 % de hit. Redirect `?debug=1` → `/debug` opérationnel.
+
+## [2026-05-02] — Optimisations latence Peter : keep-alive, pré-warm, streaming par phrase, indicateurs d'étape
+
+### ⚡ De ~30 s à <8 s pour entendre la 1ère phrase de Peter
+
+Mesures de départ : 12 420 ms TTFT Flowise + 9 451 ms TTS welcome → ~30 s entre l'envoi du message et la fin de la voix. Cible : <8 s pour la 1ère phrase audible.
+
+- **T1 — Audit chatflow automatisé** (`scripts/flowise-chatflow-audit.ts`) : récupère le `flowData` via API Flowise, applique des heuristiques (nœuds RAG / LLM / tools, calcul du plus long chemin séquentiel), génère un rapport markdown actionnable dans `docs/flowise-chatflow-audit-report.md`. À rejouer dès qu'on touche au chatflow.
+- **T2 — Keep-alive Flowise** (`server/flowise-warmer.ts`) : ping HEAD du chatflow toutes les 30 s au boot, log d'agrégat toutes les 5 min (zéro spam). Évite le cold start de l'instance self-hosted entre deux élèves espacés. Désactivable via `FLOWISE_KEEPALIVE=0`.
+- **T4 — HTTP keep-alive serveur→Flowise** (`server/flowise-fetch.ts`) : Agent undici dédié (`keepAliveTimeout=60s`, `keepAliveMaxTimeout=10min`) réutilisé par TOUS les appels Flowise (warmer + SSE proxy). Élimine les ~600 ms de TLS handshake à chaque message. Mesure `connectMs` exposé dans les logs.
+- **T5 — Indicateurs visuels d'étapes** (`server/flowise-progress-labels.ts` + parser dans `client/src/lib/flowise.ts` + état `currentStepLabel` dans `useFlowise`) : le serveur mappe chaque event Flowise (`agentFlowEvent`, `nextAgentFlow`, `calledTools`, etc.) vers un label FR ("Peter cherche dans ses sources…", "Peter consulte ses outils…"), forwarde un event `progress` au client qui l'affiche dans la bulle "Peter réfléchit…" via `data-testid="thinking-label-${id}"`. L'élève VOIT que ça avance.
+- **T6 — Logs propres + instrumentation** (refactor `server/routes.ts` SSE proxy) : avant = 25+ `console.log("Unknown event")` par requête + 8 logs de debug. Après = **1 ligne au start** (`[Flowise] start chatId=… q="…"`) + **1 ligne structurée à la fin** (`[Flowise] end chatId=… ttft=…ms total=…ms connect=…ms tokens=… nodes=… tools=… unknownEvents=…`). Les events inconnus deviennent un compteur silencieux. Console enfin lisible.
+- **T7 — Pré-warm TTS welcome** (`shared/welcome-message.ts` + `server/providers/tts/prewarm.ts` + appel dans `server/index.ts`) : message d'accueil de Peter centralisé dans un seul fichier (frontend ET backend l'importent), synthétisé au boot du serveur — atterrit dans le cache LRU TTS avant le premier élève. Mesure boot : 254 chars, 250 819 octets, 2 569 ms… payés une fois pour tous les élèves. Désactivable via `TTS_PREWARM=0`.
+- **T8 — TTS streaming par phrase** (`client/src/lib/sentence-split.ts` + `client/src/hooks/use-tts-queue.ts`) : nouveau splitter FR-aware (préserve "M.", "Mme.", décimales 2,5) qui détecte les phrases COMPLÈTES dans le flux SSE Flowise. Nouveau hook `useTTSQueue` : queue séquentielle qui synthétise la phrase N+1 EN PARALLÈLE de la lecture de N (overlap fetch+playback). Stop instantané + abort des fetches en vol au mute. **La 1ère phrase est jouée dès qu'elle apparaît dans le stream** (au lieu d'attendre la fin complète) — gain attendu ~7-8 s sur les longues réponses.
+
+### 📋 T3 reste hors codebase
+La simplification du chatflow dans l'UI Flowise (réduire les 15 nœuds du plus long chemin, vérifier `streaming: true` sur tous les LLM, activer prompt caching OpenAI / Anthropic) doit se faire en session interactive avec Ulrich, alimentée par le rapport d'audit auto-généré.
+
+### 📊 Mesures attendues
+- TTFT serveur→Flowise : -300 à -600 ms (TLS handshake éliminé)
+- TTS welcome : 2 605 ms → ~40 ms (cache hit)
+- 1ère phrase audible : -7 à -8 s (streaming par phrase au lieu de message complet)
+
+### Fichiers
+- 9 nouveaux : `shared/welcome-message.ts`, `server/flowise-fetch.ts`, `server/flowise-warmer.ts`, `server/flowise-progress-labels.ts`, `server/providers/tts/prewarm.ts`, `client/src/lib/sentence-split.ts`, `client/src/hooks/use-tts-queue.ts`, `scripts/flowise-chatflow-audit.ts`, `docs/flowise-chatflow-audit-report.md` (auto-généré)
+- 7 refactor : `server/routes.ts` (SSE proxy), `server/index.ts` (boot warmer + prewarm), `client/src/lib/flowise.ts` (parser progress + onSentence), `client/src/hooks/use-flowise.ts` (currentStepLabel + welcome partagé), `client/src/components/chat/ChatInterface.tsx` (useTTSQueue), `client/src/components/chat/ChatMessage.tsx` (progressLabel), `client/src/pages/homepage.tsx`
+
 ## [2026-05-02] — Simplification UX TTS : autoplay par défaut + mute global
 
 ### 🔇 Une seule décision pour l'enseignant : muet ou pas
