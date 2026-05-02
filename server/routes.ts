@@ -5,33 +5,46 @@ import OpenAI from "openai";
 import multer from "multer";
 import fs from "fs/promises";
 import { createReadStream } from "fs";
-import crypto from "crypto";
 
-// Simple in-memory cache for Flowise responses
-interface CacheEntry {
-  response: any;
-  timestamp: number;
-}
+// Allowed domains for the content proxy (prevents SSRF to internal networks)
+const PROXY_ALLOWED_DOMAINS = new Set([
+  'lemonde.fr',
+  'liberation.fr',
+  'lefigaro.fr',
+  'francetvinfo.fr',
+  'reporterre.net',
+  'novethic.fr',
+  '20minutes.fr',
+  'bfmtv.com',
+  'ouest-france.fr',
+  'futura-sciences.com',
+  'nationalgeographic.fr',
+  'wwf.fr',
+  'greenpeace.fr',
+  'ademe.fr',
+  'ecologie.gouv.fr',
+  'wikipedia.org',
+  'wikimedia.org',
+  'our-sea.org',
+  'plasticpollutioncoalition.org',
+  'plasticsoupfoundation.org',
+  'surfrider.eu',
+  'zerowaste.fr',
+]);
 
-const flowiseCache = new Map<string, CacheEntry>();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-
-// Clean expired cache entries periodically
-setInterval(() => {
-  const now = Date.now();
-  const keysToDelete: string[] = [];
-  flowiseCache.forEach((entry, key) => {
-    if (now - entry.timestamp > CACHE_TTL) {
-      keysToDelete.push(key);
-    }
-  });
-  keysToDelete.forEach(key => flowiseCache.delete(key));
-}, 60 * 1000); // Clean every minute
-
-function generateCacheKey(question: string): string {
-  // Normalize and hash the question
-  const normalized = question.trim().toLowerCase();
-  return crypto.createHash('md5').update(normalized).digest('hex');
+function isPrivateIP(hostname: string): boolean {
+  // Block localhost and private IP ranges
+  const privatePatterns = [
+    /^localhost$/i,
+    /^127\./,
+    /^10\./,
+    /^172\.(1[6-9]|2\d|3[01])\./,
+    /^192\.168\./,
+    /^::1$/,
+    /^0\.0\.0\.0$/,
+    /^169\.254\./,
+  ];
+  return privatePatterns.some(p => p.test(hostname));
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -153,10 +166,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Validate URL format
+      let parsedUrl: URL;
       try {
-        new URL(url);
+        parsedUrl = new URL(url);
       } catch {
         return res.status(400).json({ error: "Invalid URL format" });
+      }
+
+      // Security: only allow HTTPS
+      if (parsedUrl.protocol !== 'https:') {
+        return res.status(400).json({ error: "Only HTTPS URLs are allowed" });
+      }
+
+      // Security: block private/internal IPs (SSRF protection)
+      if (isPrivateIP(parsedUrl.hostname)) {
+        return res.status(403).json({ error: "Access to internal addresses is not allowed" });
+      }
+
+      // Security: check against allowlist of known educational domains
+      const hostname = parsedUrl.hostname.replace(/^www\./, '');
+      const isAllowed = [...PROXY_ALLOWED_DOMAINS].some(domain =>
+        hostname === domain || hostname.endsWith(`.${domain}`)
+      );
+      if (!isAllowed) {
+        console.warn(`[Proxy] Blocked request to non-allowlisted domain: ${parsedUrl.hostname}`);
+        return res.status(403).json({ error: "Domain not allowed by proxy" });
       }
 
       console.log(`[Proxy] Fetching: ${url}`);

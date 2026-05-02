@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { Button } from "@/components/ui/button";
@@ -38,15 +38,21 @@ export function ChatInterface({
   const [copied, setCopied] = useState(false);
   const userAvatar = useUserAvatar();
 
-  const scrollToBottom = () => {
-    if (messagesContainerRef.current) {
-      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
-    }
-  };
+  const rafRef = useRef<number | null>(null);
+
+  const scrollToBottom = useCallback(() => {
+    if (rafRef.current !== null) return; // already scheduled
+    rafRef.current = requestAnimationFrame(() => {
+      if (messagesContainerRef.current) {
+        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+      }
+      rafRef.current = null;
+    });
+  }, []);
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, scrollToBottom]);
 
   const formatMessageForClipboard = (message: ChatMessageType) => {
     if (message.sender === 'debug') {
