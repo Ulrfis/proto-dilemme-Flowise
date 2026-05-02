@@ -219,20 +219,20 @@ export function ChatMessage({
         isDebug ? "mr-16" : isPeter ? "mr-16" : "ml-16 text-right"
       )}>
         <div className={cn(
-          "relative px-4 py-3 max-w-sm shadow-sm inline-block",
+          "max-w-sm shadow-sm inline-block overflow-hidden",
           isDebug
             ? "bg-gray-100 text-gray-600 rounded-lg border border-gray-300"
             : isPeter 
               ? "bg-teal-500 text-white rounded-2xl rounded-bl-md chat-bubble-left" 
               : "bg-white text-gray-800 rounded-2xl rounded-br-md border border-gray-200 chat-bubble-right float-right"
         )}>
-          {/* Top-right action buttons (mute toggle + debug) for Peter's messages */}
-          {isPeter && !isStreaming && (
-            <div className="absolute top-2 right-2 flex items-center gap-1">
+          {/* Action bar above the text — only for Peter's completed messages */}
+          {isPeter && !isStreaming && (ttsEnabled || message.rawJson) && (
+            <div className="flex items-center justify-end gap-0.5 px-2 py-1 bg-teal-700/60">
               {ttsEnabled && onToggleMute && (
                 <button
                   onClick={onToggleMute}
-                  className="p-1.5 rounded transition-all hover:bg-white/20"
+                  className="p-1.5 rounded transition-all hover:bg-white/20 text-teal-100 hover:text-white"
                   data-testid={`button-mute-toggle-${message.id}`}
                   title={
                     isMuted
@@ -257,9 +257,9 @@ export function ChatMessage({
                 <button
                   onClick={() => setShowRawJson(!showRawJson)}
                   className={cn(
-                    "p-1.5 rounded transition-all",
+                    "p-1.5 rounded transition-all text-teal-100 hover:text-white",
                     showRawJson
-                      ? "bg-white/30 hover:bg-white/40"
+                      ? "bg-white/20 hover:bg-white/30"
                       : "hover:bg-white/20"
                   )}
                   title={showRawJson ? "Afficher le message formaté" : "Afficher le JSON brut de l'API"}
@@ -273,6 +273,7 @@ export function ChatMessage({
               )}
             </div>
           )}
+          <div className="px-4 py-3">
           
           {showRawJson && message.rawJson ? (
             <div className="text-xs font-mono leading-tight">
@@ -366,7 +367,8 @@ export function ChatMessage({
               </span>
             </div>
           )}
-        </div>
+          </div>{/* end px-4 py-3 */}
+        </div>{/* end bubble */}
         
         {/* Action buttons based on message type - only show when NOT streaming */}
         {isPeter && !isStreaming && (
