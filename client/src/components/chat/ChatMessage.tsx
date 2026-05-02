@@ -408,32 +408,10 @@ export function ChatMessage({
               </Button>
             )}
             
-            {/* Video buttons from metadata */}
-            {message.metadata?.videoUrl && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleMediaClick(message.metadata!.videoUrl!, 'video')}
-                data-testid="button-open-video"
-                className="bg-accent border-accent text-accent-foreground hover:bg-accent/80"
-              >
-                📹 Voir la vidéo
-              </Button>
-            )}
-            
-            {/* Link buttons from metadata */}
-            {message.metadata?.links?.map((link, index) => (
-              <Button
-                key={index}
-                variant="outline"
-                size="sm"
-                onClick={() => handleMediaClick(link, 'link')}
-                data-testid={`button-open-link-${index}`}
-                className="bg-accent border-accent text-accent-foreground hover:bg-accent/80"
-              >
-                🔗 Voir le lien
-              </Button>
-            ))}
+            {/* Video / link buttons from metadata are intentionally omitted:
+                URLs are now rendered as inline clickable markdown links
+                (see extractMediaFromText in lib/flowise.ts), so duplicate
+                generic "Voir le lien" buttons would just clutter the UI. */}
           </div>
         )}
         

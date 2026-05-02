@@ -228,8 +228,28 @@ function cleanUrl(url: string): string {
   return url.replace(/[.,;:!?)\]}\s]+$/, '').replace(/\)+\.?\s*$/, '').replace(/\.$/, '').trim();
 }
 
-const MEDIA_REGEX = /(https?:\/\/[^\s]+)/gi;
-const VIDEO_DOMAINS = /(?:gumlet\.io|youtube\.com\/watch|youtu\.be|vimeo\.com)/;
+// Match raw URLs in text BUT skip URLs already inside a markdown link `](url)`.
+// We use a negative lookbehind on `](` to avoid double-rewriting links Peter
+// already wrote in markdown form.
+const MEDIA_REGEX = /(?<!\]\()(https?:\/\/[^\s)<>"']+)/gi;
+const VIDEO_DOMAINS = /(?:gumlet\.io|gumlet\.tv|youtube\.com\/watch|youtu\.be|vimeo\.com|player\.vimeo\.com)/;
+const MARKDOWN_LINK_REGEX = /\[([^\]]+)\]\(([^)]+)\)/g;
+
+/**
+ * Build a short, human-readable label from a URL.
+ * Examples:
+ *   https://journals.plos.org/plosone/article?id=...   -> "journals.plos.org"
+ *   https://www.lemonde.fr/planete/article/...          -> "lemonde.fr"
+ *   https://vimeo.com/123456789                         -> "vimeo.com"
+ */
+function friendlyLabelFromUrl(rawUrl: string): string {
+  try {
+    const u = new URL(rawUrl);
+    return u.hostname.replace(/^www\./, '');
+  } catch {
+    return rawUrl;
+  }
+}
 
 export function extractMediaFromText(text: string): {
   cleanText: string;
@@ -243,16 +263,30 @@ export function extractMediaFromText(text: string): {
     return { cleanText: text, videos, links };
   }
 
+  // 1) Collect URLs from existing markdown links (so the media panel still has them)
+  //    without rewriting their visible text.
+  MARKDOWN_LINK_REGEX.lastIndex = 0;
+  let mdMatch: RegExpExecArray | null;
+  while ((mdMatch = MARKDOWN_LINK_REGEX.exec(text)) !== null) {
+    const url = mdMatch[2].replace(/[.,;:!?)\]}\s]+$/, '').trim();
+    if (!/^https?:\/\//i.test(url)) continue;
+    if (VIDEO_DOMAINS.test(url)) videos.push(url);
+    else links.push(url);
+  }
+
+  // 2) Rewrite raw URLs into inline markdown links so they render as proper
+  //    clickable text in the chat (instead of an ugly "[Lien disponible…]" placeholder).
   MEDIA_REGEX.lastIndex = 0;
   const cleanText = text.replace(MEDIA_REGEX, (match) => {
     const cleanedUrl = match.replace(/[.,;:!?)\]}\s]+$/, '').trim();
+    const label = friendlyLabelFromUrl(cleanedUrl);
 
     if (VIDEO_DOMAINS.test(cleanedUrl)) {
       videos.push(cleanedUrl);
-      return `[Vidéo disponible dans le panneau média]`;
+      return `[📹 ${label}](${cleanedUrl})`;
     } else {
       links.push(cleanedUrl);
-      return `[Lien disponible dans le panneau média]`;
+      return `[${label}](${cleanedUrl})`;
     }
   });
 
