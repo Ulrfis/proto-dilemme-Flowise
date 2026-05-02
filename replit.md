@@ -1,30 +1,7 @@
 # Dilemme Plastique - Educational Web App
 
-## Project Overview
-A desktop-only French educational web app integrating Flowise chatbot "Peter" for plastic pollution education. Features in-app Gumlet video player and webview navigation for links clicked within the chat conversation.
-
-## Architecture
-- Frontend: React with TypeScript using Wouter for routing
-- Backend: Express.js with in-memory storage
-- Chat: Flowise chatbot integration with custom embedding
-- Video: Gumlet video player for media playback
-- Navigation: In-app webview for external links
-
-## Key Features
-1. **Split-Screen Interface**: Chat interface (1/3 width) with media panel (2/3 width)
-2. **Homepage with Peter Chat**: Flowise chatbot integration for educational conversations
-3. **À propos Page**: Static information about the app and learning objectives
-4. **Gumlet Video Player**: Integrated video player for educational content in dedicated panel
-5. **In-App Webview**: External links open within the app in dedicated article panel
-6. **Desktop-Only**: Optimized for classroom desktop/laptop use
-7. **French Language**: All content and UI in French
-
-## Technical Requirements
-- Desktop viewport minimum 1024px width
-- No user authentication or accounts
-- Anonymous usage with basic analytics
-- WCAG 2.1 AA accessibility compliance
-- CORS handling for Flowise API calls
+## Overview
+Dilemme Plastique is a desktop-only French educational web application designed to educate students (10-18 years) and teachers about plastic pollution. It integrates an AI chatbot named "Peter" (powered by Flowise) and features a Gumlet video player and an in-app webview for navigating external links, all within a split-screen interface. The project aims to provide an engaging and informative experience, optimized for classroom use, with a typical session duration of 20-30 minutes. The application has no user authentication or accounts, focusing on anonymous usage with basic analytics.
 
 ## User Preferences
 - Language: French for all user-facing content
@@ -32,107 +9,44 @@ A desktop-only French educational web app integrating Flowise chatbot "Peter" fo
 - Session duration: 20-30 minutes typical usage
 - No audio components in first version (text-only conversations)
 
-## Current State (Feb 2026)
-The application is published and functional with the following complete features:
+## System Architecture
+The application features a split-screen interface with a chat panel (1/3 width) and a media/article panel (2/3 width). It is optimized for desktop viewports (minimum 1024px width). The UI is designed with a consistent teal color (#14B8A7) and aims for WCAG 2.1 AA accessibility compliance.
 
-### Core Features
-- **Split-screen layout**: Chat (1/3) + Media panel (2/3) always visible
-- **Flowise chatbot "Peter"**: SSE streaming with ~500ms first-token latency
-- **Three-layer JSON protection**: Client accumulation → Server extraction → Hook rendering (zero raw JSON displayed)
-- **Gumlet video player**: HLS streaming for educational videos in media panel
-- **YouTube integration**: Clean embed player without distracting overlays
-- **In-app webview**: External links open within the app
-- **Message types**: Information (thumbs up), open questions, choices, links (bold formatting)
-- **Rectify Analytics**: Session recording and behavior tracking
-- **Visual consistency**: Unified teal color (#14B8A7) throughout UI
+**Frontend:**
+- Built with React and TypeScript, utilizing Wouter for routing and shadcn/ui components for a consistent design.
+- Tailwind CSS is used for styling.
+- Features a welcome screen and an identity form for capturing user names before starting a chat session.
+- Handles Flowise chatbot streaming responses, including a three-layer JSON protection mechanism to prevent raw JSON from reaching the UI.
+- Implements French-aware sentence splitting and a sequential queue for TTS streaming, allowing for prefetching of sentences.
+- Markdown titles are detected and styled, and links are made clickable, routing to either video playback or the in-app webview.
+- TTS functionality removes URLs and markdown formatting to ensure natural speech.
 
-### Video Onboarding
-- Single intro video (16/9): ID `69577dbaf3928b38fc32c32b`
-- Flow: Welcome screen → "Démarrer l'aventure" → Video → Chat
-- GumletPlayer for HLS streaming support
-- Skip button available during playback
+**Backend:**
+- An Express.js server acts as an API proxy and handles persistence.
+- Provides endpoints for Flowise chatbot predictions, TTS, and STT services.
+- Implements a multi-provider architecture for TTS/STT, configurable via environment variables, with ElevenLabs and OpenAI as primary providers.
+- Includes a TTS cache (LRU memory-based) to improve performance.
+- Features a debug console (`/debug`) for diagnosing service health, latency, and traces of Flowise and TTS requests.
+- Implements Flowise keep-alive and HTTP keep-alive for performance optimization.
+- Stores conversation sessions and messages in a PostgreSQL database using Drizzle ORM.
 
-### SSE Streaming Architecture
-- Endpoint: `/api/flowise/prediction/:chatflowId/stream`
-- Flowise SSE format: `data: {"event":"token","data":"text"}` (JSON payload in data line)
-- Three-layer architecture prevents raw JSON from ever reaching the UI
-- Chatflow: `1a7e3c86-6cbd-4fcf-ac01-bbf8b59a5bd9`
-- Chatflow must use streaming-compatible LLM (OpenAI, Anthropic, etc.)
+**Core Features:**
+- **Split-Screen Interface**: Chat (1/3) + Media panel (2/3) always visible.
+- **Flowise Chatbot "Peter"**: Integrated for educational conversations with SSE streaming and optimized first-token latency.
+- **Gumlet Video Player**: Integrated for HLS streaming of educational videos.
+- **In-App Webview**: External links clicked within the chat open in a dedicated article panel.
+- **Message Types**: Supports information messages, open questions, choices, and bold-formatted links.
+- **Desktop-Only**: Optimized for classroom desktop/laptop use.
+- **French Language**: All content and UI are in French.
 
-### Performance
-- Response time: 3-5s (down from 7-12s)
-- First token latency: ~500ms
-- Payload optimized: sourceDocuments disabled, conditional media extraction
-
-## Development Guidelines
-Following fullstack_js blueprint with:
-- React frontend with shadcn/ui components
-- Express backend for API proxying
-- In-memory storage (no database needed)
-- Tailwind CSS for styling
-- TypeScript for type safety
-
-### STORY DOCUMENTATION RULE
-**After completing any feature (major or minor), update STORY.md following its internal structure:**
-- **Major features** (new capability, significant UI change, integration): Add full entry in "Feature Chronicle" + trigger a "Pulse Check" question
-- **Minor features** (bug fixes, tweaks, small improvements): Add brief entry in "Feature Chronicle"
-- **On errors/pivots**: Document immediately in "Pivots & Breakages" section
-- **Every 3-5 features**: Ask the creator one "Pulse Check" question about their current state
-- **Update** "Last Updated" date at top of STORY.md after each entry
-
-## Providers vocaux (TTS / STT)
-
-Architecture multi-providers pour la voix de Peter, configurable via variables d'environnement.
-
-- **Choix de production figé (mai 2026)** : `TTS_PROVIDER=elevenlabs` et `STT_PROVIDER=elevenlabs` (Scribe). Évaluation comparative complète et résultats bruts dans `docs/voice-providers-eval.md` (Scribe a 3× moins d'erreurs que Whisper sur notre corpus FR ; ElevenLabs TTS est 1,5× plus rapide qu'OpenAI et plus naturel sur la cible 10–18 ans).
-- **TTS** (lecture des messages) : `TTS_PROVIDER=elevenlabs|openai|none`. En dev, auto-détection (ElevenLabs si `ELEVENLABS_API_KEY` + `ELEVENLABS_VOICE_ID` présents, sinon OpenAI, sinon `none` = bouton lecture désactivé).
-- **STT** (transcription du micro) : `STT_PROVIDER=openai|elevenlabs|deepgram` (défaut `openai`/Whisper en dev, `elevenlabs`/Scribe en prod).
-- **Endpoints** : `POST /api/tts` (`{ text, voiceId? }` → audio MP3), `POST /api/transcribe` (multipart `audio` → `{ text, language }`, signature inchangée), `GET /api/providers` (introspection).
-- **Endpoints dev-only** : `POST /api/_bench/tts` et `POST /api/_bench/transcribe` permettent d'override le provider par requête (utilisés par `scripts/voice-bench.ts`). Désactivés en production sauf `ALLOW_VOICE_BENCH=1`.
-- **Bench reproductible** : `npx tsx scripts/voice-bench.ts` (serveur dev doit tourner) → `scripts/voice-bench-results.json`. Mesure WER, CER, latence et coût pour tous les providers disponibles.
-- **Ajouter un provider** en 3 étapes : 1) créer `server/providers/tts/<name>.ts` (ou `/stt/`) implémentant `ITTSProvider` / `ISTTProvider`, 2) l'enregistrer dans `REGISTRY` du `index.ts` correspondant, 3) ajouter le nom au type union. Les clients sont instanciés paresseusement (pas de warnings au boot).
-- **Secrets requis** : `OPENAI_API_KEY` (existant), `ELEVENLABS_API_KEY` + `ELEVENLABS_VOICE_ID` (TTS ElevenLabs / STT Scribe), `DEEPGRAM_API_KEY` (optionnel, pour Deepgram Nova-3 — non testé empiriquement, voir doc d'évaluation).
-- **UX (mai 2026, simplifié)** : autoplay activé par défaut (Peter dit toutes ses réponses, à commencer par le message de bienvenue lu dès l'arrivée). Un bouton mute/unmute global sur chaque bulle Peter (`data-testid="button-mute-toggle-${id}"`, icônes `Volume2` ↔ `VolumeX`) bascule l'état pour toute la conversation ; mute coupe la lecture en cours, unmute n'est pas rétroactif. État persisté dans `localStorage:tts-muted`. Plus de sélecteur de voix ni de toggle "Lecture auto" dans l'en-tête — Peter utilise toujours sa voix par défaut côté provider (`ELEVENLABS_VOICE_ID`).
-- **Endpoints voix conservés mais non utilisés par le front** : `GET /api/tts/voices` reste exposé (utile pour outillage / debug), interface `ITTSProvider` garde `listVoices()` / `getDefaultVoiceId()` optionnels. `POST /api/tts` accepte toujours `voiceId` optionnel ; quand absent, le provider utilise sa voix par défaut.
-- **Cache TTS** : `server/providers/tts/cache.ts` — LRU mémoire (clé SHA-256 sur `provider + voiceId + text`, 100 entrées par défaut, override via `TTS_CACHE_MAX_ENTRIES`). Auto-invalidation totale dès que `TTS_PROVIDER` ou `ELEVENLABS_VOICE_ID` changent. En-têtes de réponse `X-TTS-Cache: hit|miss` pour observabilité (~40 ms sur hit vs ~1.1 s sur miss).
-
-## Console debug (mai 2026)
-
-Tableau de bord interne pour diagnostiquer rapidement les problèmes (services down, latences anormales, cache TTS froid). Données 100 % en mémoire, perdues au redémarrage.
-
-- **Accès** : `/debug` direct, ou ajouter `?debug` (ou `?debug=1`) à n'importe quelle URL — un redirect dans `client/src/App.tsx` (`DebugQueryRedirect`) navigue vers `/debug`. La route est volontairement hors `DesktopValidator` pour rester utilisable même sur mobile / quand l'app principale est cassée. Pas d'auth (panneau interne, ne révèle aucun secret, juste des métriques agrégées).
-- **Endpoints** :
-  - `GET /api/debug/health` — sondes parallèles : Flowise (HEAD via `flowiseFetch` avec timeout 3s, vert <600ms / orange <1500ms / rouge), ElevenLabs (`GET /v1/voices`, vert <800ms), OpenAI + Deepgram (présence de clé seulement, pas de ping pour ne pas consommer de quota), TTS/STT actif. Retourne aussi `warmer` (état du keep-alive Flowise + dernier ping) et `cache` (taille + hits/misses + signature).
-  - `GET /api/debug/traces` — buffer mémoire des 50 dernières requêtes Flowise + 200 derniers appels TTS, du plus récent au plus ancien.
-- **Buffer** : `server/debug-traces.ts` — circulaire, push depuis `server/routes.ts` à la fin de chaque appel SSE Flowise (capture `connectMs`, `ttftMs`, `totalMs`, `tokens`, `nodes`, `tools`, `unknownEvents`, `status`) et de chaque appel `/api/tts` (capture `chars`, `durationMs`, `cacheHit`, `provider`, `status`).
-- **Visualisation** : barres horizontales empilées par session Flowise (composant `client/src/components/debug/LatencyBar.tsx`), 3 phases colorées : Connect (sky), Pré-TTFT (violet), Stream (emerald). Marqueur en pointillés rose pour la cible 8 s. Tooltips au survol de chaque segment avec explication + suggestion de remédiation si la phase dépasse un seuil (ex : Pré-TTFT >5 s → "vérifier le rapport docs/flowise-chatflow-audit-report.md").
-- **Auto-refresh** : 5 s pour `/api/debug/health`, 3 s pour `/api/debug/traces`, toggle on/off + bouton manuel.
-- **Tooltips solutions** (composant `ServiceStatusCard`) : chaque service en `orange`/`rouge` expose un bouton "Solution possible" qui révèle le `suggestion` retourné par `server/debug-health.ts`. Bandeau d'alerte critique en haut quand ≥1 service est `red`.
-- **Compteurs cache TTS** : `LRUTTSCache.stats()` (hits/misses/size/signature) ajoutés dans `server/providers/tts/cache.ts`. Le `getFlowiseWarmerStats()` exposé dans `server/flowise-warmer.ts` donne le décompte cumulé (vs le rolling 5 min des logs).
-
-## Optimisations latence (mai 2026)
-
-Mesure de départ : ~30s entre l'envoi du message et la fin de la lecture vocale (TTFT Flowise = 12 420 ms, TTS welcome = 9 451 ms). Cible : 1ère phrase audible <8s.
-
-- **Audit chatflow** : `npx tsx scripts/flowise-chatflow-audit.ts` → `docs/flowise-chatflow-audit-report.md`. Heuristiques sur le flowData (nœuds RAG/LLM/tools, plus long chemin séquentiel). À rejouer dès qu'on touche au chatflow Flowise.
-- **Keep-alive Flowise** (`server/flowise-warmer.ts`) : ping HEAD toutes les 30s au boot du serveur, summary toutes les 5 min. Désactivable via `FLOWISE_KEEPALIVE=0`.
-- **HTTP keep-alive** (`server/flowise-fetch.ts`) : Agent undici (`keepAliveTimeout=60s`) partagé entre warmer et SSE proxy. Élimine TLS handshake répété, expose `connectMs` dans les logs.
-- **Pré-warm TTS** (`server/providers/tts/prewarm.ts` + appel dans `server/index.ts`) : synthétise le `PETER_WELCOME_MESSAGE` au boot et le pousse dans `ttsCache`. Désactivable via `TTS_PREWARM=0`. Texte centralisé dans `shared/welcome-message.ts` (importé par client et serveur).
-- **Indicateurs d'étape** (`server/flowise-progress-labels.ts`) : mapping events Flowise → labels FR ("Peter cherche dans ses sources…", "Peter consulte ses outils…"). Le serveur forwarde un event SSE `progress` ; le client l'affiche dans la bulle de pensée via `data-testid="thinking-label-${id}"`.
-- **TTS streaming par phrase** (`client/src/lib/sentence-split.ts` + `client/src/hooks/use-tts-queue.ts`) : splitter FR-aware (préserve M., Mme., décimales) extrait chaque phrase complète du flux Flowise. Queue séquentielle qui prefetch la phrase N+1 pendant la lecture de N. Mute stop instantané + abort fetches en vol.
-- **Logs SSE refactorés** (`server/routes.ts`) : 1 ligne au start (`[Flowise] start chatId=… q="…"`) + 1 ligne structurée à la fin (`[Flowise] end chatId=… ttft=…ms total=…ms connect=…ms tokens=… nodes=… tools=… unknownEvents=…`). Plus de `console.log("Unknown event")` répétés.
-- **À faire (T3, hors codebase)** : simplification du chatflow Flowise dans l'UI (15 nœuds dans le plus long chemin, 2 LLM calls). Voir `docs/flowise-chatflow-audit-report.md`.
-
-## Rendu des messages Peter (mai 2026)
-
-- **Titres markdown** (`##`, `###`, …) détectés et stylés dans `client/src/components/chat/ChatMessage.tsx` (fonction `renderMarkdown`). Les marqueurs `#` ne sont jamais affichés en brut. Côté TTS (`client/src/lib/tts-text.ts`, `plainifyForTTS`) ils sont également retirés pour que Peter ne lise pas "dièse dièse".
-- **Liens cliquables** : `getMessageType` détecte les liens markdown **en premier** ; le détecteur de listes utilise `/^\s*\*\s+/m` (début de ligne uniquement) pour éviter le faux positif sur le gras `**mot** texte`. Routage `onVideoClick` (YouTube, Vimeo, Gumlet, gumlet.tv) vs `onLinkClick` (autres).
-- **TTS sans URLs** : les liens markdown sont remplacés à voix haute par "vidéo à regarder dans le panneau" (préfixe 📹) ou "article à consulter dans le panneau". Les URLs nues sont aussi remplacées.
-- **Proxy article** : `/api/proxy` ouvert à tout HTTPS public (SSRF toujours bloqué via `isPrivateIP`). Le whitelist `PROXY_ALLOWED_DOMAINS` est conservé en commentaire pour réactivation rapide. Permet à Peter de citer librement frontiersin, plos, rts, etc.
-
-## Integration Priorities
-1. Flowise chatbot API integration with proxy for security
-2. Gumlet video player for video URLs in chat
-3. In-app webview component for external links
-4. French localization throughout
-5. Desktop-responsive design
+## External Dependencies
+- **Flowise**: AI chatbot platform for "Peter" (integrated via API).
+- **PostgreSQL**: Database for persisting conversation sessions and messages (using Drizzle ORM).
+- **Gumlet**: Video player for HLS streaming of educational content.
+- **YouTube**: Integrated for playing video content without distracting overlays.
+- **Rectify**: Session recording and behavior tracking analytics.
+- **PostHog**: Product analytics for tracking events and user engagement.
+- **ElevenLabs**: TTS (Text-to-Speech) and STT (Speech-to-Text) provider.
+- **OpenAI**: TTS and STT provider.
+- **Deepgram**: Optional STT provider.
+- **Neon**: Serverless Postgres for database hosting.

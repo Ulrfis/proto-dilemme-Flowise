@@ -1,4 +1,5 @@
 import { AnalyticsEvent } from "@shared/schema";
+import { phCapture } from "./posthog";
 
 class Analytics {
   private sessionId: string;
@@ -9,6 +10,9 @@ class Analytics {
   }
 
   async track(event: string, data?: Record<string, any>) {
+    // Forward vers PostHog (no-op si non configuré)
+    phCapture(event, { sessionId: this.sessionId, ...(data || {}) });
+
     try {
       const analyticsEvent: AnalyticsEvent = {
         event,
@@ -42,6 +46,10 @@ class Analytics {
     this.track("message_sent", { length: messageLength });
   }
 
+  trackPeterReplied(messageLength: number, ttftMs?: number, totalMs?: number) {
+    this.track("peter_replied", { length: messageLength, ttftMs, totalMs });
+  }
+
   trackVideoOpened(videoUrl: string) {
     this.track("video_opened", { url: videoUrl });
   }
@@ -58,6 +66,14 @@ class Analytics {
 
   trackSessionComplete() {
     this.track("session_complete");
+  }
+
+  trackAdventureStarted(props?: Record<string, any>) {
+    this.track("aventure_demarree", props);
+  }
+
+  trackIdentityCaptured(props?: Record<string, any>) {
+    this.track("identity_captured", props);
   }
 }
 

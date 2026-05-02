@@ -9,6 +9,9 @@ import { useFlowise } from "../hooks/use-flowise";
 import { useMediaPanel } from "../hooks/use-media-panel";
 import { analytics } from "../lib/analytics";
 import { INTRO_VIDEO_URL } from "../../../shared/welcome-message";
+import { IdentityForm } from "../components/onboarding/IdentityForm";
+import { createConversationSession } from "../lib/conversation-session";
+import { phIdentify } from "../lib/posthog";
 
 interface InfoPanelData {
   theme?: string;
@@ -134,11 +137,25 @@ export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
     };
   }, []);
 
-  const handleStartAdventure = () => {
+  const handleStartAdventure = async (identity: { firstName: string; lastName: string }) => {
+    // Crée la session côté serveur AVANT d'ouvrir le chat. Si la création
+    // échoue (DB indisponible), on continue quand même : la conversation
+    // ne sera juste pas persistée — l'expérience utilisateur prime.
+    const sessionId = await createConversationSession(identity);
+    if (sessionId) {
+      phIdentify(sessionId, {
+        first_name: identity.firstName,
+        last_name: identity.lastName,
+      });
+      analytics.trackIdentityCaptured({ sessionId });
+    } else {
+      console.warn("[homepage] session non persistée (création échouée)");
+    }
+    analytics.trackAdventureStarted({ persisted: !!sessionId });
+
     setShowWelcome(false);
     setShowChat(true);
     initializeChat();
-    // Load intro video immediately in the panel
     showVideo(INTRO_VIDEO_URL, "Introduction — Dilemme Plastique", "Regarde cette vidéo pour démarrer l'aventure");
     analytics.trackPageView('chat_interface');
   };
@@ -203,14 +220,7 @@ export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
             </div>
 
             <div className="mb-8">
-              <Button
-                size="lg"
-                onClick={handleStartAdventure}
-                data-testid="button-start-chat"
-                className="bg-accent hover:bg-accent/80 text-accent-foreground font-semibold py-4 px-8 rounded-xl transition-all transform hover:scale-105 text-lg"
-              >
-                Démarrer l'aventure !
-              </Button>
+              <IdentityForm onSubmit={handleStartAdventure} />
               <p className="text-sm text-gray-500 mt-4">
                 Session d'apprentissage : 20-30 minutes
               </p>
