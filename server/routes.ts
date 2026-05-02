@@ -9,11 +9,16 @@ import {
   getAvailableTTSProviders,
 } from "./providers/tts";
 import { ttsCache } from "./providers/tts/cache";
+import { ElevenLabsTTSProvider } from "./providers/tts/elevenlabs";
+import { OpenAITTSProvider } from "./providers/tts/openai";
 import {
   getActiveSTTProvider,
   getActiveSTTProviderName,
   getAvailableSTTProviders,
 } from "./providers/stt";
+import { ElevenLabsSTTProvider } from "./providers/stt/elevenlabs";
+import { OpenAISTTProvider } from "./providers/stt/openai";
+import { DeepgramSTTProvider } from "./providers/stt/deepgram";
 
 // Allowed domains for the content proxy (prevents SSRF to internal networks)
 const PROXY_ALLOWED_DOMAINS = new Set([
@@ -253,6 +258,96 @@ export async function registerRoutes(app: Express): Promise<Server> {
         error: "Erreur lors de la récupération des voix",
         details: error instanceof Error ? error.message : String(error),
       });
+    }
+  });
+
+  // ────────────────────────────────────────────────────────────────────
+  // Bench endpoints (NOT for production traffic)
+  // Allow per-request provider override so the bench script can compare
+  // ElevenLabs / OpenAI / Deepgram on the same input. Disabled in
+  // production by checking NODE_ENV. Bypasses TTS cache.
+  // ────────────────────────────────────────────────────────────────────
+  const benchEnabled = () =>
+    process.env.NODE_ENV !== "production" || process.env.ALLOW_VOICE_BENCH === "1";
+
+  app.post("/api/_bench/tts", async (req, res) => {
+    if (!benchEnabled()) {
+      return res.status(404).json({ error: "Not found" });
+    }
+    try {
+      const { provider, text, voiceId } = req.body || {};
+      if (!text || typeof text !== "string") {
+        return res.status(400).json({ error: "text requis" });
+      }
+      let impl;
+      switch (provider) {
+        case "elevenlabs":
+          impl = new ElevenLabsTTSProvider();
+          break;
+        case "openai":
+          impl = new OpenAITTSProvider();
+          break;
+        default:
+          return res.status(400).json({ error: `provider inconnu: ${provider}` });
+      }
+      if (!impl.isAvailable()) {
+        return res.status(503).json({ error: `${provider} non disponible (clé manquante)` });
+      }
+      const result = await impl.synthesize({ text, voiceId });
+      res.setHeader("Content-Type", result.contentType);
+      res.setHeader("Content-Length", String(result.audio.length));
+      res.setHeader("X-Bench-Provider", provider);
+      res.send(result.audio);
+    } catch (e) {
+      console.error("[bench:tts] error:", e);
+      res.status(502).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
+  app.post("/api/_bench/transcribe", upload.single("audio"), async (req, res) => {
+    if (!benchEnabled()) {
+      return res.status(404).json({ error: "Not found" });
+    }
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "audio requis" });
+      }
+      const provider = (req.body?.provider || "").toString();
+      let impl;
+      switch (provider) {
+        case "openai":
+          impl = new OpenAISTTProvider();
+          break;
+        case "elevenlabs":
+          impl = new ElevenLabsSTTProvider();
+          break;
+        case "deepgram":
+          impl = new DeepgramSTTProvider();
+          break;
+        default:
+          await fs.unlink(req.file.path).catch(() => {});
+          return res.status(400).json({ error: `provider inconnu: ${provider}` });
+      }
+      if (!impl.isAvailable()) {
+        await fs.unlink(req.file.path).catch(() => {});
+        return res.status(503).json({ error: `${provider} non disponible (clé manquante)` });
+      }
+      const audioBuffer = await fs.readFile(req.file.path);
+      try {
+        const result = await impl.transcribe({
+          audio: audioBuffer,
+          filename: req.file.originalname || "audio.webm",
+          mimeType: req.file.mimetype,
+          language: "fr",
+        });
+        res.json({ text: result.text, language: result.language || "fr", provider });
+      } finally {
+        await fs.unlink(req.file.path).catch(() => {});
+      }
+    } catch (e) {
+      console.error("[bench:stt] error:", e);
+      if (req.file) await fs.unlink(req.file.path).catch(() => {});
+      res.status(502).json({ error: e instanceof Error ? e.message : String(e) });
     }
   });
 
