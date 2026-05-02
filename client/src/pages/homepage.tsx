@@ -28,8 +28,8 @@ export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
   const [showConfetti, setShowConfetti] = useState(false);
   const previousIndicesRef = useRef<number>(0);
   
-  // Get Flowise config from environment variables
-  const chatflowId = import.meta.env.VITE_FLOWISE_CHATFLOW_ID || import.meta.env.FLOWISE_CHATFLOW_ID;
+  // Get Flowise config from environment variables (VITE_ prefix required for frontend access)
+  const chatflowId = import.meta.env.VITE_FLOWISE_CHATFLOW_ID;
   
   // Callback to update info panel data from Flowise responses
   const handleInfoDataUpdate = (newData: InfoPanelData | null) => {
