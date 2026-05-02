@@ -45,6 +45,10 @@ integrations = ["javascript_openai:1.0.0"]
 
 [userenv.shared]
 
+[userenv.production]
+TTS_PROVIDER = "elevenlabs"
+STT_PROVIDER = "elevenlabs"
+
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 20000

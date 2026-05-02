@@ -1,0 +1,664 @@
+{
+  "runAt": "2026-05-02T17:19:48.181Z",
+  "base": "http://localhost:5000",
+  "samples": [
+    {
+      "id": "s1-greeting",
+      "label": "Salut court",
+      "text": "Salut Peter ! Comment vas-tu aujourd'hui ?"
+    },
+    {
+      "id": "s2-question-courte",
+      "label": "Question courte",
+      "text": "Pourquoi le plastique est-il un problème pour les océans ?"
+    },
+    {
+      "id": "s3-reponse-info",
+      "label": "Réponse type information",
+      "text": "Chaque année, environ huit millions de tonnes de plastique finissent dans les mers du monde, soit l'équivalent d'un camion-benne déversé chaque minute."
+    },
+    {
+      "id": "s4-question-ouverte",
+      "label": "Question ouverte (pédagogique)",
+      "text": "À ton avis, quelles habitudes du quotidien pourrais-tu changer pour réduire ta consommation de plastique à usage unique ?"
+    },
+    {
+      "id": "s5-acronymes",
+      "label": "Acronymes et chiffres",
+      "text": "Le PET, le PEHD et le PVC se recyclent différemment ; un sac plastique met entre 100 et 1000 ans à se dégrader."
+    },
+    {
+      "id": "s6-noms-propres",
+      "label": "Noms propres et lieux",
+      "text": "Le 7e continent de plastique, situé entre Hawaï et la Californie, fait environ trois fois la taille de la France."
+    },
+    {
+      "id": "s7-eleve-bafouille",
+      "label": "Phrase d'élève hésitant",
+      "text": "Euh… je pense que… enfin, je crois que recycler c'est bien, mais ça suffit pas vraiment non ?"
+    },
+    {
+      "id": "s8-message-long",
+      "label": "Message long (Peter expliquant)",
+      "text": "Lorsque le plastique se retrouve dans l'océan, il se fragmente sous l'effet du soleil et des vagues en minuscules morceaux appelés microplastiques. Ces particules sont ingérées par le plancton, puis par les poissons, et remontent toute la chaîne alimentaire jusqu'à notre assiette. C'est pour cela que la solution doit commencer en amont, par la réduction à la source."
+    }
+  ],
+  "tts": {
+    "results": [
+      {
+        "caseId": "s1-greeting",
+        "provider": "elevenlabs",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 902,
+        "bytes": 33062,
+        "bytesPerChar": 787.1904761904761
+      },
+      {
+        "caseId": "s1-greeting",
+        "provider": "openai",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 1346,
+        "bytes": 47040,
+        "bytesPerChar": 1120
+      },
+      {
+        "caseId": "s2-question-courte",
+        "provider": "elevenlabs",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 971,
+        "bytes": 46437,
+        "bytesPerChar": 800.6379310344828
+      },
+      {
+        "caseId": "s2-question-courte",
+        "provider": "openai",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 1792,
+        "bytes": 74400,
+        "bytesPerChar": 1282.7586206896551
+      },
+      {
+        "caseId": "s3-reponse-info",
+        "provider": "elevenlabs",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 1421,
+        "bytes": 125849,
+        "bytesPerChar": 833.4370860927153
+      },
+      {
+        "caseId": "s3-reponse-info",
+        "provider": "openai",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 3113,
+        "bytes": 192480,
+        "bytesPerChar": 1274.7019867549668
+      },
+      {
+        "caseId": "s4-question-ouverte",
+        "provider": "elevenlabs",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 1322,
+        "bytes": 115400,
+        "bytesPerChar": 953.7190082644628
+      },
+      {
+        "caseId": "s4-question-ouverte",
+        "provider": "openai",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 2154,
+        "bytes": 154560,
+        "bytesPerChar": 1277.3553719008264
+      },
+      {
+        "caseId": "s5-acronymes",
+        "provider": "elevenlabs",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 1347,
+        "bytes": 126685,
+        "bytesPerChar": 1141.3063063063064
+      },
+      {
+        "caseId": "s5-acronymes",
+        "provider": "openai",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 2121,
+        "bytes": 167040,
+        "bytesPerChar": 1504.8648648648648
+      },
+      {
+        "caseId": "s6-noms-propres",
+        "provider": "elevenlabs",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 1254,
+        "bytes": 104951,
+        "bytesPerChar": 928.7699115044247
+      },
+      {
+        "caseId": "s6-noms-propres",
+        "provider": "openai",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 1702,
+        "bytes": 144960,
+        "bytesPerChar": 1282.8318584070796
+      },
+      {
+        "caseId": "s7-eleve-bafouille",
+        "provider": "elevenlabs",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 1182,
+        "bytes": 83635,
+        "bytesPerChar": 899.3010752688172
+      },
+      {
+        "caseId": "s7-eleve-bafouille",
+        "provider": "openai",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 1679,
+        "bytes": 113280,
+        "bytesPerChar": 1218.0645161290322
+      },
+      {
+        "caseId": "s8-message-long",
+        "provider": "elevenlabs",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 3660,
+        "bytes": 336919,
+        "bytesPerChar": 915.5407608695652
+      },
+      {
+        "caseId": "s8-message-long",
+        "provider": "openai",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 5078,
+        "bytes": 464640,
+        "bytesPerChar": 1262.608695652174
+      }
+    ],
+    "summary": [
+      {
+        "provider": "elevenlabs",
+        "samples": 8,
+        "avgLatencyMs": 1507,
+        "p95LatencyMs": 3660,
+        "avgBytes": 121617,
+        "bytesPerChar": 907.49,
+        "costPer1KCharsUSD": 0.22,
+        "estimatedCostPerMessageUSD": 0.02907
+      },
+      {
+        "provider": "openai",
+        "samples": 8,
+        "avgLatencyMs": 2373,
+        "p95LatencyMs": 5078,
+        "avgBytes": 169800,
+        "bytesPerChar": 1277.9,
+        "costPer1KCharsUSD": 0.015,
+        "estimatedCostPerMessageUSD": 0.00198
+      }
+    ]
+  },
+  "stt": {
+    "results": [
+      {
+        "caseId": "s1-greeting",
+        "provider": "openai",
+        "refSource": "elevenlabs",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 521,
+        "expected": "Salut Peter ! Comment vas-tu aujourd'hui ?",
+        "transcript": "Salut Peter, comment vas-tu aujourd'hui ?",
+        "wer": 0,
+        "cer": 0
+      },
+      {
+        "caseId": "s1-greeting",
+        "provider": "elevenlabs",
+        "refSource": "elevenlabs",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 816,
+        "expected": "Salut Peter ! Comment vas-tu aujourd'hui ?",
+        "transcript": "Salut Peter, comment vas-tu aujourd'hui ?",
+        "wer": 0,
+        "cer": 0
+      },
+      {
+        "caseId": "s1-greeting",
+        "provider": "openai",
+        "refSource": "openai",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 619,
+        "expected": "Salut Peter ! Comment vas-tu aujourd'hui ?",
+        "transcript": "Salut Peter, comment vas-tu aujourd'hui?",
+        "wer": 0,
+        "cer": 0
+      },
+      {
+        "caseId": "s1-greeting",
+        "provider": "elevenlabs",
+        "refSource": "openai",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 515,
+        "expected": "Salut Peter ! Comment vas-tu aujourd'hui ?",
+        "transcript": "Salut Peter, comment vas-tu aujourd'hui ?",
+        "wer": 0,
+        "cer": 0
+      },
+      {
+        "caseId": "s2-question-courte",
+        "provider": "openai",
+        "refSource": "elevenlabs",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 720,
+        "expected": "Pourquoi le plastique est-il un problème pour les océans ?",
+        "transcript": "Pourquoi le plastique est-il un problème pour les océans ?",
+        "wer": 0,
+        "cer": 0
+      },
+      {
+        "caseId": "s2-question-courte",
+        "provider": "elevenlabs",
+        "refSource": "elevenlabs",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 695,
+        "expected": "Pourquoi le plastique est-il un problème pour les océans ?",
+        "transcript": "Pourquoi le plastique est-il un problème pour les océans ?",
+        "wer": 0,
+        "cer": 0
+      },
+      {
+        "caseId": "s2-question-courte",
+        "provider": "openai",
+        "refSource": "openai",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 967,
+        "expected": "Pourquoi le plastique est-il un problème pour les océans ?",
+        "transcript": "Pourquoi le plastique est-il un problème pour les océans?",
+        "wer": 0,
+        "cer": 0
+      },
+      {
+        "caseId": "s2-question-courte",
+        "provider": "elevenlabs",
+        "refSource": "openai",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 624,
+        "expected": "Pourquoi le plastique est-il un problème pour les océans ?",
+        "transcript": "Pourquoi le plastique est-il un problème pour les océans ?",
+        "wer": 0,
+        "cer": 0
+      },
+      {
+        "caseId": "s3-reponse-info",
+        "provider": "openai",
+        "refSource": "elevenlabs",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 1254,
+        "expected": "Chaque année, environ huit millions de tonnes de plastique finissent dans les mers du monde, soit l'équivalent d'un camion-benne déversé chaque minute.",
+        "transcript": "Chaque année, environ 8 millions de tonnes de plastique finissent dans les mers du monde, soit l'équivalent d'un camion benne déversé chaque minute.",
+        "wer": 0.04,
+        "cer": 0.03225806451612903
+      },
+      {
+        "caseId": "s3-reponse-info",
+        "provider": "elevenlabs",
+        "refSource": "elevenlabs",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 1379,
+        "expected": "Chaque année, environ huit millions de tonnes de plastique finissent dans les mers du monde, soit l'équivalent d'un camion-benne déversé chaque minute.",
+        "transcript": "Chaque année, environ huit millions de tonnes de plastique finissent dans les mers du monde, soit l'équivalent d'un camion-benne déversé chaque minute.",
+        "wer": 0,
+        "cer": 0
+      },
+      {
+        "caseId": "s3-reponse-info",
+        "provider": "openai",
+        "refSource": "openai",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 774,
+        "expected": "Chaque année, environ huit millions de tonnes de plastique finissent dans les mers du monde, soit l'équivalent d'un camion-benne déversé chaque minute.",
+        "transcript": "Chaque année, environ 8 millions de tonnes de plastique finissent dans les mers du monde, soit l'équivalent d'un camion-benne déversé chaque minute.",
+        "wer": 0.04,
+        "cer": 0.03225806451612903
+      },
+      {
+        "caseId": "s3-reponse-info",
+        "provider": "elevenlabs",
+        "refSource": "openai",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 1435,
+        "expected": "Chaque année, environ huit millions de tonnes de plastique finissent dans les mers du monde, soit l'équivalent d'un camion-benne déversé chaque minute.",
+        "transcript": "Chaque année, environ huit millions de tonnes de plastique finissent dans les mers du monde, soit l'équivalent d'un camion-benne déversé chaque minute.",
+        "wer": 0,
+        "cer": 0
+      },
+      {
+        "caseId": "s4-question-ouverte",
+        "provider": "openai",
+        "refSource": "elevenlabs",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 614,
+        "expected": "À ton avis, quelles habitudes du quotidien pourrais-tu changer pour réduire ta consommation de plastique à usage unique ?",
+        "transcript": "À ton avis, quelles habitudes du quotidien pourrais-tu changer pour réduire ta consommation de plastique à usage unique ?",
+        "wer": 0,
+        "cer": 0
+      },
+      {
+        "caseId": "s4-question-ouverte",
+        "provider": "elevenlabs",
+        "refSource": "elevenlabs",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 1042,
+        "expected": "À ton avis, quelles habitudes du quotidien pourrais-tu changer pour réduire ta consommation de plastique à usage unique ?",
+        "transcript": "À ton avis, quelles habitudes du quotidien pourrais-tu changer pour réduire ta consommation de plastique à usage unique ?",
+        "wer": 0,
+        "cer": 0
+      },
+      {
+        "caseId": "s4-question-ouverte",
+        "provider": "openai",
+        "refSource": "openai",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 1850,
+        "expected": "À ton avis, quelles habitudes du quotidien pourrais-tu changer pour réduire ta consommation de plastique à usage unique ?",
+        "transcript": "À ton avis, quelles habitudes du quotidien pourrais-tu changer pour réduire ta consommation de plastique à usage unique?",
+        "wer": 0,
+        "cer": 0
+      },
+      {
+        "caseId": "s4-question-ouverte",
+        "provider": "elevenlabs",
+        "refSource": "openai",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 1509,
+        "expected": "À ton avis, quelles habitudes du quotidien pourrais-tu changer pour réduire ta consommation de plastique à usage unique ?",
+        "transcript": "À ton avis, quelles habitudes du quotidien pourrais-tu changer pour réduire ta consommation de plastique à usage unique ?",
+        "wer": 0,
+        "cer": 0
+      },
+      {
+        "caseId": "s5-acronymes",
+        "provider": "openai",
+        "refSource": "elevenlabs",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 1012,
+        "expected": "Le PET, le PEHD et le PVC se recyclent différemment ; un sac plastique met entre 100 et 1000 ans à se dégrader.",
+        "transcript": "Le PET, le PEHD et le PVC se recyclent différemment. Un sac plastique met entre 100 et 1000 ans à se dégrader.",
+        "wer": 0,
+        "cer": 0
+      },
+      {
+        "caseId": "s5-acronymes",
+        "provider": "elevenlabs",
+        "refSource": "elevenlabs",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 961,
+        "expected": "Le PET, le PEHD et le PVC se recyclent différemment ; un sac plastique met entre 100 et 1000 ans à se dégrader.",
+        "transcript": "Le PET, le PEHD et le PVC se recyclent différemment. Un sac plastique met entre cent et mille ans à se dégrader.",
+        "wer": 0.09090909090909091,
+        "cer": 0.10465116279069768
+      },
+      {
+        "caseId": "s5-acronymes",
+        "provider": "openai",
+        "refSource": "openai",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 1629,
+        "expected": "Le PET, le PEHD et le PVC se recyclent différemment ; un sac plastique met entre 100 et 1000 ans à se dégrader.",
+        "transcript": "Le PEH, le PEHD et le PVC se recyclent différemment. Un sac plastique met entre 100 et 1 000 ans à se dégrader.",
+        "wer": 0.13636363636363635,
+        "cer": 0.011627906976744186
+      },
+      {
+        "caseId": "s5-acronymes",
+        "provider": "elevenlabs",
+        "refSource": "openai",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 1431,
+        "expected": "Le PET, le PEHD et le PVC se recyclent différemment ; un sac plastique met entre 100 et 1000 ans à se dégrader.",
+        "transcript": "Le PET, le PEHD et le PVC se recyclent différemment. Un sac plastique met entre cent et mille ans à se dégrader.",
+        "wer": 0.09090909090909091,
+        "cer": 0.10465116279069768
+      },
+      {
+        "caseId": "s6-noms-propres",
+        "provider": "openai",
+        "refSource": "elevenlabs",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 1578,
+        "expected": "Le 7e continent de plastique, situé entre Hawaï et la Californie, fait environ trois fois la taille de la France.",
+        "transcript": "Le septième continent de plastique, situé entre Hawaï et la Californie, fait environ trois fois la taille de la France.",
+        "wer": 0.05,
+        "cer": 0.07692307692307693
+      },
+      {
+        "caseId": "s6-noms-propres",
+        "provider": "elevenlabs",
+        "refSource": "elevenlabs",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 1073,
+        "expected": "Le 7e continent de plastique, situé entre Hawaï et la Californie, fait environ trois fois la taille de la France.",
+        "transcript": "Le septième continent de plastique situé entre Hawaï et la Californie fait environ trois fois la taille de la France.",
+        "wer": 0.05,
+        "cer": 0.07692307692307693
+      },
+      {
+        "caseId": "s6-noms-propres",
+        "provider": "openai",
+        "refSource": "openai",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 1247,
+        "expected": "Le 7e continent de plastique, situé entre Hawaï et la Californie, fait environ trois fois la taille de la France.",
+        "transcript": "Le septième continent de plastique, situé entre Hawaï et la Californie, fait environ trois fois la taille de la France.",
+        "wer": 0.05,
+        "cer": 0.07692307692307693
+      },
+      {
+        "caseId": "s6-noms-propres",
+        "provider": "elevenlabs",
+        "refSource": "openai",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 2130,
+        "expected": "Le 7e continent de plastique, situé entre Hawaï et la Californie, fait environ trois fois la taille de la France.",
+        "transcript": "Le septième continent de plastique situé entre Hawaï et la Californie fait environ trois fois la taille de la France.",
+        "wer": 0.05,
+        "cer": 0.07692307692307693
+      },
+      {
+        "caseId": "s7-eleve-bafouille",
+        "provider": "openai",
+        "refSource": "elevenlabs",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 1539,
+        "expected": "Euh… je pense que… enfin, je crois que recycler c'est bien, mais ça suffit pas vraiment non ?",
+        "transcript": "Je crois que recycler, c'est bien, mais ça ne suffit pas vraiment, non ?",
+        "wer": 0.3333333333333333,
+        "cer": 0.2857142857142857
+      },
+      {
+        "caseId": "s7-eleve-bafouille",
+        "provider": "elevenlabs",
+        "refSource": "elevenlabs",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 1123,
+        "expected": "Euh… je pense que… enfin, je crois que recycler c'est bien, mais ça suffit pas vraiment non ?",
+        "transcript": "Euh... Je pense que— enfin, je crois que recycler, c'est bien, mais ça suffit pas vraiment, non ?",
+        "wer": 0,
+        "cer": 0
+      },
+      {
+        "caseId": "s7-eleve-bafouille",
+        "provider": "openai",
+        "refSource": "openai",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 1902,
+        "expected": "Euh… je pense que… enfin, je crois que recycler c'est bien, mais ça suffit pas vraiment non ?",
+        "transcript": "Je crois que recycler, c'est bien, mais ça ne suffit pas vraiment, non?",
+        "wer": 0.3333333333333333,
+        "cer": 0.2857142857142857
+      },
+      {
+        "caseId": "s7-eleve-bafouille",
+        "provider": "elevenlabs",
+        "refSource": "openai",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 1292,
+        "expected": "Euh… je pense que… enfin, je crois que recycler c'est bien, mais ça suffit pas vraiment non ?",
+        "transcript": "Je pense que... Enfin, je crois que recycler, c'est bien, mais ça suffit pas vraiment, non ?",
+        "wer": 0.05555555555555555,
+        "cer": 0.04285714285714286
+      },
+      {
+        "caseId": "s8-message-long",
+        "provider": "openai",
+        "refSource": "elevenlabs",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 2955,
+        "expected": "Lorsque le plastique se retrouve dans l'océan, il se fragmente sous l'effet du soleil et des vagues en minuscules morceaux appelés microplastiques. Ces particules sont ingérées par le plancton, puis par les poissons, et remontent toute la chaîne alimentaire jusqu'à notre assiette. C'est pour cela que la solution doit commencer en amont, par la réduction à la source.",
+        "transcript": "Lorsque le plastique se retrouve dans l'océan, il se fragmente sous l'effet du soleil et dévague en minuscules morceaux appelés microplastiques. Ces particules sont ingérées par le plancton, puis par les poissons, et remontent toute la chaîne alimentaire jusqu'à notre assiette. C'est pour cela que la solution doit commencer en amont, par la réduction à la source.",
+        "wer": 0.03225806451612903,
+        "cer": 0.006666666666666667
+      },
+      {
+        "caseId": "s8-message-long",
+        "provider": "elevenlabs",
+        "refSource": "elevenlabs",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 2932,
+        "expected": "Lorsque le plastique se retrouve dans l'océan, il se fragmente sous l'effet du soleil et des vagues en minuscules morceaux appelés microplastiques. Ces particules sont ingérées par le plancton, puis par les poissons, et remontent toute la chaîne alimentaire jusqu'à notre assiette. C'est pour cela que la solution doit commencer en amont, par la réduction à la source.",
+        "transcript": "Lorsque le plastique se retrouve dans l'océan, il se fragmente sous l'effet du soleil et des vagues en minuscules morceaux appelés microplastiques. Ces particules sont ingérées par le plancton puis par les poissons et remontent toute la chaîne alimentaire jusqu'à notre assiette. C'est pour cela que la solution doit commencer en amont par la réduction à la source.",
+        "wer": 0,
+        "cer": 0
+      },
+      {
+        "caseId": "s8-message-long",
+        "provider": "openai",
+        "refSource": "openai",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 1971,
+        "expected": "Lorsque le plastique se retrouve dans l'océan, il se fragmente sous l'effet du soleil et des vagues en minuscules morceaux appelés microplastiques. Ces particules sont ingérées par le plancton, puis par les poissons, et remontent toute la chaîne alimentaire jusqu'à notre assiette. C'est pour cela que la solution doit commencer en amont, par la réduction à la source.",
+        "transcript": "Lorsque le plastique se retrouve dans l'océan, il se fragmente sous l'effet du soleil et des vagues en minuscules morceaux appelées microplastiques. Ces particules sont ingérées par le plancton, puis par les poissons et remontent toute la chaîne alimentaire jusqu'à notre assiette. C'est pour cela que la solution doit commencer en amont, par la réduction à la source.",
+        "wer": 0.016129032258064516,
+        "cer": 0.0033333333333333335
+      },
+      {
+        "caseId": "s8-message-long",
+        "provider": "elevenlabs",
+        "refSource": "openai",
+        "ok": true,
+        "status": 200,
+        "latencyMs": 2893,
+        "expected": "Lorsque le plastique se retrouve dans l'océan, il se fragmente sous l'effet du soleil et des vagues en minuscules morceaux appelés microplastiques. Ces particules sont ingérées par le plancton, puis par les poissons, et remontent toute la chaîne alimentaire jusqu'à notre assiette. C'est pour cela que la solution doit commencer en amont, par la réduction à la source.",
+        "transcript": "Lorsque le plastique se retrouve dans l'océan, il se fragmente sous l'effet du soleil et des vagues en minuscules morceaux appelés microplastiques. Ces particules sont ingérées par le plancton, puis par les poissons, et remontent toute la chaîne alimentaire jusqu'à notre assiette. C'est pour cela que la solution doit commencer en amont par la réduction à la source.",
+        "wer": 0,
+        "cer": 0
+      }
+    ],
+    "summary": [
+      {
+        "provider": "openai",
+        "refSource": "ALL",
+        "samples": 16,
+        "avgLatencyMs": 1322,
+        "p95LatencyMs": 2955,
+        "avgWerPct": 6.45,
+        "avgCerPct": 5.07,
+        "perfectTranscripts": 7,
+        "costPerMinUSD": 0.006
+      },
+      {
+        "provider": "openai",
+        "refSource": "elevenlabs",
+        "samples": 8,
+        "avgLatencyMs": 1274,
+        "avgWerPct": 5.69,
+        "avgCerPct": 5.02,
+        "perfectTranscripts": 4
+      },
+      {
+        "provider": "openai",
+        "refSource": "openai",
+        "samples": 8,
+        "avgLatencyMs": 1370,
+        "avgWerPct": 7.2,
+        "avgCerPct": 5.12,
+        "perfectTranscripts": 3
+      },
+      {
+        "provider": "elevenlabs",
+        "refSource": "ALL",
+        "samples": 16,
+        "avgLatencyMs": 1366,
+        "p95LatencyMs": 2932,
+        "avgWerPct": 2.11,
+        "avgCerPct": 2.54,
+        "perfectTranscripts": 11,
+        "costPerMinUSD": 0.0067
+      },
+      {
+        "provider": "elevenlabs",
+        "refSource": "openai",
+        "samples": 8,
+        "avgLatencyMs": 1479,
+        "avgWerPct": 2.46,
+        "avgCerPct": 2.81,
+        "perfectTranscripts": 5
+      },
+      {
+        "provider": "elevenlabs",
+        "refSource": "elevenlabs",
+        "samples": 8,
+        "avgLatencyMs": 1253,
+        "avgWerPct": 1.76,
+        "avgCerPct": 2.27,
+        "perfectTranscripts": 6
+      }
+    ]
+  }
+}
