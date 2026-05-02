@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Code, MessageSquare, Volume2, VolumeX } from "lucide-react";
+import { ThinkingIndicator } from "./ThinkingIndicator";
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -359,15 +360,11 @@ export function ChatMessage({
           )}
           
           {showThinking && (
-            <div
-              className="flex items-center space-x-2 mt-2 pt-2 border-t border-white/20"
-              data-testid={`thinking-${message.id}`}
-            >
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              <span className="text-xs opacity-80" data-testid={`thinking-label-${message.id}`}>
-                {progressLabel || "Peter réfléchit..."}
-              </span>
-            </div>
+            <ThinkingIndicator
+              progressLabel={progressLabel}
+              testId={`thinking-${message.id}`}
+              variant="teal"
+            />
           )}
           </div>{/* end px-4 py-3 */}
         </div>{/* end bubble */}
