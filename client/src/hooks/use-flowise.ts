@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { ChatMessage } from "../types/chat";
 import { FlowiseClient, extractMediaFromText, type FlowiseProgressLabel } from "../lib/flowise";
 import { analytics } from "../lib/analytics";
+import { recordMessage } from "../lib/conversation-session";
 import { PETER_WELCOME_MESSAGE, PETER_INTRO_MESSAGE } from "../../../shared/welcome-message";
 
 // Token batching configuration for smoother streaming
@@ -72,6 +73,7 @@ export function useFlowise(
     setIsLoading(true);
     setCurrentStepLabel("Peter prépare sa réponse…");
     setTimeout(() => analytics.trackMessageSent(content.length), 0);
+    void recordMessage("user", userMessage.content);
 
     const peterMessageId = `peter_${Date.now()}`;
     const peterMessage: ChatMessage = {
@@ -167,6 +169,20 @@ export function useFlowise(
 
           setIsLoading(false);
           setCurrentStepLabel(null);
+
+          // Persistance Postgres (best-effort) + analytics PostHog
+          if (cleanText && cleanText.trim()) {
+            void recordMessage("peter", cleanText);
+            setTimeout(
+              () =>
+                analytics.trackPeterReplied(
+                  cleanText.length,
+                  metadata?.firstTokenTime,
+                  metadata?.totalTime,
+                ),
+              0,
+            );
+          }
 
           // Analytics tracking
           if (videos.length > 0 || links.length > 0) {
@@ -281,6 +297,8 @@ export function useFlowise(
       };
       return [...prev, welcomeMessage];
     });
+    // Persiste le message de bienvenue (best-effort, ignore les doublons côté serveur)
+    void recordMessage("peter", PETER_WELCOME_MESSAGE);
   }, []);
 
   return {

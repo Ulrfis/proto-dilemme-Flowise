@@ -1,6 +1,11 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { analyticsEventSchema } from "@shared/schema";
+import {
+  analyticsEventSchema,
+  insertConversationSessionSchema,
+  insertConversationMessageSchema,
+} from "@shared/schema";
+import { storage } from "./storage";
 import multer from "multer";
 import fs from "fs/promises";
 import {
@@ -404,6 +409,92 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
   
+  // ────────────────────────────────────────────────────────────────────
+  // Persistance des conversations (Postgres via Drizzle)
+  // POST /api/sessions          → crée une session (firstName, lastName)
+  // POST /api/sessions/:id/messages → ajoute un message à la session
+  // GET  /api/admin/sessions    → liste (Bearer ADMIN_PASSWORD)
+  // GET  /api/admin/sessions/:id → détail + messages
+  // ────────────────────────────────────────────────────────────────────
+  const requireAdmin = (req: any, res: any): boolean => {
+    const adminPwd = process.env.ADMIN_PASSWORD;
+    if (!adminPwd) {
+      res.status(503).json({ error: "ADMIN_PASSWORD non configuré sur le serveur" });
+      return false;
+    }
+    const auth = req.headers["authorization"] || "";
+    const token = typeof auth === "string" && auth.startsWith("Bearer ")
+      ? auth.slice(7).trim()
+      : "";
+    if (token !== adminPwd) {
+      res.status(401).json({ error: "Mot de passe invalide" });
+      return false;
+    }
+    return true;
+  };
+
+  app.post("/api/sessions", async (req, res) => {
+    try {
+      const parsed = insertConversationSessionSchema.parse({
+        firstName: String(req.body?.firstName ?? "").trim().slice(0, 80),
+        lastName: String(req.body?.lastName ?? "").trim().slice(0, 80),
+      });
+      if (!parsed.firstName || !parsed.lastName) {
+        return res.status(400).json({ error: "firstName et lastName requis" });
+      }
+      const session = await storage.createConversationSession(parsed);
+      res.status(201).json({ id: session.id, createdAt: session.createdAt });
+    } catch (err) {
+      console.error("[sessions] create error", err);
+      res.status(400).json({ error: "Données invalides" });
+    }
+  });
+
+  app.post("/api/sessions/:id/messages", async (req, res) => {
+    try {
+      const sessionId = req.params.id;
+      const parsed = insertConversationMessageSchema.parse({
+        sessionId,
+        sender: req.body?.sender,
+        content: String(req.body?.content ?? "").slice(0, 20000),
+      });
+      if (!parsed.content.trim()) {
+        return res.status(400).json({ error: "content vide" });
+      }
+      const exists = await storage.getConversationSession(sessionId);
+      if (!exists) return res.status(404).json({ error: "session introuvable" });
+      const msg = await storage.appendConversationMessage(parsed);
+      res.status(201).json({ id: msg.id, createdAt: msg.createdAt });
+    } catch (err) {
+      console.error("[sessions] append message error", err);
+      res.status(400).json({ error: "Données invalides" });
+    }
+  });
+
+  app.get("/api/admin/sessions", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    try {
+      const sessions = await storage.listConversationSessions(500);
+      res.json({ sessions });
+    } catch (err) {
+      console.error("[admin] list error", err);
+      res.status(500).json({ error: "list failed" });
+    }
+  });
+
+  app.get("/api/admin/sessions/:id", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    try {
+      const session = await storage.getConversationSession(req.params.id);
+      if (!session) return res.status(404).json({ error: "session introuvable" });
+      const messages = await storage.listSessionMessages(session.id);
+      res.json({ session, messages });
+    } catch (err) {
+      console.error("[admin] detail error", err);
+      res.status(500).json({ error: "detail failed" });
+    }
+  });
+
   // Analytics endpoint for anonymous event tracking
   app.post("/api/analytics", async (req, res) => {
     try {

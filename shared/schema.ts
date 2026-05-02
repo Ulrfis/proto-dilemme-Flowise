@@ -1,6 +1,8 @@
 import { z } from "zod";
+import { pgTable, uuid, text, timestamp, index } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
 
-// Analytics event schema
+// ─── Analytics event (transitoire, envoyée au backend pour log) ─────────────
 export const analyticsEventSchema = z.object({
   event: z.string(),
   data: z.record(z.any()).optional(),
@@ -10,7 +12,7 @@ export const analyticsEventSchema = z.object({
 
 export type AnalyticsEvent = z.infer<typeof analyticsEventSchema>;
 
-// Chat message schema for local storage
+// ─── ChatMessage (rendu côté client uniquement) ─────────────────────────────
 export const chatMessageSchema = z.object({
   id: z.string(),
   content: z.string(),
@@ -26,7 +28,7 @@ export const chatMessageSchema = z.object({
 
 export type ChatMessage = z.infer<typeof chatMessageSchema>;
 
-// Flowise response schema
+// ─── Flowise raw response ───────────────────────────────────────────────────
 export const flowiseResponseSchema = z.object({
   id: z.string().optional(),
   text: z.string(),
@@ -35,3 +37,44 @@ export const flowiseResponseSchema = z.object({
 });
 
 export type FlowiseResponse = z.infer<typeof flowiseResponseSchema>;
+
+// ─── Persistance Postgres ───────────────────────────────────────────────────
+// Une session = un binôme prénom/nom + un fil de messages.
+// Volontairement simple : pas de updatedAt, pas de soft-delete.
+
+export const conversationSessions = pgTable("conversation_sessions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const conversationMessages = pgTable(
+  "conversation_messages",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    sessionId: uuid("session_id")
+      .references(() => conversationSessions.id, { onDelete: "cascade" })
+      .notNull(),
+    sender: text("sender", { enum: ["user", "peter"] }).notNull(),
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    bySession: index("conv_msg_session_idx").on(t.sessionId, t.createdAt),
+  }),
+);
+
+// Insert schemas (omit auto-generated fields)
+export const insertConversationSessionSchema = createInsertSchema(
+  conversationSessions,
+).omit({ id: true, createdAt: true });
+
+export const insertConversationMessageSchema = createInsertSchema(
+  conversationMessages,
+).omit({ id: true, createdAt: true });
+
+export type InsertConversationSession = z.infer<typeof insertConversationSessionSchema>;
+export type InsertConversationMessage = z.infer<typeof insertConversationMessageSchema>;
+export type ConversationSession = typeof conversationSessions.$inferSelect;
+export type ConversationMessage = typeof conversationMessages.$inferSelect;
