@@ -11,12 +11,86 @@ interface VideoPlayerProps {
 
 export function VideoPlayer({ video, onVideoEnded, onVideoPaused, onVideoPlay }: VideoPlayerProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const gumletPlayerRef = useRef<any>(null);
   const [playerType, setPlayerType] = useState<'youtube' | 'gumlet' | 'unknown'>('unknown');
   const [videoData, setVideoData] = useState<{
     embedUrl?: string;
     gumletVideoId?: string;
     youtubeVideoId?: string;
   }>({});
+
+  // Keep latest callbacks in refs so the polling loop never sees stale closures
+  const onEndedRef = useRef(onVideoEnded);
+  const onPausedRef = useRef(onVideoPaused);
+  const onPlayRef = useRef(onVideoPlay);
+  onEndedRef.current = onVideoEnded;
+  onPausedRef.current = onVideoPaused;
+  onPlayRef.current = onVideoPlay;
+
+  // ---- Gumlet state polling ------------------------------------------------
+  // The GumletPlayer's onPause/onEnded callbacks suffer from a stale-closure
+  // bug in the library: they only see props captured the first time the
+  // "ready" event fires. Instead we poll the imperative API every 500ms and
+  // detect transitions ourselves — this is rock-solid and never misses an
+  // event.
+  useEffect(() => {
+    if (playerType !== 'gumlet' || !videoData.gumletVideoId) return;
+
+    let cancelled = false;
+    let prevPaused: boolean | null = null;
+    let endFired = false;
+
+    const interval = setInterval(async () => {
+      const player = gumletPlayerRef.current;
+      if (!player || cancelled) return;
+
+      try {
+        const [paused, currentTime, duration] = await Promise.all([
+          player.getPaused?.(),
+          player.getCurrentTime?.(),
+          player.getDuration?.(),
+        ]);
+        if (cancelled) return;
+
+        // End-of-video: head reached (within 0.5s of) duration
+        if (
+          !endFired &&
+          typeof currentTime === 'number' &&
+          typeof duration === 'number' &&
+          duration > 0 &&
+          currentTime >= duration - 0.5
+        ) {
+          endFired = true;
+          console.log('[VideoPlayer] Polling: end reached', { currentTime, duration });
+          onEndedRef.current?.();
+          return;
+        }
+
+        // Pause/play transitions
+        if (typeof paused === 'boolean' && paused !== prevPaused) {
+          if (prevPaused === null) {
+            // First reading — just record it, don't fire (initial state may be paused)
+            prevPaused = paused;
+          } else if (paused) {
+            console.log('[VideoPlayer] Polling: paused');
+            prevPaused = paused;
+            onPausedRef.current?.();
+          } else {
+            console.log('[VideoPlayer] Polling: resumed');
+            prevPaused = paused;
+            onPlayRef.current?.();
+          }
+        }
+      } catch {
+        // Player not ready yet — silent retry next tick
+      }
+    }, 500);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [playerType, videoData.gumletVideoId]);
 
   useEffect(() => {
     if (video) {
@@ -117,6 +191,7 @@ export function VideoPlayer({ video, onVideoEnded, onVideoPaused, onVideoPlay }:
       // Use Gumlet React Player
       return (
         <GumletPlayer
+          ref={gumletPlayerRef}
           videoID={videoData.gumletVideoId}
           title={video?.title || "Vidéo éducative Gumlet"}
           style={{ 
