@@ -39,6 +39,12 @@ export function ChatMessage({
   const isStreaming = message.isStreaming || false;
   const [showRawJson, setShowRawJson] = useState(false);
 
+  // Suppress the empty bubble that appears before the first token arrives.
+  // The standalone ThinkingIndicator in ChatInterface handles this visual state.
+  if (isPeter && isStreaming && !message.content?.trim()) {
+    return null;
+  }
+
   const handleMediaClick = (url: string, type: 'video' | 'link') => {
     // Comprehensive URL cleaning
     let cleanUrl = url.replace(/[.,;:!?)\]}\s]+$/, '').trim();
