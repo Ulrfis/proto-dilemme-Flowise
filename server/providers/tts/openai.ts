@@ -1,5 +1,10 @@
 import OpenAI from "openai";
-import type { ITTSProvider, TTSSynthesisOptions, TTSSynthesisResult } from "./types";
+import type {
+  ITTSProvider,
+  TTSSynthesisOptions,
+  TTSSynthesisResult,
+  TTSVoice,
+} from "./types";
 
 type OpenAIVoice = "alloy" | "echo" | "fable" | "onyx" | "nova" | "shimmer";
 const SUPPORTED_VOICES: readonly OpenAIVoice[] = [
@@ -10,6 +15,14 @@ const SUPPORTED_VOICES: readonly OpenAIVoice[] = [
   "nova",
   "shimmer",
 ] as const;
+const VOICE_DESCRIPTIONS: Record<OpenAIVoice, string> = {
+  alloy: "Voix neutre et équilibrée",
+  echo: "Voix masculine douce",
+  fable: "Voix expressive et chaleureuse",
+  onyx: "Voix masculine profonde",
+  nova: "Voix féminine claire",
+  shimmer: "Voix féminine apaisante",
+};
 const DEFAULT_VOICE: OpenAIVoice = "alloy";
 const DEFAULT_MODEL = "tts-1";
 
@@ -37,6 +50,23 @@ export class OpenAITTSProvider implements ITTSProvider {
 
   isAvailable(): boolean {
     return Boolean(process.env.OPENAI_API_KEY);
+  }
+
+  getDefaultVoiceId(): string | undefined {
+    const raw = (process.env.OPENAI_TTS_VOICE || DEFAULT_VOICE).toLowerCase();
+    const match = SUPPORTED_VOICES.find((v) => v === raw);
+    return match || DEFAULT_VOICE;
+  }
+
+  async listVoices(): Promise<TTSVoice[]> {
+    const defaultId = this.getDefaultVoiceId();
+    return SUPPORTED_VOICES.map((voice) => ({
+      id: voice,
+      name: voice.charAt(0).toUpperCase() + voice.slice(1),
+      description: VOICE_DESCRIPTIONS[voice],
+      language: "multilingue",
+      isDefault: voice === defaultId,
+    }));
   }
 
   async synthesize({ text, voiceId }: TTSSynthesisOptions): Promise<TTSSynthesisResult> {

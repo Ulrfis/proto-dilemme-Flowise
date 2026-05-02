@@ -177,6 +177,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // List available voices for the active TTS provider.
+  // Returns: { provider: string, defaultVoiceId?: string, voices: TTSVoice[] }
+  app.get("/api/tts/voices", async (_req, res) => {
+    try {
+      const provider = getActiveTTSProvider();
+
+      if (provider.name === "none") {
+        return res.json({
+          provider: provider.name,
+          defaultVoiceId: undefined,
+          voices: [],
+        });
+      }
+
+      if (typeof provider.listVoices !== "function") {
+        return res.json({
+          provider: provider.name,
+          defaultVoiceId: provider.getDefaultVoiceId?.(),
+          voices: [],
+        });
+      }
+
+      try {
+        const voices = await provider.listVoices();
+        res.setHeader("Cache-Control", "private, max-age=60");
+        res.json({
+          provider: provider.name,
+          defaultVoiceId: provider.getDefaultVoiceId?.(),
+          voices,
+        });
+      } catch (providerError) {
+        console.error(`[TTS:${provider.name}] listVoices error:`, providerError);
+        res.status(502).json({
+          error: "Impossible de récupérer la liste des voix",
+          details:
+            providerError instanceof Error
+              ? providerError.message
+              : "Le service vocal a rencontré un problème",
+          provider: provider.name,
+        });
+      }
+    } catch (error) {
+      console.error("[TTS] Voices endpoint error:", error);
+      res.status(500).json({
+        error: "Erreur lors de la récupération des voix",
+        details: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
   // Introspection endpoint — returns active and available voice providers.
   app.get("/api/providers", (_req, res) => {
     res.json({

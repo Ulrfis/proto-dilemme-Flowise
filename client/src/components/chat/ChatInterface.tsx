@@ -5,7 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { PanelsRightBottom, Copy, Check, Volume2, VolumeX } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { PanelsRightBottom, Copy, Check, Volume2, VolumeX, Mic2 } from "lucide-react";
 import { ChatMessage as ChatMessageType } from "../../types/chat";
 import { cn } from "@/lib/utils";
 import { AvatarSelector } from "../avatar/AvatarSelector";
@@ -43,6 +50,7 @@ export function ChatInterface({
   const userAvatar = useUserAvatar();
 
   const TTS_AUTOPLAY_KEY = 'tts-autoplay';
+  const TTS_VOICE_KEY = 'tts-voice-id';
   const [autoplayTTS, setAutoplayTTS] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     try {
@@ -64,13 +72,16 @@ export function ChatInterface({
   // Detect TTS availability via /api/providers so we can hide controls when
   // the active provider is "none" (no key configured).
   const [ttsEnabled, setTtsEnabled] = useState<boolean>(true);
+  const [ttsProviderName, setTtsProviderName] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
     fetch('/api/providers')
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (cancelled || !data) return;
-        setTtsEnabled(data?.tts?.active && data.tts.active !== 'none');
+        const active = data?.tts?.active;
+        setTtsEnabled(typeof active === 'string' && active !== 'none');
+        setTtsProviderName(typeof active === 'string' ? active : null);
       })
       .catch(() => {
         // Network failure: keep enabled (button click will surface the error).
@@ -79,6 +90,71 @@ export function ChatInterface({
       cancelled = true;
     };
   }, []);
+
+  // Voice selector state — load persisted choice, fetch available voices.
+  type TTSVoice = {
+    id: string;
+    name: string;
+    description?: string;
+    language?: string;
+    isDefault?: boolean;
+  };
+  const [voices, setVoices] = useState<TTSVoice[]>([]);
+  const [defaultVoiceId, setDefaultVoiceId] = useState<string | null>(null);
+  const [voicesLoading, setVoicesLoading] = useState<boolean>(false);
+  const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      return window.localStorage.getItem(TTS_VOICE_KEY);
+    } catch {
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      if (selectedVoiceId) {
+        window.localStorage.setItem(TTS_VOICE_KEY, selectedVoiceId);
+      } else {
+        window.localStorage.removeItem(TTS_VOICE_KEY);
+      }
+    } catch {
+      // ignore
+    }
+  }, [selectedVoiceId]);
+
+  useEffect(() => {
+    if (!ttsEnabled) return;
+    let cancelled = false;
+    setVoicesLoading(true);
+    fetch('/api/tts/voices')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled || !data) return;
+        const list: TTSVoice[] = Array.isArray(data.voices) ? data.voices : [];
+        setVoices(list);
+        const defaultId =
+          typeof data.defaultVoiceId === 'string' ? data.defaultVoiceId : null;
+        setDefaultVoiceId(defaultId);
+        // If the persisted voice is no longer available, fall back to default.
+        setSelectedVoiceId((current) => {
+          if (current && list.some((v) => v.id === current)) {
+            return current;
+          }
+          return defaultId;
+        });
+      })
+      .catch((err) => {
+        console.warn('[ChatInterface] Failed to load TTS voices:', err);
+      })
+      .finally(() => {
+        if (!cancelled) setVoicesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [ttsEnabled, ttsProviderName]);
 
   // Single autoplay engine: triggers TTS exactly once per Peter message that
   // transitions from streaming → not-streaming (the "new response just
@@ -91,7 +167,7 @@ export function ChatInterface({
   ttsEnabledRef.current = ttsEnabled;
   const lastAnnouncedIdRef = useRef<string | null>(null);
   const previousMessagesRef = useRef<ChatMessageType[]>([]);
-  const autoplayTTS_engine = useTTS();
+  const autoplayTTS_engine = useTTS({ voiceId: selectedVoiceId });
 
   // Track the last Peter message id we've seen to detect new completed responses
   const firstMountRef = useRef(true);
@@ -242,6 +318,48 @@ export function ChatInterface({
               currentAvatarUrl={userAvatar.avatarUrl}
               onAvatarChange={userAvatar.updateAvatar}
             />
+            {ttsEnabled && voices.length > 0 && (
+              <div
+                className="flex items-center gap-1.5"
+                title="Choisir la voix utilisée pour Peter"
+              >
+                <Mic2 className="w-3.5 h-3.5 text-gray-500" />
+                <Select
+                  value={selectedVoiceId ?? defaultVoiceId ?? undefined}
+                  onValueChange={(value) => setSelectedVoiceId(value)}
+                  disabled={voicesLoading}
+                >
+                  <SelectTrigger
+                    className="h-7 px-2 text-xs w-[110px] sm:w-[150px]"
+                    data-testid="select-tts-voice"
+                    aria-label="Choisir la voix de Peter"
+                  >
+                    <SelectValue placeholder="Voix…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {voices.map((voice) => (
+                      <SelectItem
+                        key={voice.id}
+                        value={voice.id}
+                        data-testid={`option-voice-${voice.id}`}
+                      >
+                        <div className="flex flex-col">
+                          <span className="text-xs font-medium">
+                            {voice.name}
+                            {voice.id === defaultVoiceId ? ' (défaut)' : ''}
+                          </span>
+                          {voice.description && (
+                            <span className="text-[10px] text-gray-500">
+                              {voice.description}
+                            </span>
+                          )}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             {ttsEnabled && (
               <div
                 className="flex items-center gap-1.5"
@@ -294,6 +412,7 @@ export function ChatInterface({
               userName={userAvatar.name}
               showThinking={showThinking}
               ttsEnabled={ttsEnabled}
+              ttsVoiceId={selectedVoiceId ?? defaultVoiceId}
             />
           );
         })}

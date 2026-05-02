@@ -8,8 +8,18 @@ export interface TTSSynthesisResult {
   contentType: string;
 }
 
+export interface TTSVoice {
+  id: string;
+  name: string;
+  description?: string;
+  language?: string;
+  isDefault?: boolean;
+}
+
 export interface ITTSProvider {
   readonly name: string;
   isAvailable(): boolean;
   synthesize(options: TTSSynthesisOptions): Promise<TTSSynthesisResult>;
+  listVoices?(): Promise<TTSVoice[]>;
+  getDefaultVoiceId?(): string | undefined;
 }
