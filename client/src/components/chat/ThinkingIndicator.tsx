@@ -3,8 +3,10 @@ import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 interface ThinkingIndicatorProps {
-  /** Real progress label from Flowise SSE events. When provided, takes priority
-   *  over the rotating placeholder phrases. */
+  /** @deprecated Kept for backwards compatibility but no longer affects rendering.
+   *  Phrases ALWAYS rotate from the local bank (Claude-style UX). The server
+   *  progress label was making the indicator static, which is the opposite of
+   *  what we want. */
   progressLabel?: string | null;
   /** Test id. */
   testId?: string;
@@ -74,7 +76,7 @@ const PHRASES_BLAME_PLASTIC: readonly string[] = [
   "Peter cherche son stylo, mâché par un goéland",
 ] as const;
 
-const ROTATION_MS = 2400;
+const ROTATION_MS = 2000;
 const BLAME_THRESHOLD_MS = 12_000;
 const RECENT_MEMORY = 4;
 
@@ -85,7 +87,7 @@ function pickPhrase(bank: readonly string[], avoid: readonly string[]): string {
 }
 
 export function ThinkingIndicator({
-  progressLabel = null,
+  // progressLabel intentionally ignored — see prop docs.
   testId,
   variant = "standalone",
 }: ThinkingIndicatorProps) {
@@ -98,7 +100,6 @@ export function ThinkingIndicator({
   });
 
   useEffect(() => {
-    if (progressLabel) return;
     const id = setInterval(() => {
       const elapsed = Date.now() - startedAtRef.current;
       const useBlame = elapsed >= BLAME_THRESHOLD_MS && Math.random() < 0.75;
@@ -108,9 +109,9 @@ export function ThinkingIndicator({
       setText(next);
     }, ROTATION_MS);
     return () => clearInterval(id);
-  }, [progressLabel]);
+  }, []);
 
-  const display = progressLabel || text;
+  const display = text;
 
   const isStandalone = variant === "standalone";
 
