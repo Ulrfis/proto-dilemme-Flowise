@@ -147,7 +147,16 @@ export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
         first_name: identity.firstName,
         last_name: identity.lastName,
       });
-      analytics.trackIdentityCaptured({ sessionId });
+      analytics.trackIdentityCaptured({
+        sessionId,
+        firstName: identity.firstName,
+        lastName: identity.lastName,
+      });
+      analytics.trackSessionStarted({
+        sessionId,
+        firstName: identity.firstName,
+        lastName: identity.lastName,
+      });
     } else {
       console.warn("[homepage] session non persistée (création échouée)");
     }

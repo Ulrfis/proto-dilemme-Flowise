@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { MediaItem } from "../types/chat";
+import { analytics } from "../lib/analytics";
 
 export function useMediaPanel() {
   const [isOpen, setIsOpen] = useState(false);
@@ -44,6 +45,9 @@ export function useMediaPanel() {
 
   const switchTab = useCallback((tab: 'video' | 'web') => {
     setActiveTab(tab);
+    setTimeout(() => {
+      try { analytics.trackPanelChange(tab); } catch {}
+    }, 0);
   }, []);
 
   return {
