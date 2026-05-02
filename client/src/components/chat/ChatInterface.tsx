@@ -111,6 +111,36 @@ export function ChatInterface({
   const ttsEnabledRef = useRef(ttsEnabled);
   ttsEnabledRef.current = ttsEnabled;
 
+  // ----- Unmute recovery -----
+  // When going muted → unmuted, re-speak the last complete Peter message so the
+  // user immediately hears voice again (otherwise the current message stays
+  // silent and the UX feels broken).
+  const prevIsMutedRef = useRef(isMuted);
+  // Keep a live ref to messages so the effect closure doesn't go stale
+  const messagesLiveRef = useRef(messages);
+  messagesLiveRef.current = messages;
+
+  useEffect(() => {
+    const wasMuted = prevIsMutedRef.current;
+    prevIsMutedRef.current = isMuted;
+
+    // Only act on the muted → unmuted transition
+    if (!wasMuted || isMuted) return;
+    if (!ttsEnabledRef.current) return;
+
+    const lastPeter = [...messagesLiveRef.current]
+      .reverse()
+      .find((m) => m.sender === 'peter' && !m.isStreaming && m.content?.trim());
+    if (!lastPeter) return;
+
+    const cleaned = plainifyForTTS(lastPeter.content);
+    if (!cleaned) return;
+
+    lastAnnouncedIdRef.current = lastPeter.id;
+    splitIntoSentences(cleaned).forEach((s) => ttsQueue.enqueue(s));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMuted]); // intentionally only isMuted — messages/ttsQueue read via refs
+
   // Stable enqueue function exposed to the parent via ttsEnqueueRef. Parent
   // (homepage / use-flowise) calls this for each streamed sentence.
   const enqueueSentence = useCallback((text: string) => {
