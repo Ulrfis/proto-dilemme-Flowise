@@ -19,9 +19,28 @@ class LRUTTSCache {
   private readonly maxEntries: number;
   private store = new Map<string, CacheEntry>();
   private signature = "";
+  private hits = 0;
+  private misses = 0;
 
   constructor(maxEntries: number = DEFAULT_MAX_ENTRIES) {
     this.maxEntries = maxEntries;
+  }
+
+  /** Aggregated counters for the debug panel. */
+  stats(): { size: number; maxEntries: number; hits: number; misses: number; signature: string } {
+    this.ensureSignature();
+    return {
+      size: this.store.size,
+      maxEntries: this.maxEntries,
+      hits: this.hits,
+      misses: this.misses,
+      signature: this.signature,
+    };
+  }
+
+  /** Record an externally-observed miss (e.g. when set() is called outside of get()). */
+  recordMiss(): void {
+    this.misses++;
   }
 
   private currentSignature(): string {
@@ -58,7 +77,11 @@ class LRUTTSCache {
   get(key: string): CacheEntry | undefined {
     this.ensureSignature();
     const entry = this.store.get(key);
-    if (!entry) return undefined;
+    if (!entry) {
+      this.misses++;
+      return undefined;
+    }
+    this.hits++;
     // Refresh recency
     this.store.delete(key);
     this.store.set(key, entry);

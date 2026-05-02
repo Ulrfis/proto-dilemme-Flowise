@@ -3,7 +3,7 @@
 > **Status**: 🟡 In Progress  
 > **Creator**: Ulrich Fischer  
 > **Started**: 2025-11-06  
-> **Last Updated**: 2026-05-02 (Optimisations latence Peter : ~30s → cible <8s)  
+> **Last Updated**: 2026-05-02 (Console debug interne : services + latences + tooltips solutions)  
 
 ---
 
@@ -91,6 +91,37 @@ How Peter helps: Conversational guide who asks questions, shares surprising fact
 ## Feature Chronicle
 
 *Each feature gets an entry. Major features (🔷) get full treatment. Minor features (🔹) get brief notes.*
+
+### [2026-05-02] — Console debug interne `/debug` : services, latences, tooltips solutions 🔷
+
+**Intent** : Maintenant que 8 optimisations latence sont en place, donner à Ulrich un outil pour COMPRENDRE visuellement où le temps part quand quelque chose cloche, et identifier rapidement quel service est en cause. Inspiration : panneau "Latence & blocage" du projet "Où est Ava ?" (barres horizontales empilées par session).
+
+**What shipped** :
+
+- **Accès** : route `/debug` directe + redirect automatique depuis `?debug` ou `?debug=1` (composant `DebugQueryRedirect` dans `App.tsx`). La route bypass `DesktopValidator` pour rester utilisable même sur mobile / quand l'app principale est cassée.
+- **Section "Services connectés"** (6 cards) : Flowise (sondé via HEAD avec `flowiseFetch`, vert <600 ms / orange <1500 ms / rouge), ElevenLabs (`GET /v1/voices`, vert <800 ms), OpenAI + Deepgram (présence de clé seulement, pas de ping pour ne pas brûler de quota), TTS et STT actifs. Chaque card affiche pastille colorée + latence + bouton "Solution possible" (tooltip avec remédiation contextuelle).
+- **Section "Flowise warmer"** : statut du keep-alive (intervalle, pings réussis, dernier ping, dernière erreur). Exposé via nouveau `getFlowiseWarmerStats()` dans `server/flowise-warmer.ts`.
+- **Section "Cache TTS"** : entrées / max, hits / misses, taux de hit (orange si <30 %), uptime serveur. Compteurs ajoutés à `LRUTTSCache` (`stats()`).
+- **Section "Latence Flowise"** : pour chaque session, **barre horizontale empilée** avec 3 phases colorées — Connect (sky), Pré-TTFT (violet), Stream (emerald). Marqueur en pointillés rose = cible 8 s. Au survol d'un segment, tooltip avec explication + suggestion si la phase dépasse un seuil (ex : Pré-TTFT >5 s → "vérifier docs/flowise-chatflow-audit-report.md, trop de nœuds séquentiels"). Total à droite, rouge si >cible.
+- **Section "Appels TTS récents"** : liste compacte avec pill HIT (vert) / MISS (orange) / ERROR (rouge), preview texte (80 chars), durée. Tooltips contextuels sur chaque pill.
+- **Bandeau d'alerte critique** en haut quand ≥1 service est rouge.
+- **Auto-refresh** : 5 s pour health, 3 s pour traces, toggle on/off + bouton manuel.
+
+**Architecture** :
+- Buffer mémoire circulaire (`server/debug-traces.ts`, max 50 Flowise + 200 TTS) alimenté par `recordFlowise()` / `recordTTS()` à la fin de chaque appel.
+- 2 endpoints : `GET /api/debug/health` (sondes parallèles, ~400 ms) et `GET /api/debug/traces` (instantané).
+- Types partagés dans `shared/debug-types.ts` (réutilisés client + serveur).
+- Aucun secret exposé : juste des métriques agrégées + suggestions de remédiation.
+
+**Why it matters** : Quand Peter met 30 s à répondre, est-ce le warmer qui est tombé ? L'instance Flowise qui rame ? Le cache TTS qui est froid ? Une clé API qui a expiré ? Avant, il fallait grepper les logs serveur. Maintenant : un coup d'œil sur `/debug` et la réponse est visuelle (rouge / orange / vert) + actionnable (tooltip avec la solution).
+
+**Files** : 6 nouveaux (`shared/debug-types.ts`, `server/debug-traces.ts`, `server/debug-health.ts`, `client/src/components/debug/{LatencyBar,ServiceStatusCard}.tsx`, `client/src/pages/debug.tsx`) + 4 refactor (`server/routes.ts`, `server/flowise-warmer.ts`, `server/providers/tts/cache.ts`, `client/src/App.tsx`).
+
+**Time** : ~1h
+
+**Validation** : 6 services tous green/gray au boot (Flowise 384 ms, ElevenLabs 72 ms, OpenAI clé OK, Deepgram non configuré gris). 3 traces TTS de test générées (1 HIT 0 ms + 2 MISS ~1000 ms) → cache stats : 1 hit / 3 miss / 25 % de hit. Redirect `?debug=1` → `/debug` opérationnel.
+
+---
 
 ### [2026-05-02] — Optimisations latence Peter : keep-alive, pré-warm, streaming par phrase, indicateurs d'étape 🔷
 

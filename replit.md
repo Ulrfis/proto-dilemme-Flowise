@@ -96,6 +96,20 @@ Architecture multi-providers pour la voix de Peter, configurable via variables d
 - **Endpoints voix conservés mais non utilisés par le front** : `GET /api/tts/voices` reste exposé (utile pour outillage / debug), interface `ITTSProvider` garde `listVoices()` / `getDefaultVoiceId()` optionnels. `POST /api/tts` accepte toujours `voiceId` optionnel ; quand absent, le provider utilise sa voix par défaut.
 - **Cache TTS** : `server/providers/tts/cache.ts` — LRU mémoire (clé SHA-256 sur `provider + voiceId + text`, 100 entrées par défaut, override via `TTS_CACHE_MAX_ENTRIES`). Auto-invalidation totale dès que `TTS_PROVIDER` ou `ELEVENLABS_VOICE_ID` changent. En-têtes de réponse `X-TTS-Cache: hit|miss` pour observabilité (~40 ms sur hit vs ~1.1 s sur miss).
 
+## Console debug (mai 2026)
+
+Tableau de bord interne pour diagnostiquer rapidement les problèmes (services down, latences anormales, cache TTS froid). Données 100 % en mémoire, perdues au redémarrage.
+
+- **Accès** : `/debug` direct, ou ajouter `?debug` (ou `?debug=1`) à n'importe quelle URL — un redirect dans `client/src/App.tsx` (`DebugQueryRedirect`) navigue vers `/debug`. La route est volontairement hors `DesktopValidator` pour rester utilisable même sur mobile / quand l'app principale est cassée. Pas d'auth (panneau interne, ne révèle aucun secret, juste des métriques agrégées).
+- **Endpoints** :
+  - `GET /api/debug/health` — sondes parallèles : Flowise (HEAD via `flowiseFetch` avec timeout 3s, vert <600ms / orange <1500ms / rouge), ElevenLabs (`GET /v1/voices`, vert <800ms), OpenAI + Deepgram (présence de clé seulement, pas de ping pour ne pas consommer de quota), TTS/STT actif. Retourne aussi `warmer` (état du keep-alive Flowise + dernier ping) et `cache` (taille + hits/misses + signature).
+  - `GET /api/debug/traces` — buffer mémoire des 50 dernières requêtes Flowise + 200 derniers appels TTS, du plus récent au plus ancien.
+- **Buffer** : `server/debug-traces.ts` — circulaire, push depuis `server/routes.ts` à la fin de chaque appel SSE Flowise (capture `connectMs`, `ttftMs`, `totalMs`, `tokens`, `nodes`, `tools`, `unknownEvents`, `status`) et de chaque appel `/api/tts` (capture `chars`, `durationMs`, `cacheHit`, `provider`, `status`).
+- **Visualisation** : barres horizontales empilées par session Flowise (composant `client/src/components/debug/LatencyBar.tsx`), 3 phases colorées : Connect (sky), Pré-TTFT (violet), Stream (emerald). Marqueur en pointillés rose pour la cible 8 s. Tooltips au survol de chaque segment avec explication + suggestion de remédiation si la phase dépasse un seuil (ex : Pré-TTFT >5 s → "vérifier le rapport docs/flowise-chatflow-audit-report.md").
+- **Auto-refresh** : 5 s pour `/api/debug/health`, 3 s pour `/api/debug/traces`, toggle on/off + bouton manuel.
+- **Tooltips solutions** (composant `ServiceStatusCard`) : chaque service en `orange`/`rouge` expose un bouton "Solution possible" qui révèle le `suggestion` retourné par `server/debug-health.ts`. Bandeau d'alerte critique en haut quand ≥1 service est `red`.
+- **Compteurs cache TTS** : `LRUTTSCache.stats()` (hits/misses/size/signature) ajoutés dans `server/providers/tts/cache.ts`. Le `getFlowiseWarmerStats()` exposé dans `server/flowise-warmer.ts` donne le décompte cumulé (vs le rolling 5 min des logs).
+
 ## Optimisations latence (mai 2026)
 
 Mesure de départ : ~30s entre l'envoi du message et la fin de la lecture vocale (TTFT Flowise = 12 420 ms, TTS welcome = 9 451 ms). Cible : 1ère phrase audible <8s.

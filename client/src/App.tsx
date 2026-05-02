@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { useState, useEffect } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -10,6 +10,7 @@ import { RectifyWidget } from "./components/integrations/RectifyWidget";
 import Homepage from "./pages/homepage";
 import About from "./pages/about";
 import NotFound from "./pages/not-found";
+import DebugPage from "./pages/debug";
 import { analytics } from "./lib/analytics";
 
 interface InfoPanelData {
@@ -18,7 +19,7 @@ interface InfoPanelData {
   score_globale?: string | number;
 }
 
-function Router() {
+function MainApp() {
   const [showAbout, setShowAbout] = useState(false);
   const [infoData, setInfoData] = useState<InfoPanelData | null>(null);
 
@@ -29,18 +30,18 @@ function Router() {
   return (
     <DesktopValidator>
       <div className="h-full flex flex-col">
-        <Header 
+        <Header
           onAboutClick={() => setShowAbout(true)}
           infoData={infoData}
         />
-        
+
         <Switch>
           <Route path="/">
             <Homepage onInfoDataUpdate={setInfoData} />
           </Route>
           <Route component={NotFound} />
         </Switch>
-        
+
         {showAbout && (
           <About onClose={() => setShowAbout(false)} />
         )}
@@ -49,13 +50,39 @@ function Router() {
   );
 }
 
+/**
+ * Listens for `?debug` (or `?debug=1`) in the URL and redirects to /debug.
+ * Lets users open the debug console from any URL by appending the query.
+ */
+function DebugQueryRedirect() {
+  const [location, setLocation] = useLocation();
+  useEffect(() => {
+    if (location === "/debug") return;
+    const search = typeof window !== "undefined" ? window.location.search : "";
+    if (/[?&]debug(=|&|$)/.test(search)) {
+      setLocation("/debug");
+    }
+  }, [location, setLocation]);
+  return null;
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
-        <RectifyWidget />
-        <Router />
+        <DebugQueryRedirect />
+        <Switch>
+          {/* Debug route: bypasses DesktopValidator + RectifyWidget so it's
+              usable on any device, even when something is broken in the app. */}
+          <Route path="/debug">
+            <DebugPage />
+          </Route>
+          <Route>
+            <RectifyWidget />
+            <MainApp />
+          </Route>
+        </Switch>
       </TooltipProvider>
     </QueryClientProvider>
   );

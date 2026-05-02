@@ -1,4 +1,5 @@
 import { flowiseFetch } from "./flowise-fetch";
+import type { FlowiseWarmerStats } from "../shared/debug-types";
 
 interface WarmerStats {
   totalPings: number;
@@ -14,6 +15,19 @@ let stats: WarmerStats = {
   failedPings: 0,
   totalLatencyMs: 0,
 };
+
+// Lifetime + last-ping snapshot, exposed via getFlowiseWarmerStats() for the
+// debug panel. Kept separately from `stats` (which gets reset every 5 min).
+let lifetime = {
+  totalPings: 0,
+  successfulPings: 0,
+  failedPings: 0,
+};
+let lastPingAt: number | undefined;
+let lastPingOk: boolean | undefined;
+let lastPingMs: number | undefined;
+let runtimeIntervalMs = 30_000;
+let warmerEnabled = false;
 
 let timer: NodeJS.Timeout | null = null;
 let summaryTimer: NodeJS.Timeout | null = null;
@@ -32,6 +46,8 @@ async function pingFlowise(): Promise<void> {
 
   const start = Date.now();
   stats.totalPings++;
+  lifetime.totalPings++;
+  lastPingAt = start;
   try {
     // HEAD on the chatflow endpoint is the cheapest way to confirm:
     // - DNS + TLS still resolve
@@ -46,17 +62,27 @@ async function pingFlowise(): Promise<void> {
       connectMs = fallback.connectMs;
     }
     if (response.status >= 200 && response.status < 500) {
+      const latency = Date.now() - start;
       stats.successfulPings++;
-      stats.totalLatencyMs += Date.now() - start;
+      stats.totalLatencyMs += latency;
+      lifetime.successfulPings++;
+      lastPingOk = true;
+      lastPingMs = latency;
     } else {
       stats.failedPings++;
       stats.lastError = `HTTP ${response.status}`;
+      lifetime.failedPings++;
+      lastPingOk = false;
+      lastPingMs = Date.now() - start;
     }
     // Drain body to free the connection back to the pool
     try { await response.arrayBuffer(); } catch { /* ignore */ }
   } catch (err) {
     stats.failedPings++;
     stats.lastError = err instanceof Error ? err.message : String(err);
+    lifetime.failedPings++;
+    lastPingOk = false;
+    lastPingMs = Date.now() - start;
   }
 }
 
@@ -93,6 +119,8 @@ export function startFlowiseWarmer(opts: { intervalMs?: number } = {}): void {
   if (timer) return;
 
   const intervalMs = opts.intervalMs ?? DEFAULT_INTERVAL_MS;
+  runtimeIntervalMs = intervalMs;
+  warmerEnabled = true;
   console.log(
     `[FlowiseWarmer] Started (interval=${intervalMs}ms, target=${process.env.FLOWISE_HOST})`,
   );
@@ -115,4 +143,21 @@ export function stopFlowiseWarmer(): void {
     clearInterval(summaryTimer);
     summaryTimer = null;
   }
+  warmerEnabled = false;
+}
+
+/** Snapshot for the debug panel — does not reset internal counters. */
+export function getFlowiseWarmerStats(): FlowiseWarmerStats {
+  return {
+    enabled: warmerEnabled,
+    intervalMs: runtimeIntervalMs,
+    targetHost: process.env.FLOWISE_HOST || "",
+    totalPings: lifetime.totalPings,
+    successfulPings: lifetime.successfulPings,
+    failedPings: lifetime.failedPings,
+    lastPingAt,
+    lastPingOk,
+    lastPingMs,
+    lastError: stats.lastError,
+  };
 }
