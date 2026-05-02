@@ -8,6 +8,7 @@ import {
   getActiveTTSProviderName,
   getAvailableTTSProviders,
 } from "./providers/tts";
+import { ttsCache } from "./providers/tts/cache";
 import {
   getActiveSTTProvider,
   getActiveSTTProviderName,
@@ -143,7 +144,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const safeText = text.length > 5000 ? text.slice(0, 5000) : text;
 
       const provider = getActiveTTSProvider();
-      console.log(`[TTS:${provider.name}] Synthèse de ${safeText.length} caractères`);
 
       if (provider.name === "none") {
         return res.status(503).json({
@@ -152,13 +152,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      const effectiveVoiceId =
+        typeof voiceId === "string" && voiceId.trim()
+          ? voiceId.trim()
+          : provider.getDefaultVoiceId?.() || "";
+
+      const cacheKey = ttsCache.buildKey({
+        text: safeText,
+        voiceId: effectiveVoiceId,
+        provider: provider.name,
+      });
+
+      const cached = ttsCache.get(cacheKey);
+      if (cached) {
+        console.log(
+          `[TTS:${provider.name}] Cache HIT (${safeText.length} caractères, ${cached.size} octets)`,
+        );
+        res.setHeader('Content-Type', cached.contentType);
+        res.setHeader('Content-Length', String(cached.audio.length));
+        res.setHeader('Cache-Control', 'no-store');
+        res.setHeader('X-TTS-Provider', provider.name);
+        res.setHeader('X-TTS-Cache', 'hit');
+        return res.send(cached.audio);
+      }
+
+      console.log(`[TTS:${provider.name}] Cache MISS — synthèse de ${safeText.length} caractères`);
+
       try {
-        const result = await provider.synthesize({ text: safeText, voiceId });
+        const result = await provider.synthesize({ text: safeText, voiceId: effectiveVoiceId || undefined });
+
+        ttsCache.set(cacheKey, result);
 
         res.setHeader('Content-Type', result.contentType);
         res.setHeader('Content-Length', String(result.audio.length));
         res.setHeader('Cache-Control', 'no-store');
         res.setHeader('X-TTS-Provider', provider.name);
+        res.setHeader('X-TTS-Cache', 'miss');
         res.send(result.audio);
       } catch (providerError) {
         console.error(`[TTS:${provider.name}] Provider error:`, providerError);
