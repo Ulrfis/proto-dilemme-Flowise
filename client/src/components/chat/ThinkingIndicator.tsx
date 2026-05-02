@@ -6,10 +6,14 @@ interface ThinkingIndicatorProps {
   /** Real progress label from Flowise SSE events. When provided, takes priority
    *  over the rotating placeholder phrases. */
   progressLabel?: string | null;
-  /** Test id (typically the parent message id). */
+  /** Test id. */
   testId?: string;
-  /** Visual theme for the bubble color. Default = teal (Peter's bubble). */
-  variant?: "teal" | "neutral";
+  /**
+   * "standalone" (default) — rendered directly in the chat flow, outside any
+   *   bubble: teal dots, dark-gray text, no border.
+   * "inline" — legacy in-bubble style: white dots, white/80 text, border-t.
+   */
+  variant?: "standalone" | "inline";
 }
 
 /** Phase 1 — general / curious / playful. Used while wait < 12 s. */
@@ -44,10 +48,9 @@ const PHRASES_GENERAL: readonly string[] = [
   "Peter ajuste sa loupe d'enquêteur",
   "Peter tient sa langue, le temps de bien dire",
   "Peter compose une réponse aux petits oignons",
-];
+] as const;
 
-/** Phase 2 — tongue-in-cheek "it's the plastic's fault" excuses. Used after
- *  ~12 s of waiting to inject some humour into the latency. */
+/** Phase 2 — tongue-in-cheek "it's the plastic's fault" excuses. */
 const PHRASES_BLAME_PLASTIC: readonly string[] = [
   "Peter ralentit, un microplastique dans l'engrenage",
   "Peter patauge dans une marée de bouteilles",
@@ -69,11 +72,11 @@ const PHRASES_BLAME_PLASTIC: readonly string[] = [
   "Peter contourne un tas de Tupperware orphelins",
   "Peter négocie avec un yaourt qui refuse d'être recyclé",
   "Peter cherche son stylo, mâché par un goéland",
-];
+] as const;
 
 const ROTATION_MS = 2400;
 const BLAME_THRESHOLD_MS = 12_000;
-const RECENT_MEMORY = 4; // never re-use the last N phrases
+const RECENT_MEMORY = 4;
 
 function pickPhrase(bank: readonly string[], avoid: readonly string[]): string {
   const candidates = bank.filter((p) => !avoid.includes(p));
@@ -84,7 +87,7 @@ function pickPhrase(bank: readonly string[], avoid: readonly string[]): string {
 export function ThinkingIndicator({
   progressLabel = null,
   testId,
-  variant = "teal",
+  variant = "standalone",
 }: ThinkingIndicatorProps) {
   const startedAtRef = useRef<number>(Date.now());
   const recentRef = useRef<string[]>([]);
@@ -95,17 +98,12 @@ export function ThinkingIndicator({
   });
 
   useEffect(() => {
-    if (progressLabel) return; // Real label drives display — pause rotation
+    if (progressLabel) return;
     const id = setInterval(() => {
       const elapsed = Date.now() - startedAtRef.current;
-      // After threshold, mostly use blame-plastic phrases (with occasional
-      // general one for variety). Before, only general.
-      const useBlame =
-        elapsed >= BLAME_THRESHOLD_MS && Math.random() < 0.75;
+      const useBlame = elapsed >= BLAME_THRESHOLD_MS && Math.random() < 0.75;
       const bank = useBlame ? PHRASES_BLAME_PLASTIC : PHRASES_GENERAL;
       const next = pickPhrase(bank, recentRef.current);
-
-      // Keep a sliding memory of the last N phrases — never repeat too soon
       recentRef.current = [next, ...recentRef.current].slice(0, RECENT_MEMORY);
       setText(next);
     }, ROTATION_MS);
@@ -113,23 +111,28 @@ export function ThinkingIndicator({
   }, [progressLabel]);
 
   const display = progressLabel || text;
-  const dotColor = variant === "teal" ? "bg-white/80" : "bg-gray-500";
-  const textColor = variant === "teal" ? "text-white/80" : "text-gray-600";
-  const borderColor = variant === "teal" ? "border-white/20" : "border-gray-300";
+
+  const isStandalone = variant === "standalone";
 
   return (
     <div
-      className={cn("flex items-center gap-2 mt-2 pt-2 border-t", borderColor)}
+      className={cn(
+        "flex items-center gap-2",
+        isStandalone ? "py-1" : "mt-2 pt-2 border-t border-white/20",
+      )}
       data-testid={testId}
       aria-live="polite"
       aria-busy="true"
     >
-      {/* Three bouncing dots — Claude-style */}
-      <div className="flex items-end gap-[3px] h-3.5" aria-hidden="true">
+      {/* Three bouncing dots */}
+      <div className="flex items-end gap-[3px] h-3.5 flex-shrink-0" aria-hidden="true">
         {[0, 1, 2].map((i) => (
           <motion.span
             key={i}
-            className={cn("block w-1.5 h-1.5 rounded-full", dotColor)}
+            className={cn(
+              "block w-1.5 h-1.5 rounded-full",
+              isStandalone ? "bg-teal-500" : "bg-white/80",
+            )}
             animate={{ y: [0, -3, 0] }}
             transition={{
               duration: 0.9,
@@ -142,7 +145,7 @@ export function ThinkingIndicator({
       </div>
 
       {/* Phrase with smooth fade-swap */}
-      <div className="relative flex-1 min-h-[1.1rem] overflow-hidden">
+      <div className="relative min-h-[1.15rem] overflow-hidden">
         <AnimatePresence mode="wait">
           <motion.span
             key={display}
@@ -151,8 +154,10 @@ export function ThinkingIndicator({
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.25, ease: "easeOut" }}
             className={cn(
-              "inline-block text-xs italic font-light tracking-wide",
-              textColor,
+              "inline-block italic font-light tracking-wide",
+              isStandalone
+                ? "text-sm text-gray-500"
+                : "text-xs text-white/80",
             )}
             data-testid={testId ? `${testId}-text` : undefined}
           >

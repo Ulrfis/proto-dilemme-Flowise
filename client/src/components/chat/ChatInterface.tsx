@@ -12,6 +12,7 @@ import { useTTSQueue } from "../../hooks/use-tts-queue";
 import { plainifyForTTS } from "../../lib/tts-text";
 import { splitIntoSentences } from "../../lib/sentence-split";
 import peterAvatarImage from "@assets/Peter_Avatar_white_1777751289628.jpeg";
+import { ThinkingIndicator } from "./ThinkingIndicator";
 
 interface ChatInterfaceProps {
   messages: ChatMessageType[];
@@ -305,34 +306,41 @@ export function ChatInterface({
       
       {/* Chat Messages - Scrollable */}
       <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-3 space-y-3 chat-messages">
-        {messages.map((message, index) => {
-          const isLastPeterMessage = message.sender === 'peter' && 
-            !messages.slice(index + 1).some(m => m.sender === 'peter');
-          const showThinking = isLoading && isLastPeterMessage && !message.isStreaming;
-          const progressLabel = showThinking ? currentStepLabel : null;
-          
-          return (
-            <ChatMessage
-              key={message.id}
-              message={message}
-              onVideoClick={onVideoClick}
-              onLinkClick={onLinkClick}
-              onThumbsUp={onThumbsUp}
-              onChoiceClick={onChoiceClick}
-              onWatchedVideo={onWatchedVideo}
-              userAvatarUrl={userAvatar.avatarUrl}
-              userName={userAvatar.name}
-              showThinking={showThinking}
-              progressLabel={progressLabel}
-              ttsEnabled={ttsEnabled}
-              isMuted={isMuted}
-              onToggleMute={toggleMute}
+        {messages.map((message) => (
+          <ChatMessage
+            key={message.id}
+            message={message}
+            onVideoClick={onVideoClick}
+            onLinkClick={onLinkClick}
+            onThumbsUp={onThumbsUp}
+            onChoiceClick={onChoiceClick}
+            onWatchedVideo={onWatchedVideo}
+            userAvatarUrl={userAvatar.avatarUrl}
+            userName={userAvatar.name}
+            ttsEnabled={ttsEnabled}
+            isMuted={isMuted}
+            onToggleMute={toggleMute}
+          />
+        ))}
+
+        {/* Standalone thinking indicator — Claude-style, no bubble */}
+        {isLoading && !messages.some((m) => m.isStreaming) && (
+          <div
+            className="flex items-center gap-2.5 px-1 py-0.5"
+            data-testid="thinking-standalone"
+          >
+            <Avatar className="w-7 h-7 flex-shrink-0 ring-1 ring-teal-200/60">
+              <AvatarImage src={peterAvatarImage} alt="Peter" />
+              <AvatarFallback className="bg-teal-500 text-white text-xs font-bold">P</AvatarFallback>
+            </Avatar>
+            <ThinkingIndicator
+              progressLabel={currentStepLabel}
+              testId="thinking-standalone"
+              variant="standalone"
             />
-          );
-        })}
-        
-        
-        
+          </div>
+        )}
+
         <div ref={messagesEndRef} />
       </div>
       
