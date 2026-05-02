@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+interface UseTTSOptions {
+  voiceId?: string | null;
+}
+
 interface UseTTSResult {
   play: (text: string) => Promise<void>;
   stop: () => void;
@@ -11,7 +15,10 @@ interface UseTTSResult {
 
 let activeStopFn: (() => void) | null = null;
 
-export function useTTS(): UseTTSResult {
+export function useTTS(options: UseTTSOptions = {}): UseTTSResult {
+  const { voiceId } = options;
+  const voiceIdRef = useRef<string | null | undefined>(voiceId);
+  voiceIdRef.current = voiceId;
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -69,10 +76,16 @@ export function useTTS(): UseTTSResult {
       abortRef.current = controller;
 
       try {
+        const requestVoiceId = voiceIdRef.current;
+        const body: { text: string; voiceId?: string } = { text: trimmed };
+        if (requestVoiceId) {
+          body.voiceId = requestVoiceId;
+        }
+
         const response = await fetch("/api/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: trimmed }),
+          body: JSON.stringify(body),
           signal: controller.signal,
         });
 

@@ -19,6 +19,7 @@ interface ChatMessageProps {
   userName?: string;
   showThinking?: boolean;
   ttsEnabled?: boolean;
+  ttsVoiceId?: string | null;
 }
 
 export function ChatMessage({ 
@@ -31,12 +32,13 @@ export function ChatMessage({
   userName = 'Utilisateur',
   showThinking = false,
   ttsEnabled = true,
+  ttsVoiceId,
 }: ChatMessageProps) {
   const isPeter = message.sender === 'peter';
   const isDebug = message.sender === 'debug';
   const isStreaming = message.isStreaming || false;
   const [showRawJson, setShowRawJson] = useState(false);
-  const tts = useTTS();
+  const tts = useTTS({ voiceId: ttsVoiceId });
 
   const handleSpeakClick = () => {
     if (tts.isPlaying || tts.isLoading) {
