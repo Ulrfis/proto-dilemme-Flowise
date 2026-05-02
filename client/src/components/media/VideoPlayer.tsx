@@ -6,9 +6,10 @@ interface VideoPlayerProps {
   video: MediaItem | null;
   onVideoEnded?: () => void;
   onVideoPaused?: () => void;
+  onVideoPlay?: () => void;
 }
 
-export function VideoPlayer({ video, onVideoEnded, onVideoPaused }: VideoPlayerProps) {
+export function VideoPlayer({ video, onVideoEnded, onVideoPaused, onVideoPlay }: VideoPlayerProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [playerType, setPlayerType] = useState<'youtube' | 'gumlet' | 'unknown'>('unknown');
   const [videoData, setVideoData] = useState<{
@@ -137,6 +138,7 @@ export function VideoPlayer({ video, onVideoEnded, onVideoPaused }: VideoPlayerP
           muted={false}
           onEnded={onVideoEnded}
           onPause={onVideoPaused}
+          onPlay={onVideoPlay}
         />
       );
     } else if (playerType === 'youtube' && videoData.embedUrl) {

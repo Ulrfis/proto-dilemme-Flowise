@@ -21,7 +21,7 @@ interface HomepageProps {
 }
 
 // After this many ms of being paused, Peter continues without the video
-const PAUSE_TIMEOUT_MS = 5000;
+const PAUSE_TIMEOUT_MS = 3000;
 
 export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
   const [showWelcome, setShowWelcome] = useState(true);
@@ -108,19 +108,26 @@ export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
     triggerWelcome();
   }, [triggerWelcome]);
 
-  // Video paused → start 5s timer
+  // Video paused → start 3s timer (then Peter continues)
   const handleVideoPaused = useCallback(() => {
     if (welcomeAddedRef.current) return;
-    console.log('[Intro] Video paused → starting 5s timer');
+    console.log('[Intro] Video paused → starting 3s timer');
     if (pauseTimerRef.current) clearTimeout(pauseTimerRef.current);
     pauseTimerRef.current = setTimeout(() => {
-      console.log('[Intro] 5s elapsed after pause → Peter continues');
+      console.log('[Intro] 3s elapsed after pause → Peter continues');
       triggerWelcome();
     }, PAUSE_TIMEOUT_MS);
   }, [triggerWelcome]);
 
-  // Clear pause timer if video resumes (play event is not exposed by GumletPlayer
-  // but onPause fires on each pause so the timer resets correctly on each pause)
+  // Video resumed → cancel pending pause timer
+  const handleVideoPlay = useCallback(() => {
+    if (pauseTimerRef.current) {
+      console.log('[Intro] Video resumed → cancelling pause timer');
+      clearTimeout(pauseTimerRef.current);
+      pauseTimerRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
     return () => {
       if (pauseTimerRef.current) clearTimeout(pauseTimerRef.current);
@@ -264,6 +271,7 @@ export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
               onTabChange={switchTab}
               onVideoEnded={handleVideoEnded}
               onVideoPaused={handleVideoPaused}
+              onVideoPlay={handleVideoPlay}
             />
           </div>
         </>
