@@ -173,11 +173,11 @@ export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
         <div className="flex-1 flex items-center justify-center p-8 bg-white">
           <div className="text-center max-w-2xl">
             <div className="mb-8">
-              <div className="w-20 h-20 mx-auto mb-4">
+              <div className="w-40 h-40 mx-auto mb-4">
                 <img 
                   src={peterAvatarImage} 
                   alt="Peter - Guide écologique" 
-                  className="w-20 h-20 rounded-full object-cover"
+                  className="w-40 h-40 object-contain"
                 />
               </div>
               <h2 className="text-3xl font-bold text-gray-900 mb-4">
