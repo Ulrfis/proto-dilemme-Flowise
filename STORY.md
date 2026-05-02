@@ -3,7 +3,7 @@
 > **Status**: 🟡 In Progress  
 > **Creator**: Ulrich Fischer  
 > **Started**: 2025-11-06  
-> **Last Updated**: 2026-05-02 (Cache TTS + sélecteur de voix)  
+> **Last Updated**: 2026-05-02 (UX TTS simplifiée : autoplay + mute global)  
 
 ---
 
@@ -92,6 +92,24 @@ How Peter helps: Conversational guide who asks questions, shares surprising fact
 
 *Each feature gets an entry. Major features (🔷) get full treatment. Minor features (🔹) get brief notes.*
 
+### [2026-05-02] — UX TTS simplifiée : autoplay par défaut + mute global 🔷
+
+**Intent** : Réduire la charge cognitive pour l'enseignant. Plus de toggle, plus de sélecteur de voix — Peter parle, point. Une seule décision possible : muet ou pas.
+
+**What shipped** :
+- Autoplay activé par défaut. Le message de bienvenue est lu à voix haute dès l'arrivée dans le chat (premier `POST /api/tts` envoyé immédiatement).
+- Bouton mute/unmute sur chaque bulle Peter (`Volume2` ↔ `VolumeX`, `aria-pressed`). Cliquer n'importe où bascule l'état pour TOUTE la conversation.
+- Mute = stop instantané + plus aucun autoplay tant qu'on ne réactive pas. Unmute n'est pas rétroactif (pas de replay du message courant), seul le prochain message Peter sera lu.
+- Persistance dans `localStorage:tts-muted` (l'état survit aux reloads).
+- Suppressions : sélecteur de voix retiré de l'en-tête, toggle "Lecture auto" retiré de l'en-tête, bouton play/stop par message retiré (remplacé par le mute global). Les clés `tts-autoplay` et `tts-voice-id` ne sont plus utilisées.
+- Backend inchangé : `/api/tts` continue d'accepter `voiceId` optionnel ; le frontend ne l'envoie plus, donc le provider utilise sa voix par défaut (`ELEVENLABS_VOICE_ID`).
+
+**Why it matters** : Dans une vraie classe, l'enseignant n'a pas le temps d'aller chercher un toggle dans l'en-tête pour activer la voix. Avec autoplay-on-by-default, Peter est immédiatement audible — accessibilité gagnée pour les élèves dyslexiques et ceux qui apprennent encore à lire vite. Le mute global sur chaque message reste à portée de doigt pour ceux qui préfèrent lire en silence.
+
+**Time** : ~30 minutes (incluant tests e2e)
+
+---
+
 ### [2026-05-02] — Cache TTS LRU (latence ÷ 28 sur les répétitions) 🔹
 
 **Intent** : Éviter de re-synthétiser la même phrase plusieurs fois et réduire la facture ElevenLabs.
@@ -123,6 +141,25 @@ How Peter helps: Conversational guide who asks questions, shares surprising fact
 **Why it matters** : L'enseignant peut maintenant tester "voix masculine grave", "voix féminine pédagogique", "voix de jeune adulte" sans interrompre le cours. Le bouton replay sur chaque message Peter respecte aussi le choix actif.
 
 **Time** : ~45 minutes
+
+---
+
+### [2026-05-02] — Évaluation providers vocaux et choix figé pour la production 🔷
+
+**Intent** : Profiter de l'infra multi-providers déjà en place pour comparer empiriquement ElevenLabs, OpenAI et Deepgram sur des messages représentatifs Peter ↔ élève, puis figer la configuration recommandée pour la production.
+
+**What shipped** :
+- **Bench reproductible** (`scripts/voice-bench.ts`) : 8 phrases FR (salutation, question pédagogique, réponse chiffrée, message long, élève hésitant, acronymes, noms propres, question ouverte) testées à la fois en TTS (latence + poids audio + coût/char) et en STT (WER + CER + latence) avec **double source audio** (ElevenLabs et OpenAI) pour neutraliser le biais "Scribe préfère sa propre voix".
+- **Endpoints dev-only** `POST /api/_bench/tts` et `POST /api/_bench/transcribe` ajoutés dans `server/routes.ts` pour permettre l'override de provider par requête sans toucher aux env vars (404 en production sauf `ALLOW_VOICE_BENCH=1`, bypass du cache LRU TTS).
+- **Doc d'évaluation** `docs/voice-providers-eval.md` : méthodologie, mesures, tableaux, analyse Deepgram (documentaire — clé non fournie au moment de la tâche), recommandation finale et points à surveiller.
+- **Production figée** : `TTS_PROVIDER=elevenlabs` et `STT_PROVIDER=elevenlabs` posés dans l'environnement production via le mécanisme Replit Secrets/EnvVars.
+
+**Verdict mesuré** :
+- **TTS → ElevenLabs** : 1 507 ms vs 2 373 ms pour OpenAI ; voix FR sensiblement plus naturelle ; MP3 ~30 % plus léger ; surcoût (×15) absorbable grâce au cache LRU déjà en place.
+- **STT → ElevenLabs Scribe** : WER **2,11 %** vs **6,45 %** pour Whisper sur le corpus, latence quasi identique (~1,3 s), coût équivalent. Conserve les hésitations d'élèves ("euh", "enfin") que Whisper gomme — important pour des analytics fidèles.
+- **Deepgram** : non mesuré (clé non fournie). Resterait pertinent pour un futur use-case streaming temps réel.
+
+**Why it matters** : Plus d'allers-retours pour décider ; le couple recommandé est figé en prod, et le bench est rejouable en une commande dès qu'on récupère un vrai corpus de voix d'élèves ou la clé Deepgram (`npx tsx scripts/voice-bench.ts`).
 
 ---
 

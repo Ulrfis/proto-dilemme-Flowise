@@ -84,13 +84,16 @@ Following fullstack_js blueprint with:
 
 Architecture multi-providers pour la voix de Peter, configurable via variables d'environnement.
 
-- **TTS** (lecture des messages) : `TTS_PROVIDER=elevenlabs|openai|none`. Par défaut, auto-détection (ElevenLabs si `ELEVENLABS_API_KEY` + `ELEVENLABS_VOICE_ID` présents, sinon OpenAI, sinon `none` = bouton lecture désactivé).
-- **STT** (transcription du micro) : `STT_PROVIDER=openai|elevenlabs|deepgram` (défaut `openai`/Whisper).
+- **Choix de production figé (mai 2026)** : `TTS_PROVIDER=elevenlabs` et `STT_PROVIDER=elevenlabs` (Scribe). Évaluation comparative complète et résultats bruts dans `docs/voice-providers-eval.md` (Scribe a 3× moins d'erreurs que Whisper sur notre corpus FR ; ElevenLabs TTS est 1,5× plus rapide qu'OpenAI et plus naturel sur la cible 10–18 ans).
+- **TTS** (lecture des messages) : `TTS_PROVIDER=elevenlabs|openai|none`. En dev, auto-détection (ElevenLabs si `ELEVENLABS_API_KEY` + `ELEVENLABS_VOICE_ID` présents, sinon OpenAI, sinon `none` = bouton lecture désactivé).
+- **STT** (transcription du micro) : `STT_PROVIDER=openai|elevenlabs|deepgram` (défaut `openai`/Whisper en dev, `elevenlabs`/Scribe en prod).
 - **Endpoints** : `POST /api/tts` (`{ text, voiceId? }` → audio MP3), `POST /api/transcribe` (multipart `audio` → `{ text, language }`, signature inchangée), `GET /api/providers` (introspection).
+- **Endpoints dev-only** : `POST /api/_bench/tts` et `POST /api/_bench/transcribe` permettent d'override le provider par requête (utilisés par `scripts/voice-bench.ts`). Désactivés en production sauf `ALLOW_VOICE_BENCH=1`.
+- **Bench reproductible** : `npx tsx scripts/voice-bench.ts` (serveur dev doit tourner) → `scripts/voice-bench-results.json`. Mesure WER, CER, latence et coût pour tous les providers disponibles.
 - **Ajouter un provider** en 3 étapes : 1) créer `server/providers/tts/<name>.ts` (ou `/stt/`) implémentant `ITTSProvider` / `ISTTProvider`, 2) l'enregistrer dans `REGISTRY` du `index.ts` correspondant, 3) ajouter le nom au type union. Les clients sont instanciés paresseusement (pas de warnings au boot).
-- **Secrets requis** : `OPENAI_API_KEY` (existant), `ELEVENLABS_API_KEY` + `ELEVENLABS_VOICE_ID` (TTS ElevenLabs / STT Scribe), `DEEPGRAM_API_KEY` (optionnel, pour Deepgram Nova-3).
-- **UI** : bouton haut-parleur sur chaque message Peter + toggle "Lecture auto" dans l'en-tête (persisté dans `localStorage` sous `tts-autoplay`).
-- **Sélecteur de voix runtime** : `<Select>` (icône `Mic2`) dans l'en-tête du chat, alimenté par `GET /api/tts/voices`. Choix persisté dans `localStorage:tts-voice-id`, propagé à `POST /api/tts` (clé `voiceId`). Fallback automatique sur la voix par défaut du provider si la voix mémorisée n'existe plus. Implémentation provider via `listVoices()` / `getDefaultVoiceId()` optionnels sur `ITTSProvider`.
+- **Secrets requis** : `OPENAI_API_KEY` (existant), `ELEVENLABS_API_KEY` + `ELEVENLABS_VOICE_ID` (TTS ElevenLabs / STT Scribe), `DEEPGRAM_API_KEY` (optionnel, pour Deepgram Nova-3 — non testé empiriquement, voir doc d'évaluation).
+- **UX (mai 2026, simplifié)** : autoplay activé par défaut (Peter dit toutes ses réponses, à commencer par le message de bienvenue lu dès l'arrivée). Un bouton mute/unmute global sur chaque bulle Peter (`data-testid="button-mute-toggle-${id}"`, icônes `Volume2` ↔ `VolumeX`) bascule l'état pour toute la conversation ; mute coupe la lecture en cours, unmute n'est pas rétroactif. État persisté dans `localStorage:tts-muted`. Plus de sélecteur de voix ni de toggle "Lecture auto" dans l'en-tête — Peter utilise toujours sa voix par défaut côté provider (`ELEVENLABS_VOICE_ID`).
+- **Endpoints voix conservés mais non utilisés par le front** : `GET /api/tts/voices` reste exposé (utile pour outillage / debug), interface `ITTSProvider` garde `listVoices()` / `getDefaultVoiceId()` optionnels. `POST /api/tts` accepte toujours `voiceId` optionnel ; quand absent, le provider utilise sa voix par défaut.
 - **Cache TTS** : `server/providers/tts/cache.ts` — LRU mémoire (clé SHA-256 sur `provider + voiceId + text`, 100 entrées par défaut, override via `TTS_CACHE_MAX_ENTRIES`). Auto-invalidation totale dès que `TTS_PROVIDER` ou `ELEVENLABS_VOICE_ID` changent. En-têtes de réponse `X-TTS-Cache: hit|miss` pour observabilité (~40 ms sur hit vs ~1.1 s sur miss).
 
 ## Integration Priorities

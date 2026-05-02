@@ -2,6 +2,20 @@
 
 Tous les changements notables de ce projet seront documentés dans ce fichier.
 
+## [2026-05-02] — Simplification UX TTS : autoplay par défaut + mute global
+
+### 🔇 Une seule décision pour l'enseignant : muet ou pas
+- **Autoplay par défaut ON** : Peter dit à voix haute toutes ses réponses, dès la première (le message de bienvenue est lu immédiatement à l'arrivée dans le chat).
+- **Bouton mute/unmute global sur chaque message Peter** (`data-testid="button-mute-toggle-${id}"`, icônes `Volume2` / `VolumeX`, `aria-pressed`). Cliquer sur n'importe quelle bulle bascule l'état pour toute la conversation.
+- **Mute = stop immédiat** : passer en muet annule la lecture en cours. Repasser en non-muet n'a pas d'effet rétroactif (pas de replay du message courant), mais réactive l'autoplay pour les futures réponses.
+- **Persistance** : `localStorage:tts-muted` (`'1'` muet, `'0'`/absent non-muet) — l'état survit aux reloads.
+- **Suppressions** :
+  - Sélecteur de voix retiré de l'en-tête du chat (Peter utilise toujours sa voix par défaut côté provider — `ELEVENLABS_VOICE_ID`).
+  - Toggle "Lecture auto" retiré de l'en-tête (le bouton mute par message le remplace).
+  - `localStorage:tts-autoplay` et `localStorage:tts-voice-id` ne sont plus lus ni écrits ; le bouton de play / stop par message a disparu.
+- **Backend inchangé** : `/api/tts` accepte toujours `voiceId` optionnel (utilisé en interne par le moteur autoplay sans le passer), `GET /api/tts/voices` reste exposé pour usage futur.
+- **Vérifié e2e** : welcome message auto-joué (1 POST `/api/tts` immédiat), mute → 0 nouvel appel après reload, unmute → pas de replay du message courant.
+
 ## [2026-05-02] — Cache TTS LRU (réduction latence + coût)
 
 ### ⚡ Cache mémoire pour les synthèses vocales
