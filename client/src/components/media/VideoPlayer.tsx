@@ -168,16 +168,23 @@ export function VideoPlayer({ video, onVideoEnded, onVideoPaused, onVideoPlay }:
 
         // Supported formats:
         //   https://vimeo.com/123456789
-        //   https://vimeo.com/123456789/abcd1234        (with private hash)
+        //   https://vimeo.com/123456789/abcd1234              (with private hash)
         //   https://player.vimeo.com/video/123456789
         //   https://vimeo.com/channels/foo/123456789
+        //   https://vimeo.com/groups/foo/videos/123456789
+        //   https://vimeo.com/manage/videos/123456789/abcd1234 (admin URL — Peter
+        //     sometimes pastes these; the public hash still works for embedding)
         const playerMatch = video.url.match(/player\.vimeo\.com\/video\/(\d+)(?:\/([\w]+))?/);
+        const manageMatch = video.url.match(/vimeo\.com\/manage\/videos\/(\d+)(?:\/([\w]+))?/);
         const standardMatch = video.url.match(/vimeo\.com\/(?:channels\/[^/]+\/|groups\/[^/]+\/videos\/)?(\d+)(?:\/([\w]+))?/);
 
         let hash = '';
         if (playerMatch) {
           vimeoVideoId = playerMatch[1];
           hash = playerMatch[2] || '';
+        } else if (manageMatch) {
+          vimeoVideoId = manageMatch[1];
+          hash = manageMatch[2] || '';
         } else if (standardMatch) {
           vimeoVideoId = standardMatch[1];
           hash = standardMatch[2] || '';

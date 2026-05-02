@@ -28,6 +28,14 @@ export function plainifyForTTS(content: string): string {
     // Bare URLs that may have slipped through (Peter forgot the markdown):
     // collapse them to the same spoken substitute.
     .replace(/https?:\/\/\S+/g, " — lien à consulter dans le panneau ")
+    // Bare domain mentions like "vimeo.com", "rts.ch", "frontiersin.org" that
+    // Peter writes as plain text. We strip the most common public TLDs only,
+    // so ordinary French sentences like "etc." or "p.ex." aren't damaged.
+    // The leading word-boundary and trailing path are optional.
+    .replace(
+      /\b(?:[a-z0-9-]+\.)+(?:com|org|net|fr|ch|be|ca|tv|io|edu|gov|info|news|app|dev|tech|eu|de|uk|it|es|nl)(?:\/\S*)?/gi,
+      " — lien à consulter dans le panneau ",
+    )
     .replace(/\s+/g, " ")
     .trim();
 }
