@@ -76,7 +76,7 @@ const PHRASES_BLAME_PLASTIC: readonly string[] = [
   "Peter cherche son stylo, mâché par un goéland",
 ] as const;
 
-const ROTATION_MS = 2000;
+const ROTATION_MS = 3000;
 const BLAME_THRESHOLD_MS = 12_000;
 const RECENT_MEMORY = 4;
 
