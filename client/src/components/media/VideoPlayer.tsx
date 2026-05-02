@@ -4,9 +4,11 @@ import { GumletPlayer } from '@gumlet/react-embed-player';
 
 interface VideoPlayerProps {
   video: MediaItem | null;
+  onVideoEnded?: () => void;
+  onVideoPaused?: () => void;
 }
 
-export function VideoPlayer({ video }: VideoPlayerProps) {
+export function VideoPlayer({ video, onVideoEnded, onVideoPaused }: VideoPlayerProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [playerType, setPlayerType] = useState<'youtube' | 'gumlet' | 'unknown'>('unknown');
   const [videoData, setVideoData] = useState<{
@@ -56,8 +58,8 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
         
         console.log(`YouTube URL detected: "${video.url}" -> ID: "${youtubeVideoId}"`);
       }
-      // Handle Gumlet URLs
-      else if (video.url.includes('gumlet.io')) {
+      // Handle Gumlet URLs (gumlet.io and gumlet.tv)
+      else if (video.url.includes('gumlet.io') || video.url.includes('gumlet.tv')) {
         type = 'gumlet';
         
         // Extract video ID from various Gumlet URL formats
@@ -66,12 +68,15 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
           const embedMatch = video.url.match(/\/embed\/([^?&/]+)/);
           gumletVideoId = embedMatch ? embedMatch[1] : '';
         } else if (video.url.includes('play.gumlet.io/')) {
-          // Play URL: https://play.gumlet.io/VIDEO_ID or similar
           const playMatch = video.url.match(/play\.gumlet\.io\/([^?&/]+)/);
           gumletVideoId = playMatch ? playMatch[1] : '';
+        } else if (video.url.includes('gumlet.tv/watch/')) {
+          // gumlet.tv watch URL: https://gumlet.tv/watch/VIDEO_ID
+          const watchMatch = video.url.match(/gumlet\.tv\/watch\/([^?&/]+)/);
+          gumletVideoId = watchMatch ? watchMatch[1] : '';
         } else {
           // Generic gumlet.io URL - try to extract ID from path
-          const pathMatch = video.url.match(/gumlet\.io\/[^\/]*\/([^?&/]+)/);
+          const pathMatch = video.url.match(/gumlet\.(?:io|tv)\/[^\/]*\/([^?&/]+)/);
           gumletVideoId = pathMatch ? pathMatch[1] : '';
         }
         
@@ -129,6 +134,8 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
           autoplay={false}
           preload={true}
           muted={false}
+          onEnded={onVideoEnded}
+          onPause={onVideoPaused}
         />
       );
     } else if (playerType === 'youtube' && videoData.embedUrl) {

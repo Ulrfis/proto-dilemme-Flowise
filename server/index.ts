@@ -6,7 +6,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { startFlowiseWarmer } from "./flowise-warmer";
 import { prewarmTTS } from "./providers/tts/prewarm";
-import { PETER_WELCOME_MESSAGE } from "../shared/welcome-message";
+import { PETER_WELCOME_MESSAGE, PETER_INTRO_MESSAGE } from "../shared/welcome-message";
 
 const app = express();
 
@@ -134,6 +134,7 @@ app.use((req, res, next) => {
     log(`serving on port ${port}`);
     // Latency optimizations: keep Flowise warm + pre-cache welcome TTS
     startFlowiseWarmer();
+    void prewarmTTS(PETER_INTRO_MESSAGE, "intro");
     void prewarmTTS(PETER_WELCOME_MESSAGE, "welcome");
   });
 })();

@@ -3,7 +3,7 @@
 > **Status**: 🟡 In Progress  
 > **Creator**: Ulrich Fischer  
 > **Started**: 2025-11-06  
-> **Last Updated**: 2026-05-02 (Console debug interne : services + latences + tooltips solutions)  
+> **Last Updated**: 2026-05-02 (Nouveau flow d'entrée : direct au chat + vidéo intro + Peter en deux temps)  
 
 ---
 
