@@ -13,6 +13,7 @@ interface ChatMessageProps {
   onLinkClick?: (url: string) => void;
   onThumbsUp?: () => void;
   onChoiceClick?: (choice: string) => void;
+  onWatchedVideo?: () => void;
   userAvatarUrl?: string;
   userName?: string;
   showThinking?: boolean;
@@ -30,6 +31,7 @@ export function ChatMessage({
   onLinkClick, 
   onThumbsUp, 
   onChoiceClick,
+  onWatchedVideo,
   userAvatarUrl,
   userName = 'Utilisateur',
   showThinking = false,
@@ -370,8 +372,23 @@ export function ChatMessage({
           </div>{/* end px-4 py-3 */}
         </div>{/* end bubble */}
         
+        {/* "J'ai regardé cette vidéo" button — shown on the intro message */}
+        {isPeter && !isStreaming && message.watchedVideoButton && onWatchedVideo && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onWatchedVideo}
+              data-testid="button-watched-video"
+              className="bg-accent border-accent text-accent-foreground hover:bg-accent/80"
+            >
+              ✅ J'ai regardé cette vidéo
+            </Button>
+          </div>
+        )}
+
         {/* Action buttons based on message type - only show when NOT streaming and actions allowed */}
-        {isPeter && !isStreaming && !message.noActions && (
+        {isPeter && !isStreaming && !message.noActions && !message.watchedVideoButton && (
           <div className="mt-2 flex flex-wrap gap-2">
             {/* Choice buttons for menu messages */}
             {messageType === 'with-choices' && onChoiceClick && extractedChoices.map((choice, index) => (

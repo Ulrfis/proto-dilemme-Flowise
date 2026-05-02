@@ -262,7 +262,7 @@ export function useFlowise(
       content: PETER_INTRO_MESSAGE,
       sender: 'peter',
       timestamp: new Date().toISOString(),
-      noActions: true,
+      watchedVideoButton: true,
     };
 
     setMessages([introMessage]);
