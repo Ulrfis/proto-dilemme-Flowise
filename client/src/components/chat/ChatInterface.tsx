@@ -11,6 +11,7 @@ import { useUserAvatar } from "../../hooks/use-user-avatar";
 import { useTTSQueue } from "../../hooks/use-tts-queue";
 import { plainifyForTTS } from "../../lib/tts-text";
 import { splitIntoSentences } from "../../lib/sentence-split";
+import { analytics } from "../../lib/analytics";
 import peterAvatarImage from "@assets/Peter_Avatar_white_1777751289628.jpeg";
 import { ThinkingIndicator } from "./ThinkingIndicator";
 
@@ -99,6 +100,9 @@ export function ChatInterface({
   // (immediate silence). Going TO unmuted just enables future enqueues —
   // does not replay the current message.
   const toggleMute = useCallback(() => {
+    setTimeout(() => {
+      try { analytics.trackMuteToggled(!isMutedRef.current); } catch {}
+    }, 0);
     setIsMuted((prev) => {
       const next = !prev;
       if (next) ttsQueue.stop();

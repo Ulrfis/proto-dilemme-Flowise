@@ -1,4 +1,4 @@
-import { eq, asc, desc } from "drizzle-orm";
+import { eq, asc, desc, sql } from "drizzle-orm";
 import {
   AnalyticsEvent,
   conversationMessages,
@@ -10,6 +10,17 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 
+export interface SessionListItem extends ConversationSession {
+  messageCount: number;
+}
+
+export interface SessionListPage {
+  items: SessionListItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export interface IStorage {
   // Analytics (best-effort, console-only en dev)
   logAnalyticsEvent(event: AnalyticsEvent): Promise<void>;
@@ -17,7 +28,7 @@ export interface IStorage {
   // Conversations persistées
   createConversationSession(input: InsertConversationSession): Promise<ConversationSession>;
   appendConversationMessage(input: InsertConversationMessage): Promise<ConversationMessage>;
-  listConversationSessions(limit?: number): Promise<ConversationSession[]>;
+  listConversationSessions(opts?: { page?: number; pageSize?: number }): Promise<SessionListPage>;
   getConversationSession(id: string): Promise<ConversationSession | null>;
   listSessionMessages(sessionId: string): Promise<ConversationMessage[]>;
 }
@@ -51,12 +62,34 @@ export class DbStorage implements IStorage {
     return row;
   }
 
-  async listConversationSessions(limit = 200): Promise<ConversationSession[]> {
-    return db
-      .select()
+  async listConversationSessions(opts: { page?: number; pageSize?: number } = {}): Promise<SessionListPage> {
+    const page = Math.max(1, opts.page ?? 1);
+    const pageSize = Math.min(200, Math.max(1, opts.pageSize ?? 50));
+    const offset = (page - 1) * pageSize;
+
+    const rows = await db
+      .select({
+        id: conversationSessions.id,
+        firstName: conversationSessions.firstName,
+        lastName: conversationSessions.lastName,
+        createdAt: conversationSessions.createdAt,
+        messageCount: sql<number>`COALESCE(COUNT(${conversationMessages.id}), 0)::int`,
+      })
       .from(conversationSessions)
+      .leftJoin(
+        conversationMessages,
+        eq(conversationMessages.sessionId, conversationSessions.id),
+      )
+      .groupBy(conversationSessions.id)
       .orderBy(desc(conversationSessions.createdAt))
-      .limit(limit);
+      .limit(pageSize)
+      .offset(offset);
+
+    const [{ count }] = await db
+      .select({ count: sql<number>`COUNT(*)::int` })
+      .from(conversationSessions);
+
+    return { items: rows as SessionListItem[], total: count, page, pageSize };
   }
 
   async getConversationSession(id: string): Promise<ConversationSession | null> {
