@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Code, MessageSquare, Volume2, VolumeX } from "lucide-react";
-import { ThinkingIndicator } from "./ThinkingIndicator";
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -17,10 +16,6 @@ interface ChatMessageProps {
   onWatchedVideo?: () => void;
   userAvatarUrl?: string;
   userName?: string;
-  showThinking?: boolean;
-  /** Dynamic step label (e.g. "Peter cherche dans ses sources…"). Falls back
-   *  to a generic message when null. */
-  progressLabel?: string | null;
   ttsEnabled?: boolean;
   isMuted?: boolean;
   onToggleMute?: () => void;
@@ -35,8 +30,6 @@ export function ChatMessage({
   onWatchedVideo,
   userAvatarUrl,
   userName = 'Utilisateur',
-  showThinking = false,
-  progressLabel = null,
   ttsEnabled = true,
   isMuted = false,
   onToggleMute,
@@ -361,13 +354,6 @@ export function ChatMessage({
             </p>
           )}
           
-          {showThinking && (
-            <ThinkingIndicator
-              progressLabel={progressLabel}
-              testId={`thinking-${message.id}`}
-              variant="teal"
-            />
-          )}
           </div>{/* end px-4 py-3 */}
         </div>{/* end bubble */}
         
