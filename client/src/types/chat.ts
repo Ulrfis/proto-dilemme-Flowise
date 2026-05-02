@@ -12,6 +12,7 @@ export interface ChatMessage {
   };
   isStreaming?: boolean; // Indique si le message est en cours de streaming
   noActions?: boolean;  // Désactive les boutons d'action (👍, choix, liens)
+  watchedVideoButton?: boolean; // Affiche le bouton "J'ai regardé cette vidéo"
 }
 
 export interface FlowiseConfig {

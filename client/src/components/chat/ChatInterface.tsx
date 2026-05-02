@@ -21,6 +21,7 @@ interface ChatInterfaceProps {
   onToggleMediaPanel: () => void;
   onThumbsUp: () => void;
   onChoiceClick: (choice: string) => void;
+  onWatchedVideo?: () => void;
   isLoading?: boolean;
   messageCount: number;
   /** Current streaming step label (e.g. "Peter cherche dans ses sources…"). */
@@ -37,6 +38,7 @@ export function ChatInterface({
   onToggleMediaPanel,
   onThumbsUp,
   onChoiceClick,
+  onWatchedVideo,
   isLoading = false,
   messageCount,
   currentStepLabel = null,
@@ -287,6 +289,7 @@ export function ChatInterface({
               onLinkClick={onLinkClick}
               onThumbsUp={onThumbsUp}
               onChoiceClick={onChoiceClick}
+              onWatchedVideo={onWatchedVideo}
               userAvatarUrl={userAvatar.avatarUrl}
               userName={userAvatar.name}
               showThinking={showThinking}

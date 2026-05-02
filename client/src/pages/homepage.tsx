@@ -253,6 +253,7 @@ export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
               onToggleMediaPanel={openMediaPanel}
               onThumbsUp={handleThumbsUp}
               onChoiceClick={handleChoiceClick}
+              onWatchedVideo={triggerWelcome}
               isLoading={isLoading}
               messageCount={messages.length}
               currentStepLabel={currentStepLabel}
