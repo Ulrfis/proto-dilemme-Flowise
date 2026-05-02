@@ -29,7 +29,7 @@ app.use(helmet({
       imgSrc: ["'self'", "data:", "https:"],
       connectSrc: ["'self'", "https:", "https://api.rectify.so", "*.rectify.so"], // Allow HTTPS connections and Rectify API
       frameSrc: ["'self'", "https:", "https://www.youtube.com", "https://www.youtube-nocookie.com", "https://play.gumlet.io", "https://api.rectify.so", "*.rectify.so"],
-      mediaSrc: ["'self'", "https:", "https://www.youtube.com", "https://play.gumlet.io"],
+      mediaSrc: ["'self'", "blob:", "data:", "https:", "https://www.youtube.com", "https://play.gumlet.io"],
       fontSrc: ["'self'", "https:", "data:"],
       childSrc: ["'self'", "https:", "*.rectify.so"],
       workerSrc: ["'self'", "blob:", "https:", "*.rectify.so"],

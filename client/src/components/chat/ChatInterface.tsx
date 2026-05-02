@@ -2,12 +2,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { PanelsRightBottom, Copy, Check } from "lucide-react";
+import { PanelsRightBottom, Copy, Check, Volume2, VolumeX } from "lucide-react";
 import { ChatMessage as ChatMessageType } from "../../types/chat";
 import { cn } from "@/lib/utils";
 import { AvatarSelector } from "../avatar/AvatarSelector";
 import { useUserAvatar } from "../../hooks/use-user-avatar";
+import { useTTS } from "../../hooks/use-tts";
+import { plainifyForTTS } from "../../lib/tts-text";
 import peterAvatarImage from "@assets/Peter Avatar_1756370825342.jpg";
 
 interface ChatInterfaceProps {
@@ -37,6 +41,107 @@ export function ChatInterface({
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
   const userAvatar = useUserAvatar();
+
+  const TTS_AUTOPLAY_KEY = 'tts-autoplay';
+  const [autoplayTTS, setAutoplayTTS] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return window.localStorage.getItem(TTS_AUTOPLAY_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(TTS_AUTOPLAY_KEY, autoplayTTS ? '1' : '0');
+    } catch {
+      // ignore
+    }
+  }, [autoplayTTS]);
+
+  // Detect TTS availability via /api/providers so we can hide controls when
+  // the active provider is "none" (no key configured).
+  const [ttsEnabled, setTtsEnabled] = useState<boolean>(true);
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/providers')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled || !data) return;
+        setTtsEnabled(data?.tts?.active && data.tts.active !== 'none');
+      })
+      .catch(() => {
+        // Network failure: keep enabled (button click will surface the error).
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Single autoplay engine: triggers TTS exactly once per Peter message that
+  // transitions from streaming → not-streaming (the "new response just
+  // completed" edge). We track the id of the last announced message so an
+  // already-completed historic message never re-triggers, and so streaming
+  // updates only fire `play()` once per message.
+  const autoplayTTSRef = useRef(autoplayTTS);
+  autoplayTTSRef.current = autoplayTTS;
+  const ttsEnabledRef = useRef(ttsEnabled);
+  ttsEnabledRef.current = ttsEnabled;
+  const lastAnnouncedIdRef = useRef<string | null>(null);
+  const previousMessagesRef = useRef<ChatMessageType[]>([]);
+  const autoplayTTS_engine = useTTS();
+
+  // Track the last Peter message id we've seen to detect new completed responses
+  const firstMountRef = useRef(true);
+
+  useEffect(() => {
+    const previous = previousMessagesRef.current;
+    previousMessagesRef.current = messages;
+    const isFirstMount = firstMountRef.current;
+    firstMountRef.current = false;
+
+    if (!autoplayTTSRef.current || !ttsEnabledRef.current) {
+      // Even with autoplay off, keep lastAnnouncedIdRef in sync with the
+      // latest Peter message so toggling autoplay ON later does not replay
+      // historic messages.
+      const lastPeter = [...messages].reverse().find((m) => m.sender === 'peter');
+      if (lastPeter && !lastPeter.isStreaming) {
+        lastAnnouncedIdRef.current = lastPeter.id;
+      }
+      return;
+    }
+
+    // On the first mount with pre-existing history (e.g. welcome message,
+    // or full reload after autoplay was previously enabled), mark the most
+    // recent Peter message as "already announced" without playing it.
+    if (isFirstMount) {
+      const lastPeter = [...messages].reverse().find((m) => m.sender === 'peter');
+      if (lastPeter) lastAnnouncedIdRef.current = lastPeter.id;
+      return;
+    }
+
+    // Look for a Peter message whose state just transitioned from streaming
+    // to complete (or that just appeared already complete since last render).
+    const lastPeter = [...messages].reverse().find((m) => m.sender === 'peter');
+    if (!lastPeter) return;
+    if (lastAnnouncedIdRef.current === lastPeter.id) return;
+    if (lastPeter.isStreaming) return;
+    if (!lastPeter.content?.trim()) return;
+
+    const previousState = previous.find((m) => m.id === lastPeter.id);
+    const justFinishedStreaming = previousState?.isStreaming === true;
+    const arrivedComplete = !previousState; // brand new, already non-streaming
+
+    if (justFinishedStreaming || arrivedComplete) {
+      const text = plainifyForTTS(lastPeter.content);
+      if (text) {
+        lastAnnouncedIdRef.current = lastPeter.id;
+        void autoplayTTS_engine.play(text);
+      }
+    }
+  }, [messages, autoplayTTS_engine]);
 
   const rafRef = useRef<number | null>(null);
 
@@ -137,6 +242,32 @@ export function ChatInterface({
               currentAvatarUrl={userAvatar.avatarUrl}
               onAvatarChange={userAvatar.updateAvatar}
             />
+            {ttsEnabled && (
+              <div
+                className="flex items-center gap-1.5"
+                title="Lecture vocale automatique des messages de Peter"
+              >
+                {autoplayTTS ? (
+                  <Volume2 className="w-3.5 h-3.5 text-teal-500" />
+                ) : (
+                  <VolumeX className="w-3.5 h-3.5 text-gray-400" />
+                )}
+                <Switch
+                  id="tts-autoplay-toggle"
+                  checked={autoplayTTS}
+                  onCheckedChange={setAutoplayTTS}
+                  data-testid="switch-tts-autoplay"
+                  aria-label="Activer ou désactiver la lecture vocale automatique"
+                  className="scale-75"
+                />
+                <Label
+                  htmlFor="tts-autoplay-toggle"
+                  className="text-xs text-gray-600 cursor-pointer select-none hidden sm:inline"
+                >
+                  Lecture auto
+                </Label>
+              </div>
+            )}
             <div className="text-xs text-gray-500" data-testid="text-message-count">
               <span>{messageCount}</span> msgs
             </div>
@@ -162,6 +293,7 @@ export function ChatInterface({
               userAvatarUrl={userAvatar.avatarUrl}
               userName={userAvatar.name}
               showThinking={showThinking}
+              ttsEnabled={ttsEnabled}
             />
           );
         })}

@@ -3,7 +3,7 @@
 > **Status**: 🟡 In Progress  
 > **Creator**: Ulrich Fischer  
 > **Started**: 2025-11-06  
-> **Last Updated**: 2026-05-02  
+> **Last Updated**: 2026-05-02 (TTS/STT multi-providers)  
 
 ---
 
@@ -91,6 +91,22 @@ How Peter helps: Conversational guide who asks questions, shares surprising fact
 ## Feature Chronicle
 
 *Each feature gets an entry. Major features (🔷) get full treatment. Minor features (🔹) get brief notes.*
+
+### [2026-05-02] — Pipeline TTS/STT multi-providers (voix de Peter) 🔷
+
+**Intent**: Permettre au créateur de basculer le provider vocal (TTS et STT) via variables d'environnement, sans toucher au code, pour comparer ElevenLabs, OpenAI et Deepgram en autonomie.
+
+**What shipped**:
+- Backend : couches d'abstraction `server/providers/tts/` (ElevenLabs, OpenAI, None) et `server/providers/stt/` (OpenAI Whisper, ElevenLabs Scribe, Deepgram Nova-3) avec fabrique paresseuse — pas d'instanciation de client tant qu'aucun appel n'est fait.
+- Endpoints : `POST /api/tts` (audio MP3), `GET /api/providers` (introspection), `POST /api/transcribe` refactoré pour déléguer au STT actif (signature publique inchangée).
+- Frontend : hook `useTTS` à instance Audio unique avec auto-cancel global, bouton haut-parleur sur chaque message Peter, toggle "Lecture auto" persistant (`localStorage:tts-autoplay`).
+- Autoplay : moteur unique côté `ChatInterface` qui déclenche la lecture exactement une fois sur l'arête `isStreaming: true → false` du dernier message Peter (via `lastAnnouncedIdRef` + `firstMountRef`). Aucun rejouage de l'historique au chargement, au toggle ON ou au reload.
+- Sécurité/CSP : `media-src` autorise `blob:` et `data:` ; toutes les clés provider restent côté serveur.
+- Code review : voix OpenAI typées strictement (union `"alloy" | "echo" | "fable" | "onyx" | "nova" | "shimmer"`) avec validation explicite — plus aucun `as any`. Bouton TTS et toggle masqués automatiquement quand `/api/providers` rapporte `tts.active === "none"`.
+
+**Tests e2e** : ttsCount=0 au chargement (autoplay off), ttsCount=0 après activation du toggle (pas de rejouage), ttsCount=1 après une nouvelle réponse Peter terminée, ttsCount=0 après reload (autoplay persisté), ttsCount=1 sur la nouvelle réponse, +1 sur clic manuel du bouton haut-parleur. `/api/providers` renvoie `tts=elevenlabs`, `stt=openai`.
+
+**Why it matters** : Ulrich peut maintenant comparer trois pipelines vocaux en changeant deux variables d'env. La voix de Peter peut évoluer au rythme des progrès du marché sans dette technique.
 
 ### [2026-05-02] — Code Quality Audit: Security, Performance & Reliability 🔷
 
