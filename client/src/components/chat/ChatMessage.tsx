@@ -16,6 +16,9 @@ interface ChatMessageProps {
   userAvatarUrl?: string;
   userName?: string;
   showThinking?: boolean;
+  /** Dynamic step label (e.g. "Peter cherche dans ses sources…"). Falls back
+   *  to a generic message when null. */
+  progressLabel?: string | null;
   ttsEnabled?: boolean;
   isMuted?: boolean;
   onToggleMute?: () => void;
@@ -30,6 +33,7 @@ export function ChatMessage({
   userAvatarUrl,
   userName = 'Utilisateur',
   showThinking = false,
+  progressLabel = null,
   ttsEnabled = true,
   isMuted = false,
   onToggleMute,
@@ -352,9 +356,14 @@ export function ChatMessage({
           )}
           
           {showThinking && (
-            <div className="flex items-center space-x-2 mt-2 pt-2 border-t border-white/20">
+            <div
+              className="flex items-center space-x-2 mt-2 pt-2 border-t border-white/20"
+              data-testid={`thinking-${message.id}`}
+            >
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              <span className="text-xs opacity-80">Peter réfléchit...</span>
+              <span className="text-xs opacity-80" data-testid={`thinking-label-${message.id}`}>
+                {progressLabel || "Peter réfléchit..."}
+              </span>
             </div>
           )}
         </div>

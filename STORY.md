@@ -3,7 +3,7 @@
 > **Status**: 🟡 In Progress  
 > **Creator**: Ulrich Fischer  
 > **Started**: 2025-11-06  
-> **Last Updated**: 2026-05-02 (UX TTS simplifiée : autoplay + mute global)  
+> **Last Updated**: 2026-05-02 (Optimisations latence Peter : ~30s → cible <8s)  
 
 ---
 
@@ -91,6 +91,39 @@ How Peter helps: Conversational guide who asks questions, shares surprising fact
 ## Feature Chronicle
 
 *Each feature gets an entry. Major features (🔷) get full treatment. Minor features (🔹) get brief notes.*
+
+### [2026-05-02] — Optimisations latence Peter : keep-alive, pré-warm, streaming par phrase, indicateurs d'étape 🔷
+
+**Intent** : Réduire la latence ressentie par l'élève entre son message et la voix de Peter. Mesures de départ : 12 420 ms TTFT (Flowise), 9 451 ms TTS, ~30s totale. Cible : <8s pour entendre la 1ère phrase.
+
+**Diagnostic** (`docs/flowise-latency-analysis.md` puis `docs/flowise-chatflow-audit-report.md`) :
+- Le chatflow Flowise contient 53 nœuds, plus long chemin = 15 nœuds (correspond aux ~11 cycles `agentFlowEvent` observés). 2 LLM calls.
+- 4 sources de latence séquentielles : DNS+TLS+keep-alive Flowise (~600 ms), exécution agent flow (~12 s), synthèse TTS du message complet (~9 s), pas de retour visuel pendant l'attente (impression de gel).
+
+**What shipped (T1-T8 sauf T3)** :
+
+- **T1 — Audit chatflow automatisé** (`scripts/flowise-chatflow-audit.ts`) : récupère le flowData via API, détecte les nœuds lourds (RAG, LLM, tools), calcule le plus long chemin séquentiel, écrit un rapport markdown actionable dans `docs/flowise-chatflow-audit-report.md`.
+- **T2 — Keep-alive Flowise** (`server/flowise-warmer.ts`) : ping HEAD du chatflow toutes les 30s au boot du serveur, agrégat de stats toutes les 5 min (zéro spam de log). Évite le cold start réseau de l'instance Flowise self-hosted entre deux élèves espacés.
+- **T4 — HTTP keep-alive serveur→Flowise** (`server/flowise-fetch.ts`) : Agent undici dédié (`keepAliveTimeout=60s`, `keepAliveMaxTimeout=10min`) réutilisé pour TOUS les appels Flowise (warmer + SSE proxy). Élimine les ~600 ms de TLS handshake répétés. Mesure le `connectMs` et l'inclut dans les logs.
+- **T5 — Indicateurs visuels d'étapes** (`server/flowise-progress-labels.ts` + parser dans `client/src/lib/flowise.ts` + état `currentStepLabel` dans `useFlowise`) : le serveur mappe chaque event Flowise (`agentFlowEvent`, `nextAgentFlow`, `calledTools`, etc.) vers un label FR ("Peter cherche dans ses sources…", "Peter consulte ses outils…"), forwarde un event `progress` au client, qui l'affiche en remplacement du générique "Peter réfléchit…". L'élève voit que ça avance.
+- **T6 — Logs propres + instrumentation** (refactor `server/routes.ts` SSE proxy) : avant = 25+ `console.log("Unknown event")` par requête + 8 logs de debug. Après = **1 ligne au start, 1 ligne structurée à la fin** avec `ttft`, `total`, `connectMs`, `tokens`, `chars`, `nodes`, `tools`, `unknownEvents`. Les `Unknown event` deviennent un compteur silencieux. Plus rien ne pollue la console.
+- **T7 — Pré-warm TTS welcome** (`shared/welcome-message.ts` + `server/providers/tts/prewarm.ts` + appel dans `server/index.ts`) : le message d'accueil de Peter est centralisé dans un seul fichier (frontend ET backend l'importent), et synthétisé au boot du serveur — il atterrit dans le cache LRU TTS avant le premier élève. Mesure boot : 254 chars, 250 819 octets, 2 605 ms… payés une fois pour tous les élèves.
+- **T8 — TTS streaming par phrase** (`client/src/lib/sentence-split.ts` + `client/src/hooks/use-tts-queue.ts`) : nouveau splitter FR-aware (préserve "M.", "Mme.", décimales) qui détecte les phrases COMPLÈTES dans le flux SSE Flowise. Nouveau hook `useTTSQueue` : queue séquentielle qui synthétise la phrase N+1 EN PARALLÈLE de la lecture de N (overlap fetch+playback). Stop instantané + abort des fetches en vol au mute. Conséquence : la 1ère phrase est jouée dès qu'elle apparaît dans le stream (au lieu d'attendre la fin complète), gain attendu ~7-8s sur les longues réponses.
+
+**T3 (hors codebase)** : la simplification du chatflow dans l'UI Flowise (réduire les 15 nœuds du plus long chemin, vérifier `streaming: true` sur tous les LLM, activer prompt caching OpenAI/Anthropic) reste à faire en session interactive avec Ulrich, alimentée par le rapport d'audit auto-généré.
+
+**Why it matters** : Une attente de 30s avec une bulle "Peter réfléchit…" figée donne l'impression que l'app a planté. Avec le streaming par phrase + indicateurs dynamiques, l'élève entend Peter parler en moins de 5s et VOIT en permanence ce qu'il fait. Le keep-alive + le pré-warm transforment l'expérience du PREMIER élève (cold) en celle de tous les autres (warm).
+
+**Mesures attendues** (à valider en classe avec un vrai trafic) :
+- TTFT serveur→Flowise : -300 à -600 ms (TLS handshake éliminé)
+- TTS welcome : 2 605 ms → ~40 ms (cache hit)
+- 1ère phrase audible : -7 à -8 s (streaming par phrase au lieu de message complet)
+
+**Files** : 9 nouveaux + 7 refactor. `scripts/flowise-chatflow-audit.ts`, `shared/welcome-message.ts`, `server/flowise-fetch.ts`, `server/flowise-warmer.ts`, `server/flowise-progress-labels.ts`, `server/providers/tts/prewarm.ts`, `client/src/lib/sentence-split.ts`, `client/src/hooks/use-tts-queue.ts`, `docs/flowise-chatflow-audit-report.md` (auto-généré).
+
+**Time** : ~2h (analyse + diagnostic + 8 tâches + tests + doc)
+
+---
 
 ### [2026-05-02] — UX TTS simplifiée : autoplay par défaut + mute global 🔷
 

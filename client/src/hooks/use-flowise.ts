@@ -1,7 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { ChatMessage } from "../types/chat";
-import { FlowiseClient, extractMediaFromText } from "../lib/flowise";
+import { FlowiseClient, extractMediaFromText, type FlowiseProgressLabel } from "../lib/flowise";
 import { analytics } from "../lib/analytics";
+import { PETER_WELCOME_MESSAGE } from "../../../shared/welcome-message";
 
 // Token batching configuration for smoother streaming
 const TOKEN_BATCH_INTERVAL_MS = 50; // Update UI every 50ms max
@@ -12,23 +13,37 @@ interface InfoPanelData {
   score_globale?: string | number;
 }
 
-export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPanelData | null) => void) {
+interface UseFlowiseOptions {
+  /** Called every time a new complete sentence appears in Peter's stream. */
+  onSentenceComplete?: (sentence: string) => void;
+}
+
+export function useFlowise(
+  chatflowId: string,
+  onInfoDataUpdate?: (data: InfoPanelData | null) => void,
+  options: UseFlowiseOptions = {},
+) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [client] = useState(() => new FlowiseClient(chatflowId));
-  
+  const [currentStepLabel, setCurrentStepLabel] = useState<string | null>(null);
+
   // Refs for token batching - reduces re-renders from 200+ to ~60-80 per response
   const tokenBufferRef = useRef<string>('');
   const batchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentMessageIdRef = useRef<string>('');
   // AbortController ref - cancels in-flight SSE stream on new message or unmount
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const abortControllersRef = useRef<AbortController | null>(null);
+  // Latest onSentenceComplete callback (kept in ref so the FlowiseClient call
+  // doesn't capture a stale closure when the consumer re-renders).
+  const onSentenceRef = useRef<UseFlowiseOptions["onSentenceComplete"]>(options.onSentenceComplete);
+  onSentenceRef.current = options.onSentenceComplete;
 
   // Cancel any active stream on unmount
   useEffect(() => {
     return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
+      if (abortControllersRef.current) {
+        abortControllersRef.current.abort();
       }
       if (batchTimeoutRef.current) {
         clearTimeout(batchTimeoutRef.current);
@@ -40,11 +55,11 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
     if (!content.trim()) return;
 
     // Cancel any previous in-flight stream
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
+    if (abortControllersRef.current) {
+      abortControllersRef.current.abort();
     }
     const abortController = new AbortController();
-    abortControllerRef.current = abortController;
+    abortControllersRef.current = abortController;
 
     const userMessage: ChatMessage = {
       id: `user_${Date.now()}`,
@@ -55,6 +70,7 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
 
     setMessages(prev => [...prev, userMessage]);
     setIsLoading(true);
+    setCurrentStepLabel("Peter prépare sa réponse…");
     setTimeout(() => analytics.trackMessageSent(content.length), 0);
 
     const peterMessageId = `peter_${Date.now()}`;
@@ -150,6 +166,7 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
           ));
 
           setIsLoading(false);
+          setCurrentStepLabel(null);
 
           // Analytics tracking
           if (videos.length > 0 || links.length > 0) {
@@ -176,6 +193,7 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
           // Ignore AbortError — it means we intentionally cancelled the stream
           if (error.name === 'AbortError') {
             console.log('[use-flowise] Stream aborted (new message started)');
+            setCurrentStepLabel(null);
             return;
           }
 
@@ -193,8 +211,20 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
           ));
 
           setIsLoading(false);
+          setCurrentStepLabel(null);
         },
-        abortController.signal
+        abortController.signal,
+        // Progress callback (server-emitted FR labels for current Flowise step)
+        (label: FlowiseProgressLabel) => {
+          setCurrentStepLabel(label.label);
+        },
+        // Sentence callback (each complete sentence as it appears in stream)
+        (sentence: string) => {
+          if (onSentenceRef.current) {
+            try { onSentenceRef.current(sentence); }
+            catch (err) { console.warn('[use-flowise] onSentenceComplete threw', err); }
+          }
+        },
       );
 
     } catch (error) {
@@ -216,6 +246,7 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
       ));
 
       setIsLoading(false);
+      setCurrentStepLabel(null);
     }
   }, [client, onInfoDataUpdate]);
 
@@ -228,7 +259,7 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
   const initializeChat = useCallback(() => {
     const welcomeMessage: ChatMessage = {
       id: 'peter_welcome',
-      content: `Salut, c'est toi l'enquêteur écologique avec qui je dois collaborer ? Ne sois pas surpris, en 2025, ils ont bien fait le taf lorsqu'ils ont enregistré mon fantôme digital, je suis plus vrai que nature ! Alors, à qui ai-je affaire, comment tu t'appelles ?`,
+      content: PETER_WELCOME_MESSAGE,
       sender: 'peter',
       timestamp: new Date().toISOString(),
     };
@@ -240,6 +271,7 @@ export function useFlowise(chatflowId: string, onInfoDataUpdate?: (data: InfoPan
   return {
     messages,
     isLoading,
+    currentStepLabel,
     sendMessage,
     resetSession,
     initializeChat,

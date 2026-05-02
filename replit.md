@@ -96,6 +96,19 @@ Architecture multi-providers pour la voix de Peter, configurable via variables d
 - **Endpoints voix conservés mais non utilisés par le front** : `GET /api/tts/voices` reste exposé (utile pour outillage / debug), interface `ITTSProvider` garde `listVoices()` / `getDefaultVoiceId()` optionnels. `POST /api/tts` accepte toujours `voiceId` optionnel ; quand absent, le provider utilise sa voix par défaut.
 - **Cache TTS** : `server/providers/tts/cache.ts` — LRU mémoire (clé SHA-256 sur `provider + voiceId + text`, 100 entrées par défaut, override via `TTS_CACHE_MAX_ENTRIES`). Auto-invalidation totale dès que `TTS_PROVIDER` ou `ELEVENLABS_VOICE_ID` changent. En-têtes de réponse `X-TTS-Cache: hit|miss` pour observabilité (~40 ms sur hit vs ~1.1 s sur miss).
 
+## Optimisations latence (mai 2026)
+
+Mesure de départ : ~30s entre l'envoi du message et la fin de la lecture vocale (TTFT Flowise = 12 420 ms, TTS welcome = 9 451 ms). Cible : 1ère phrase audible <8s.
+
+- **Audit chatflow** : `npx tsx scripts/flowise-chatflow-audit.ts` → `docs/flowise-chatflow-audit-report.md`. Heuristiques sur le flowData (nœuds RAG/LLM/tools, plus long chemin séquentiel). À rejouer dès qu'on touche au chatflow Flowise.
+- **Keep-alive Flowise** (`server/flowise-warmer.ts`) : ping HEAD toutes les 30s au boot du serveur, summary toutes les 5 min. Désactivable via `FLOWISE_KEEPALIVE=0`.
+- **HTTP keep-alive** (`server/flowise-fetch.ts`) : Agent undici (`keepAliveTimeout=60s`) partagé entre warmer et SSE proxy. Élimine TLS handshake répété, expose `connectMs` dans les logs.
+- **Pré-warm TTS** (`server/providers/tts/prewarm.ts` + appel dans `server/index.ts`) : synthétise le `PETER_WELCOME_MESSAGE` au boot et le pousse dans `ttsCache`. Désactivable via `TTS_PREWARM=0`. Texte centralisé dans `shared/welcome-message.ts` (importé par client et serveur).
+- **Indicateurs d'étape** (`server/flowise-progress-labels.ts`) : mapping events Flowise → labels FR ("Peter cherche dans ses sources…", "Peter consulte ses outils…"). Le serveur forwarde un event SSE `progress` ; le client l'affiche dans la bulle de pensée via `data-testid="thinking-label-${id}"`.
+- **TTS streaming par phrase** (`client/src/lib/sentence-split.ts` + `client/src/hooks/use-tts-queue.ts`) : splitter FR-aware (préserve M., Mme., décimales) extrait chaque phrase complète du flux Flowise. Queue séquentielle qui prefetch la phrase N+1 pendant la lecture de N. Mute stop instantané + abort fetches en vol.
+- **Logs SSE refactorés** (`server/routes.ts`) : 1 ligne au start (`[Flowise] start chatId=… q="…"`) + 1 ligne structurée à la fin (`[Flowise] end chatId=… ttft=…ms total=…ms connect=…ms tokens=… nodes=… tools=… unknownEvents=…`). Plus de `console.log("Unknown event")` répétés.
+- **À faire (T3, hors codebase)** : simplification du chatflow Flowise dans l'UI (15 nœuds dans le plus long chemin, 2 LLM calls). Voir `docs/flowise-chatflow-audit-report.md`.
+
 ## Integration Priorities
 1. Flowise chatbot API integration with proxy for security
 2. Gumlet video player for video URLs in chat

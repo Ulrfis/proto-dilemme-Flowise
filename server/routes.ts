@@ -19,6 +19,8 @@ import {
 import { ElevenLabsSTTProvider } from "./providers/stt/elevenlabs";
 import { OpenAISTTProvider } from "./providers/stt/openai";
 import { DeepgramSTTProvider } from "./providers/stt/deepgram";
+import { flowiseFetch } from "./flowise-fetch";
+import { labelForFlowiseEvent, type ProgressLabel } from "./flowise-progress-labels";
 
 // Allowed domains for the content proxy (prevents SSRF to internal networks)
 const PROXY_ALLOWED_DOMAINS = new Set([
@@ -492,216 +494,215 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // NOUVEAU: Flowise streaming endpoint with SSE
+  // Flowise streaming endpoint (SSE proxy)
+  // Forwards Flowise events to the client AND emits a `progress` event with a
+  // human-friendly FR label whenever Flowise transitions between agent steps.
+  // Logs are minimal: 1 line at start, 1 structured line at end.
   app.post("/api/flowise/prediction/:chatflowId/stream", async (req, res) => {
     const perfStart = Date.now();
+    const { chatflowId } = req.params;
+    const { question, chatId } = req.body;
+    const sessionTag = (chatId || `anon_${Date.now()}`).slice(0, 24);
+
+    // SSE headers (no-transform critical to bypass compression middleware)
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+
+    const actualChatflowId = process.env.FLOWISE_CHATFLOW_ID || chatflowId;
+    const flowiseHost = process.env.FLOWISE_HOST;
+    const flowiseApiKey = process.env.FLOWISE_API_KEY;
+
+    if (!flowiseHost) {
+      res.write(`data: ${JSON.stringify({ error: 'FLOWISE_HOST not configured' })}\n\n`);
+      return res.end();
+    }
+    if (!actualChatflowId) {
+      res.write(`data: ${JSON.stringify({ error: 'FLOWISE_CHATFLOW_ID not configured' })}\n\n`);
+      return res.end();
+    }
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Accept': 'text/event-stream',
+    };
+    if (flowiseApiKey) headers['Authorization'] = `Bearer ${flowiseApiKey}`;
+
+    const requestBody = {
+      question,
+      chatId: chatId || `session_${Date.now()}`,
+      streaming: true,
+      returnSourceDocuments: false,
+    };
+
+    // Counters for the final structured log
+    let firstTokenMs = 0;
+    let tokenCount = 0;
+    let nodesExecuted = 0;
+    let toolsCalled = 0;
+    let unknownEvents = 0;
+    let lastProgressStep = '';
+    let fullText = '';
+    let metadata: any = {};
+    let errorReason = '';
+
+    console.log(`[Flowise] start chatId=${sessionTag} q="${(question || '').slice(0, 60)}"`);
+
+    let response: Response;
+    let connectMs = 0;
+    try {
+      const result = await flowiseFetch(
+        `${flowiseHost}/api/v1/prediction/${actualChatflowId}`,
+        { method: 'POST', headers, body: JSON.stringify(requestBody) },
+      );
+      response = result.response;
+      connectMs = result.connectMs;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[Flowise] end chatId=${sessionTag} status=fetch_failed error="${msg}"`);
+      res.write(`data: ${JSON.stringify({ error: 'Flowise unreachable', details: msg })}\n\n`);
+      return res.end();
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      console.error(`[Flowise] end chatId=${sessionTag} status=${response.status} body="${errorText.slice(0, 120)}"`);
+      res.write(`data: ${JSON.stringify({ error: `Flowise API error: ${response.status}` })}\n\n`);
+      return res.end();
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      console.error(`[Flowise] end chatId=${sessionTag} status=no_body`);
+      res.write(`data: ${JSON.stringify({ error: 'No response body from Flowise' })}\n\n`);
+      return res.end();
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    const emitProgress = (event: string, data: unknown) => {
+      const label = labelForFlowiseEvent(event, data);
+      if (!label) return;
+      if (label.step === lastProgressStep) return; // dedupe identical consecutive steps
+      lastProgressStep = label.step;
+      res.write(`data: ${JSON.stringify({ event: 'progress', data: label })}\n\n`);
+    };
 
     try {
-      const { chatflowId } = req.params;
-      const { question, chatId } = req.body;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      console.log(`[Flowise Stream] Starting stream for chatId: ${chatId}`);
+        const chunk = decoder.decode(value, { stream: true });
+        buffer += chunk;
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
 
-      // Configuration SSE
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache, no-transform');
-      res.setHeader('Connection', 'keep-alive');
-      res.setHeader('X-Accel-Buffering', 'no');
+        for (const line of lines) {
+          const trimmedLine = line.trim();
+          if (!trimmedLine || !trimmedLine.startsWith('data:')) continue;
 
-      const actualChatflowId = process.env.FLOWISE_CHATFLOW_ID || chatflowId;
-      const flowiseHost = process.env.FLOWISE_HOST;
-      const flowiseApiKey = process.env.FLOWISE_API_KEY;
+          const payload = trimmedLine.slice(5).trim();
+          if (!payload || payload === '[DONE]' || payload === '"[DONE]"') continue;
 
-      if (!flowiseHost) {
-        res.write(`data: ${JSON.stringify({ error: 'FLOWISE_HOST not configured' })}\n\n`);
-        return res.end();
-      }
-
-      if (!actualChatflowId) {
-        res.write(`data: ${JSON.stringify({ error: 'FLOWISE_CHATFLOW_ID not configured' })}\n\n`);
-        return res.end();
-      }
-
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'Accept': 'text/event-stream',
-      };
-
-      if (flowiseApiKey) {
-        headers['Authorization'] = `Bearer ${flowiseApiKey}`;
-      }
-
-      const requestBody = {
-        question,
-        chatId: chatId || `session_${Date.now()}`,
-        streaming: true,
-        returnSourceDocuments: false,
-      };
-
-      console.log(`[Flowise Stream] Requesting stream from Flowise...`);
-
-      const response = await fetch(`${flowiseHost}/api/v1/prediction/${actualChatflowId}`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Flowise Stream] Error: ${response.status} ${errorText}`);
-        res.write(`data: ${JSON.stringify({ error: `Flowise API error: ${response.status}` })}\n\n`);
-        return res.end();
-      }
-
-      const reader = response.body?.getReader();
-      if (!reader) {
-        res.write(`data: ${JSON.stringify({ error: 'No response body from Flowise' })}\n\n`);
-        return res.end();
-      }
-
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let firstTokenTime = 0;
-      let tokenCount = 0;
-      let fullText = '';
-      let metadata: any = {};
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-
-          if (done) {
-            console.log(`[Flowise Stream] Stream complete. Tokens: ${tokenCount}, First token: ${firstTokenTime}ms`);
-            console.log(`[Flowise Stream] Full text received (${fullText.length} chars):`, fullText.substring(0, 100));
-            break;
-          }
-
-          const chunk = decoder.decode(value, { stream: true });
-          buffer += chunk;
-
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            const trimmedLine = line.trim();
-            
-            if (!trimmedLine) {
-              continue;
-            }
-
-            // Flowise SSE format: data: {"event":"token","data":"text"}
-            if (trimmedLine.startsWith('data:')) {
-              const payload = trimmedLine.slice(5).trim();
-              
-              if (!payload || payload === '[DONE]' || payload === '"[DONE]"') {
-                continue;
-              }
-
-              try {
-                const obj = JSON.parse(payload);
-                
-                if (obj.event === 'token') {
-                  // Token event: accumulate and forward
-                  if (tokenCount === 0) {
-                    firstTokenTime = Date.now() - perfStart;
-                    console.log(`[Flowise Stream] First token received in ${firstTokenTime}ms`);
-                  }
-                  
-                  fullText += obj.data;
-                  tokenCount++;
-                  res.write(`data: ${JSON.stringify({ event: 'token', data: obj.data })}\n\n`);
-                  
-                } else if (obj.event === 'start') {
-                  console.log(`[Flowise Stream] Stream started`);
-                  res.write(`data: ${JSON.stringify({ event: 'start' })}\n\n`);
-                  
-                } else if (obj.event === 'metadata') {
-                  metadata = obj.data || {};
-                  console.log(`[Flowise Stream] Metadata received:`, metadata);
-                  res.write(`data: ${JSON.stringify({ event: 'metadata', data: metadata })}\n\n`);
-                  
-                } else if (obj.event === 'end') {
-                  console.log(`[Flowise Stream] End event received`);
-                  // Don't send end yet, we'll send our own with performance metrics
-                  
-                } else if (obj.event === 'error') {
-                  console.error(`[Flowise Stream] ❌ Error event from Flowise:`, obj.data);
-                  res.write(`data: ${JSON.stringify({ event: 'error', data: obj.data })}\n\n`);
-                } else {
-                  console.log(`[Flowise Stream] Unknown event type:`, obj.event);
-                }
-                
-              } catch (parseError) {
-                // Not JSON or malformed - skip it
-                console.warn(`[Flowise Stream] Failed to parse SSE data:`, payload.substring(0, 100));
-              }
-            }
-          }
-        }
-
-        const totalTime = Date.now() - perfStart;
-        
-        // CRITICAL: Extract Response field from JSON if present
-        // Sometimes Flowise returns entire response as JSON: {"Response": "text..."}
-        let finalText = fullText;
-        const trimmedFullText = fullText.trim();
-        
-        console.log(`[Flowise Stream DEBUG] fullText length: ${trimmedFullText.length}, starts with: ${trimmedFullText.substring(0, 50)}`);
-        
-        if (trimmedFullText.startsWith('{')) {
+          let obj: any;
           try {
-            // Try to parse as JSON
-            const jsonResponse = JSON.parse(trimmedFullText);
-            console.log(`[Flowise Stream DEBUG] Successfully parsed JSON, keys:`, Object.keys(jsonResponse));
-            
-            if (jsonResponse.Response && typeof jsonResponse.Response === 'string') {
-              finalText = jsonResponse.Response;
-              console.log(`[Flowise Stream] ✅ Extracted Response field from JSON (${jsonResponse.Response.length} chars)`);
-            } else {
-              console.log(`[Flowise Stream] JSON parsed but no Response field found`);
+            obj = JSON.parse(payload);
+          } catch {
+            unknownEvents++;
+            continue;
+          }
+
+          switch (obj.event) {
+            case 'token': {
+              if (tokenCount === 0) {
+                firstTokenMs = Date.now() - perfStart;
+                emitProgress('token', null);
+              }
+              fullText += obj.data;
+              tokenCount++;
+              res.write(`data: ${JSON.stringify({ event: 'token', data: obj.data })}\n\n`);
+              break;
             }
-          } catch (parseError) {
-            // Parsing failed - log the error and the problematic JSON
-            console.error(`[Flowise Stream] ❌ JSON parsing failed:`, parseError);
-            console.error(`[Flowise Stream] Problematic JSON preview (first 200 chars):`, trimmedFullText.substring(0, 200));
-            console.error(`[Flowise Stream] Problematic JSON preview (last 200 chars):`, trimmedFullText.substring(Math.max(0, trimmedFullText.length - 200)));
-            
-            // Try regex extraction as fallback
-            const responseMatch = trimmedFullText.match(/"Response"\s*:\s*"([^"]*(?:\\.[^"]*)*)"/);
-            if (responseMatch && responseMatch[1]) {
-              finalText = responseMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
-              console.log(`[Flowise Stream] ✅ Extracted Response via regex fallback (${finalText.length} chars)`);
-            } else {
-              console.log(`[Flowise Stream] Using fullText as-is (regex extraction also failed)`);
-            }
+            case 'start':
+              res.write(`data: ${JSON.stringify({ event: 'start' })}\n\n`);
+              break;
+            case 'metadata':
+              metadata = obj.data || {};
+              res.write(`data: ${JSON.stringify({ event: 'metadata', data: metadata })}\n\n`);
+              break;
+            case 'end':
+              // Will send our own end below with metrics
+              break;
+            case 'error':
+              errorReason = typeof obj.data === 'string' ? obj.data : JSON.stringify(obj.data);
+              res.write(`data: ${JSON.stringify({ event: 'error', data: obj.data })}\n\n`);
+              break;
+            case 'agentFlowEvent':
+            case 'nextAgentFlow':
+            case 'agentFlowExecutedData':
+              nodesExecuted++;
+              emitProgress(obj.event, obj.data);
+              break;
+            case 'calledTools':
+            case 'usedTools':
+              toolsCalled++;
+              emitProgress(obj.event, obj.data);
+              break;
+            case 'usageMetadata':
+              // Silent: not useful to client
+              break;
+            default:
+              unknownEvents++;
+              break;
           }
         }
-        
-        res.write(`data: ${JSON.stringify({
-          event: 'end',
-          metadata: {
-            ...metadata,
-            totalTime,
-            firstTokenTime,
-            tokenCount,
-            fullText: finalText
-          }
-        })}\n\n`);
-
-      } catch (streamError) {
-        console.error('[Flowise Stream] Stream error:', streamError);
-        res.write(`data: ${JSON.stringify({ error: 'Stream interrupted' })}\n\n`);
-      } finally {
-        reader.releaseLock();
-        res.end();
       }
 
-    } catch (error) {
-      console.error('[Flowise Stream] Error:', error);
+      // Extract `Response` field from the accumulated JSON if present
+      let finalText = fullText;
+      const trimmedFullText = fullText.trim();
+      if (trimmedFullText.startsWith('{')) {
+        try {
+          const jsonResponse = JSON.parse(trimmedFullText);
+          if (jsonResponse.Response && typeof jsonResponse.Response === 'string') {
+            finalText = jsonResponse.Response;
+          }
+        } catch {
+          const responseMatch = trimmedFullText.match(/"Response"\s*:\s*"([^"]*(?:\\.[^"]*)*)"/);
+          if (responseMatch && responseMatch[1]) {
+            finalText = responseMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
+          }
+        }
+      }
+
+      const totalMs = Date.now() - perfStart;
       res.write(`data: ${JSON.stringify({
-        error: 'Erreur lors du streaming',
-        details: error instanceof Error ? error.message : String(error)
+        event: 'end',
+        metadata: {
+          ...metadata,
+          totalTime: totalMs,
+          firstTokenTime: firstTokenMs,
+          tokenCount,
+          fullText: finalText,
+        },
       })}\n\n`);
+
+      console.log(
+        `[Flowise] end chatId=${sessionTag}` +
+          ` ttft=${firstTokenMs}ms total=${totalMs}ms connect=${connectMs}ms` +
+          ` tokens=${tokenCount} chars=${finalText.length}` +
+          ` nodes=${nodesExecuted} tools=${toolsCalled} unknownEvents=${unknownEvents}` +
+          (errorReason ? ` error="${errorReason.slice(0, 80)}"` : ''),
+      );
+    } catch (streamError) {
+      const msg = streamError instanceof Error ? streamError.message : String(streamError);
+      console.error(`[Flowise] end chatId=${sessionTag} status=stream_error error="${msg}"`);
+      res.write(`data: ${JSON.stringify({ error: 'Stream interrupted', details: msg })}\n\n`);
+    } finally {
+      try { reader.releaseLock(); } catch { /* ignore */ }
       res.end();
     }
   });

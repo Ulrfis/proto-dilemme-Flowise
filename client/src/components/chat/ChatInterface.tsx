@@ -8,8 +8,9 @@ import { ChatMessage as ChatMessageType } from "../../types/chat";
 import { cn } from "@/lib/utils";
 import { AvatarSelector } from "../avatar/AvatarSelector";
 import { useUserAvatar } from "../../hooks/use-user-avatar";
-import { useTTS } from "../../hooks/use-tts";
+import { useTTSQueue } from "../../hooks/use-tts-queue";
 import { plainifyForTTS } from "../../lib/tts-text";
+import { splitIntoSentences } from "../../lib/sentence-split";
 import peterAvatarImage from "@assets/Peter Avatar_1756370825342.jpg";
 
 interface ChatInterfaceProps {
@@ -22,6 +23,10 @@ interface ChatInterfaceProps {
   onChoiceClick: (choice: string) => void;
   isLoading?: boolean;
   messageCount: number;
+  /** Current streaming step label (e.g. "Peter cherche dans ses sources…"). */
+  currentStepLabel?: string | null;
+  /** Imperative API: parent calls this to enqueue a sentence for TTS. */
+  ttsEnqueueRef?: React.MutableRefObject<((text: string) => void) | null>;
 }
 
 export function ChatInterface({
@@ -34,6 +39,8 @@ export function ChatInterface({
   onChoiceClick,
   isLoading = false,
   messageCount,
+  currentStepLabel = null,
+  ttsEnqueueRef,
 }: ChatInterfaceProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -81,27 +88,45 @@ export function ChatInterface({
     };
   }, []);
 
-  // Single TTS engine for the whole conversation. No voice selector — uses the
-  // provider default (Peter's configured voice).
-  const ttsEngine = useTTS();
+  // TTS queue: one engine for the whole conversation, plays sentences in order
+  // as they are enqueued. No voice selector — uses provider default voice.
+  const ttsQueue = useTTSQueue();
 
-  // Toggle mute. Going TO muted also stops any in-flight playback so the user
-  // is silenced immediately. Going TO unmuted just enables future auto-play —
-  // it does not replay the current message.
+  // Toggle mute. Going TO muted stops in-flight playback AND clears the queue
+  // (immediate silence). Going TO unmuted just enables future enqueues —
+  // does not replay the current message.
   const toggleMute = useCallback(() => {
     setIsMuted((prev) => {
       const next = !prev;
-      if (next) ttsEngine.stop();
+      if (next) ttsQueue.stop();
       return next;
     });
-  }, [ttsEngine]);
+  }, [ttsQueue]);
 
-  // Auto-play engine: speaks every new Peter message as soon as it completes.
-  // Each message is played at most once (tracked via lastAnnouncedIdRef).
+  // Refs to keep current values accessible from non-reactive places
   const isMutedRef = useRef(isMuted);
   isMutedRef.current = isMuted;
   const ttsEnabledRef = useRef(ttsEnabled);
   ttsEnabledRef.current = ttsEnabled;
+
+  // Stable enqueue function exposed to the parent via ttsEnqueueRef. Parent
+  // (homepage / use-flowise) calls this for each streamed sentence.
+  const enqueueSentence = useCallback((text: string) => {
+    if (isMutedRef.current || !ttsEnabledRef.current) return;
+    const cleaned = plainifyForTTS(text);
+    if (cleaned) ttsQueue.enqueue(cleaned);
+  }, [ttsQueue]);
+
+  useEffect(() => {
+    if (ttsEnqueueRef) ttsEnqueueRef.current = enqueueSentence;
+    return () => {
+      if (ttsEnqueueRef) ttsEnqueueRef.current = null;
+    };
+  }, [enqueueSentence, ttsEnqueueRef]);
+
+  // Welcome message handling: it's added to the message list as a complete
+  // (non-streaming) message — no token stream, so the parent's onSentence
+  // callback never fires for it. We detect it here and split+enqueue locally.
   const lastAnnouncedIdRef = useRef<string | null>(null);
   const previousMessagesRef = useRef<ChatMessageType[]>([]);
 
@@ -109,8 +134,6 @@ export function ChatInterface({
     const previous = previousMessagesRef.current;
     previousMessagesRef.current = messages;
 
-    // While muted or TTS disabled, just keep lastAnnouncedIdRef in sync so
-    // unmuting later does not retroactively play already-seen messages.
     if (isMutedRef.current || !ttsEnabledRef.current) {
       const lastPeter = [...messages].reverse().find((m) => m.sender === 'peter');
       if (lastPeter && !lastPeter.isStreaming) {
@@ -126,18 +149,21 @@ export function ChatInterface({
     if (!lastPeter.content?.trim()) return;
 
     const previousState = previous.find((m) => m.id === lastPeter.id);
-    const justFinishedStreaming = previousState?.isStreaming === true;
-    const arrivedComplete = !previousState; // brand new, already non-streaming
-                                            // (covers the welcome message on first mount)
-
-    if (justFinishedStreaming || arrivedComplete) {
-      const text = plainifyForTTS(lastPeter.content);
-      if (text) {
-        lastAnnouncedIdRef.current = lastPeter.id;
-        void ttsEngine.play(text);
-      }
+    // Only auto-speak messages that arrived COMPLETE (no streaming history).
+    // Streamed messages are spoken sentence-by-sentence via enqueueSentence.
+    const arrivedComplete = !previousState;
+    if (!arrivedComplete) {
+      lastAnnouncedIdRef.current = lastPeter.id;
+      return;
     }
-  }, [messages, ttsEngine]);
+
+    const cleaned = plainifyForTTS(lastPeter.content);
+    if (cleaned) {
+      lastAnnouncedIdRef.current = lastPeter.id;
+      const sentences = splitIntoSentences(cleaned);
+      for (const s of sentences) ttsQueue.enqueue(s);
+    }
+  }, [messages, ttsQueue]);
 
   const rafRef = useRef<number | null>(null);
 
@@ -251,6 +277,7 @@ export function ChatInterface({
           const isLastPeterMessage = message.sender === 'peter' && 
             !messages.slice(index + 1).some(m => m.sender === 'peter');
           const showThinking = isLoading && isLastPeterMessage && !message.isStreaming;
+          const progressLabel = showThinking ? currentStepLabel : null;
           
           return (
             <ChatMessage
@@ -263,6 +290,7 @@ export function ChatInterface({
               userAvatarUrl={userAvatar.avatarUrl}
               userName={userAvatar.name}
               showThinking={showThinking}
+              progressLabel={progressLabel}
               ttsEnabled={ttsEnabled}
               isMuted={isMuted}
               onToggleMute={toggleMute}
