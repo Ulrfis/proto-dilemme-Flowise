@@ -474,8 +474,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/admin/sessions", async (req, res) => {
     if (!requireAdmin(req, res)) return;
     try {
-      const sessions = await storage.listConversationSessions(500);
-      res.json({ sessions });
+      const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10) || 1);
+      const pageSize = Math.min(
+        200,
+        Math.max(1, parseInt(String(req.query.pageSize ?? "50"), 10) || 50),
+      );
+      const result = await storage.listConversationSessions({ page, pageSize });
+      res.json(result);
     } catch (err) {
       console.error("[admin] list error", err);
       res.status(500).json({ error: "list failed" });

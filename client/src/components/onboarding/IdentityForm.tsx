@@ -3,14 +3,21 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
+import { getStoredIdentity } from "../../lib/conversation-session";
 
 export interface IdentityFormProps {
   onSubmit: (identity: { firstName: string; lastName: string }) => Promise<void> | void;
 }
 
 export function IdentityForm({ onSubmit }: IdentityFormProps) {
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
+  // Préremplit avec l'identité saisie au reload précédent (UX : un élève qui
+  // recharge la page n'a pas à retaper son nom). Une nouvelle session est
+  // toujours créée à la soumission — on ne reprend pas l'ancienne.
+  const stored = (() => {
+    try { return getStoredIdentity(); } catch { return null; }
+  })();
+  const [firstName, setFirstName] = useState(stored?.firstName ?? "");
+  const [lastName, setLastName] = useState(stored?.lastName ?? "");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
