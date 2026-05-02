@@ -2,6 +2,38 @@
 
 Tous les changements notables de ce projet seront documentés dans ce fichier.
 
+## [2026-05-02] — Corrections rendu messages, liens, TTS, proxy
+
+### 🔗 Liens cliquables dans les bulles Peter
+- **Cause du bug** : `getMessageType` testait les bullets (`content.includes('* ')`) avant les liens. La présence de `**gras** ` faisait un faux positif → `with-choices` → liens jamais rendus inline.
+- **Fix** : regex markdown `/\[[^\]]+\]\([^)]+\)/` testée **en premier** ; bullets uniquement si `/^\s*\*\s+/m` (début de ligne).
+- Liens vidéos (YouTube, Vimeo, Gumlet, gumlet.tv) → `onVideoClick` → panneau Vidéos.
+- Liens articles → `onLinkClick` → panneau Articles.
+
+### 📝 Titres markdown stylés (##, ###, …)
+- `renderMarkdown` détecte les titres ATX en début de chunk, strip les `#` et applique `font-bold text-base` (H1/H2) ou `font-semibold text-sm` (H3+).
+- Plus jamais `## 1) Dans l'océan…` affiché en brut.
+- `plainifyForTTS` strip aussi les `##` avant la synthèse vocale.
+
+### 🔇 Peter ne lit plus jamais les URLs
+- `plainifyForTTS` remplace maintenant : (1) titres `##` → supprimés, (2) liens markdown → phrase FR selon contexte vidéo ou article, (3) URLs `https://…` → `— lien à consulter dans le panneau`, (4) **domaines nus** (`vimeo.com`, `rts.ch`, `frontiersin.org`, etc.) → même phrase. ElevenLabs ne reçoit plus aucune URL.
+
+### 🌐 Proxy articles ouvert à tous les sites publics
+- Whitelist des 20 domaines éducatifs retirée — trop restrictive pour les sources scientifiques que Peter cite librement.
+- Sécurité maintenue : HTTPS-only + `isPrivateIP` (SSRF bloqué). `PROXY_ALLOWED_DOMAINS` conservé en commentaire pour réactivation rapide.
+
+### 🖼️ WebView : détection précoce des sites qui refusent l'intégration
+- Fetch proactif `/api/proxy?url=…` avant le rendu de l'iframe. Si non-OK → carte ambrée "Le site X refuse l'affichage intégré (erreur 4xx)" + bouton "Ouvrir dans un nouvel onglet". Plus de JSON brut `{"error":"…"}` affiché dans l'iframe.
+
+### 🎬 Vimeo : support des URLs d'administration
+- `VideoPlayer.tsx` reconnaît maintenant `vimeo.com/manage/videos/{id}/{hash}` (URL de l'interface admin Vimeo que Peter colle parfois). Le hash de confidentialité est transmis via `?h=`.
+
+### ⏱️ UX mineures
+- `ThinkingIndicator` : rotation des phrases 2 s → **3 s**.
+- **Horodatages supprimés** de toutes les bulles chat (`ChatMessage.tsx`). Interface plus épurée.
+
+---
+
 ## [2026-05-02] — Nouveau flow d'entrée : direct au chat + vidéo intro + Peter en deux temps
 
 ### 🎬 Suppression de l'onboarding vidéo plein écran — flow simplifié
