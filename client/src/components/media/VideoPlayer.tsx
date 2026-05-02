@@ -119,6 +119,7 @@ export function VideoPlayer({ video, onVideoEnded, onVideoPaused }: VideoPlayerP
           videoID={videoData.gumletVideoId}
           title={video?.title || "Vidéo éducative Gumlet"}
           style={{ 
+            position: "relative",
             height: "100%", 
             width: "100%", 
             borderRadius: "8px",
