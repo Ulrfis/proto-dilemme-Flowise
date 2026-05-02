@@ -2,17 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { PanelsRightBottom, Copy, Check, Volume2, VolumeX, Mic2 } from "lucide-react";
+import { PanelsRightBottom, Copy, Check } from "lucide-react";
 import { ChatMessage as ChatMessageType } from "../../types/chat";
 import { cn } from "@/lib/utils";
 import { AvatarSelector } from "../avatar/AvatarSelector";
@@ -49,12 +40,13 @@ export function ChatInterface({
   const [copied, setCopied] = useState(false);
   const userAvatar = useUserAvatar();
 
-  const TTS_AUTOPLAY_KEY = 'tts-autoplay';
-  const TTS_VOICE_KEY = 'tts-voice-id';
-  const [autoplayTTS, setAutoplayTTS] = useState<boolean>(() => {
+  // Global mute state. Default: NOT muted (Peter speaks every response by default).
+  // Persisted in localStorage so the teacher's choice survives reloads.
+  const TTS_MUTED_KEY = 'tts-muted';
+  const [isMuted, setIsMuted] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     try {
-      return window.localStorage.getItem(TTS_AUTOPLAY_KEY) === '1';
+      return window.localStorage.getItem(TTS_MUTED_KEY) === '1';
     } catch {
       return false;
     }
@@ -63,16 +55,15 @@ export function ChatInterface({
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
-      window.localStorage.setItem(TTS_AUTOPLAY_KEY, autoplayTTS ? '1' : '0');
+      window.localStorage.setItem(TTS_MUTED_KEY, isMuted ? '1' : '0');
     } catch {
       // ignore
     }
-  }, [autoplayTTS]);
+  }, [isMuted]);
 
-  // Detect TTS availability via /api/providers so we can hide controls when
-  // the active provider is "none" (no key configured).
+  // Detect TTS availability via /api/providers so we can hide the mute button
+  // when no TTS provider is configured.
   const [ttsEnabled, setTtsEnabled] = useState<boolean>(true);
-  const [ttsProviderName, setTtsProviderName] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
     fetch('/api/providers')
@@ -81,7 +72,6 @@ export function ChatInterface({
         if (cancelled || !data) return;
         const active = data?.tts?.active;
         setTtsEnabled(typeof active === 'string' && active !== 'none');
-        setTtsProviderName(typeof active === 'string' ? active : null);
       })
       .catch(() => {
         // Network failure: keep enabled (button click will surface the error).
@@ -91,97 +81,37 @@ export function ChatInterface({
     };
   }, []);
 
-  // Voice selector state — load persisted choice, fetch available voices.
-  type TTSVoice = {
-    id: string;
-    name: string;
-    description?: string;
-    language?: string;
-    isDefault?: boolean;
-  };
-  const [voices, setVoices] = useState<TTSVoice[]>([]);
-  const [defaultVoiceId, setDefaultVoiceId] = useState<string | null>(null);
-  const [voicesLoading, setVoicesLoading] = useState<boolean>(false);
-  const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(() => {
-    if (typeof window === 'undefined') return null;
-    try {
-      return window.localStorage.getItem(TTS_VOICE_KEY);
-    } catch {
-      return null;
-    }
-  });
+  // Single TTS engine for the whole conversation. No voice selector — uses the
+  // provider default (Peter's configured voice).
+  const ttsEngine = useTTS();
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      if (selectedVoiceId) {
-        window.localStorage.setItem(TTS_VOICE_KEY, selectedVoiceId);
-      } else {
-        window.localStorage.removeItem(TTS_VOICE_KEY);
-      }
-    } catch {
-      // ignore
-    }
-  }, [selectedVoiceId]);
+  // Toggle mute. Going TO muted also stops any in-flight playback so the user
+  // is silenced immediately. Going TO unmuted just enables future auto-play —
+  // it does not replay the current message.
+  const toggleMute = useCallback(() => {
+    setIsMuted((prev) => {
+      const next = !prev;
+      if (next) ttsEngine.stop();
+      return next;
+    });
+  }, [ttsEngine]);
 
-  useEffect(() => {
-    if (!ttsEnabled) return;
-    let cancelled = false;
-    setVoicesLoading(true);
-    fetch('/api/tts/voices')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (cancelled || !data) return;
-        const list: TTSVoice[] = Array.isArray(data.voices) ? data.voices : [];
-        setVoices(list);
-        const defaultId =
-          typeof data.defaultVoiceId === 'string' ? data.defaultVoiceId : null;
-        setDefaultVoiceId(defaultId);
-        // If the persisted voice is no longer available, fall back to default.
-        setSelectedVoiceId((current) => {
-          if (current && list.some((v) => v.id === current)) {
-            return current;
-          }
-          return defaultId;
-        });
-      })
-      .catch((err) => {
-        console.warn('[ChatInterface] Failed to load TTS voices:', err);
-      })
-      .finally(() => {
-        if (!cancelled) setVoicesLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [ttsEnabled, ttsProviderName]);
-
-  // Single autoplay engine: triggers TTS exactly once per Peter message that
-  // transitions from streaming → not-streaming (the "new response just
-  // completed" edge). We track the id of the last announced message so an
-  // already-completed historic message never re-triggers, and so streaming
-  // updates only fire `play()` once per message.
-  const autoplayTTSRef = useRef(autoplayTTS);
-  autoplayTTSRef.current = autoplayTTS;
+  // Auto-play engine: speaks every new Peter message as soon as it completes.
+  // Each message is played at most once (tracked via lastAnnouncedIdRef).
+  const isMutedRef = useRef(isMuted);
+  isMutedRef.current = isMuted;
   const ttsEnabledRef = useRef(ttsEnabled);
   ttsEnabledRef.current = ttsEnabled;
   const lastAnnouncedIdRef = useRef<string | null>(null);
   const previousMessagesRef = useRef<ChatMessageType[]>([]);
-  const autoplayTTS_engine = useTTS({ voiceId: selectedVoiceId });
-
-  // Track the last Peter message id we've seen to detect new completed responses
-  const firstMountRef = useRef(true);
 
   useEffect(() => {
     const previous = previousMessagesRef.current;
     previousMessagesRef.current = messages;
-    const isFirstMount = firstMountRef.current;
-    firstMountRef.current = false;
 
-    if (!autoplayTTSRef.current || !ttsEnabledRef.current) {
-      // Even with autoplay off, keep lastAnnouncedIdRef in sync with the
-      // latest Peter message so toggling autoplay ON later does not replay
-      // historic messages.
+    // While muted or TTS disabled, just keep lastAnnouncedIdRef in sync so
+    // unmuting later does not retroactively play already-seen messages.
+    if (isMutedRef.current || !ttsEnabledRef.current) {
       const lastPeter = [...messages].reverse().find((m) => m.sender === 'peter');
       if (lastPeter && !lastPeter.isStreaming) {
         lastAnnouncedIdRef.current = lastPeter.id;
@@ -189,17 +119,6 @@ export function ChatInterface({
       return;
     }
 
-    // On the first mount with pre-existing history (e.g. welcome message,
-    // or full reload after autoplay was previously enabled), mark the most
-    // recent Peter message as "already announced" without playing it.
-    if (isFirstMount) {
-      const lastPeter = [...messages].reverse().find((m) => m.sender === 'peter');
-      if (lastPeter) lastAnnouncedIdRef.current = lastPeter.id;
-      return;
-    }
-
-    // Look for a Peter message whose state just transitioned from streaming
-    // to complete (or that just appeared already complete since last render).
     const lastPeter = [...messages].reverse().find((m) => m.sender === 'peter');
     if (!lastPeter) return;
     if (lastAnnouncedIdRef.current === lastPeter.id) return;
@@ -209,15 +128,16 @@ export function ChatInterface({
     const previousState = previous.find((m) => m.id === lastPeter.id);
     const justFinishedStreaming = previousState?.isStreaming === true;
     const arrivedComplete = !previousState; // brand new, already non-streaming
+                                            // (covers the welcome message on first mount)
 
     if (justFinishedStreaming || arrivedComplete) {
       const text = plainifyForTTS(lastPeter.content);
       if (text) {
         lastAnnouncedIdRef.current = lastPeter.id;
-        void autoplayTTS_engine.play(text);
+        void ttsEngine.play(text);
       }
     }
-  }, [messages, autoplayTTS_engine]);
+  }, [messages, ttsEngine]);
 
   const rafRef = useRef<number | null>(null);
 
@@ -318,74 +238,6 @@ export function ChatInterface({
               currentAvatarUrl={userAvatar.avatarUrl}
               onAvatarChange={userAvatar.updateAvatar}
             />
-            {ttsEnabled && voices.length > 0 && (
-              <div
-                className="flex items-center gap-1.5"
-                title="Choisir la voix utilisée pour Peter"
-              >
-                <Mic2 className="w-3.5 h-3.5 text-gray-500" />
-                <Select
-                  value={selectedVoiceId ?? defaultVoiceId ?? undefined}
-                  onValueChange={(value) => setSelectedVoiceId(value)}
-                  disabled={voicesLoading}
-                >
-                  <SelectTrigger
-                    className="h-7 px-2 text-xs w-[110px] sm:w-[150px]"
-                    data-testid="select-tts-voice"
-                    aria-label="Choisir la voix de Peter"
-                  >
-                    <SelectValue placeholder="Voix…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {voices.map((voice) => (
-                      <SelectItem
-                        key={voice.id}
-                        value={voice.id}
-                        data-testid={`option-voice-${voice.id}`}
-                      >
-                        <div className="flex flex-col">
-                          <span className="text-xs font-medium">
-                            {voice.name}
-                            {voice.id === defaultVoiceId ? ' (défaut)' : ''}
-                          </span>
-                          {voice.description && (
-                            <span className="text-[10px] text-gray-500">
-                              {voice.description}
-                            </span>
-                          )}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            {ttsEnabled && (
-              <div
-                className="flex items-center gap-1.5"
-                title="Lecture vocale automatique des messages de Peter"
-              >
-                {autoplayTTS ? (
-                  <Volume2 className="w-3.5 h-3.5 text-teal-500" />
-                ) : (
-                  <VolumeX className="w-3.5 h-3.5 text-gray-400" />
-                )}
-                <Switch
-                  id="tts-autoplay-toggle"
-                  checked={autoplayTTS}
-                  onCheckedChange={setAutoplayTTS}
-                  data-testid="switch-tts-autoplay"
-                  aria-label="Activer ou désactiver la lecture vocale automatique"
-                  className="scale-75"
-                />
-                <Label
-                  htmlFor="tts-autoplay-toggle"
-                  className="text-xs text-gray-600 cursor-pointer select-none hidden sm:inline"
-                >
-                  Lecture auto
-                </Label>
-              </div>
-            )}
             <div className="text-xs text-gray-500" data-testid="text-message-count">
               <span>{messageCount}</span> msgs
             </div>
@@ -412,7 +264,8 @@ export function ChatInterface({
               userName={userAvatar.name}
               showThinking={showThinking}
               ttsEnabled={ttsEnabled}
-              ttsVoiceId={selectedVoiceId ?? defaultVoiceId}
+              isMuted={isMuted}
+              onToggleMute={toggleMute}
             />
           );
         })}

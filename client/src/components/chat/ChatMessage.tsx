@@ -5,9 +5,7 @@ import peterAvatarImage from "@assets/Peter Avatar_1756370825342.jpg";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Code, MessageSquare, Volume2, Square } from "lucide-react";
-import { useTTS } from "../../hooks/use-tts";
-import { plainifyForTTS } from "../../lib/tts-text";
+import { Code, MessageSquare, Volume2, VolumeX } from "lucide-react";
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -19,7 +17,8 @@ interface ChatMessageProps {
   userName?: string;
   showThinking?: boolean;
   ttsEnabled?: boolean;
-  ttsVoiceId?: string | null;
+  isMuted?: boolean;
+  onToggleMute?: () => void;
 }
 
 export function ChatMessage({ 
@@ -32,22 +31,13 @@ export function ChatMessage({
   userName = 'Utilisateur',
   showThinking = false,
   ttsEnabled = true,
-  ttsVoiceId,
+  isMuted = false,
+  onToggleMute,
 }: ChatMessageProps) {
   const isPeter = message.sender === 'peter';
   const isDebug = message.sender === 'debug';
   const isStreaming = message.isStreaming || false;
   const [showRawJson, setShowRawJson] = useState(false);
-  const tts = useTTS({ voiceId: ttsVoiceId });
-
-  const handleSpeakClick = () => {
-    if (tts.isPlaying || tts.isLoading) {
-      tts.stop();
-    } else {
-      const text = plainifyForTTS(message.content);
-      if (text) void tts.play(text);
-    }
-  };
 
   const handleMediaClick = (url: string, type: 'video' | 'link') => {
     // Comprehensive URL cleaning
@@ -232,36 +222,28 @@ export function ChatMessage({
               ? "bg-teal-500 text-white rounded-2xl rounded-bl-md chat-bubble-left" 
               : "bg-white text-gray-800 rounded-2xl rounded-br-md border border-gray-200 chat-bubble-right float-right"
         )}>
-          {/* Top-right action buttons (TTS + debug) for Peter's messages */}
+          {/* Top-right action buttons (mute toggle + debug) for Peter's messages */}
           {isPeter && !isStreaming && (
             <div className="absolute top-2 right-2 flex items-center gap-1">
-              {ttsEnabled && message.content?.trim() && (
+              {ttsEnabled && onToggleMute && (
                 <button
-                  onClick={handleSpeakClick}
-                  disabled={tts.isLoading}
-                  className={cn(
-                    "p-1.5 rounded transition-all",
-                    tts.isPlaying || tts.isLoading
-                      ? "bg-white/30 hover:bg-white/40"
-                      : "hover:bg-white/20",
-                    tts.isLoading && "opacity-70 cursor-wait"
-                  )}
-                  data-testid={`button-tts-${message.id}`}
+                  onClick={onToggleMute}
+                  className="p-1.5 rounded transition-all hover:bg-white/20"
+                  data-testid={`button-mute-toggle-${message.id}`}
                   title={
-                    tts.isLoading
-                      ? "Synthèse en cours…"
-                      : tts.isPlaying
-                      ? "Arrêter la lecture"
-                      : "Écouter ce message"
+                    isMuted
+                      ? "Réactiver la voix de Peter"
+                      : "Couper la voix de Peter"
                   }
                   aria-label={
-                    tts.isPlaying ? "Arrêter la lecture" : "Écouter ce message"
+                    isMuted
+                      ? "Réactiver la voix de Peter"
+                      : "Couper la voix de Peter"
                   }
+                  aria-pressed={isMuted}
                 >
-                  {tts.isLoading ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : tts.isPlaying ? (
-                    <Square className="w-3.5 h-3.5" />
+                  {isMuted ? (
+                    <VolumeX className="w-3.5 h-3.5" />
                   ) : (
                     <Volume2 className="w-3.5 h-3.5" />
                   )}
