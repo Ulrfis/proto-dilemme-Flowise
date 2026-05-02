@@ -3,7 +3,7 @@
 > **Status**: 🟡 In Progress  
 > **Creator**: Ulrich Fischer  
 > **Started**: 2025-11-06  
-> **Last Updated**: 2026-05-02 (Cache TTS + sélecteur de voix + évaluation providers)  
+> **Last Updated**: 2026-05-02 (UX TTS simplifiée : autoplay + mute global)  
 
 ---
 
@@ -91,6 +91,24 @@ How Peter helps: Conversational guide who asks questions, shares surprising fact
 ## Feature Chronicle
 
 *Each feature gets an entry. Major features (🔷) get full treatment. Minor features (🔹) get brief notes.*
+
+### [2026-05-02] — UX TTS simplifiée : autoplay par défaut + mute global 🔷
+
+**Intent** : Réduire la charge cognitive pour l'enseignant. Plus de toggle, plus de sélecteur de voix — Peter parle, point. Une seule décision possible : muet ou pas.
+
+**What shipped** :
+- Autoplay activé par défaut. Le message de bienvenue est lu à voix haute dès l'arrivée dans le chat (premier `POST /api/tts` envoyé immédiatement).
+- Bouton mute/unmute sur chaque bulle Peter (`Volume2` ↔ `VolumeX`, `aria-pressed`). Cliquer n'importe où bascule l'état pour TOUTE la conversation.
+- Mute = stop instantané + plus aucun autoplay tant qu'on ne réactive pas. Unmute n'est pas rétroactif (pas de replay du message courant), seul le prochain message Peter sera lu.
+- Persistance dans `localStorage:tts-muted` (l'état survit aux reloads).
+- Suppressions : sélecteur de voix retiré de l'en-tête, toggle "Lecture auto" retiré de l'en-tête, bouton play/stop par message retiré (remplacé par le mute global). Les clés `tts-autoplay` et `tts-voice-id` ne sont plus utilisées.
+- Backend inchangé : `/api/tts` continue d'accepter `voiceId` optionnel ; le frontend ne l'envoie plus, donc le provider utilise sa voix par défaut (`ELEVENLABS_VOICE_ID`).
+
+**Why it matters** : Dans une vraie classe, l'enseignant n'a pas le temps d'aller chercher un toggle dans l'en-tête pour activer la voix. Avec autoplay-on-by-default, Peter est immédiatement audible — accessibilité gagnée pour les élèves dyslexiques et ceux qui apprennent encore à lire vite. Le mute global sur chaque message reste à portée de doigt pour ceux qui préfèrent lire en silence.
+
+**Time** : ~30 minutes (incluant tests e2e)
+
+---
 
 ### [2026-05-02] — Cache TTS LRU (latence ÷ 28 sur les répétitions) 🔹
 
