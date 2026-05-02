@@ -12,11 +12,12 @@ interface VideoPlayerProps {
 export function VideoPlayer({ video, onVideoEnded, onVideoPaused, onVideoPlay }: VideoPlayerProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const gumletPlayerRef = useRef<any>(null);
-  const [playerType, setPlayerType] = useState<'youtube' | 'gumlet' | 'unknown'>('unknown');
+  const [playerType, setPlayerType] = useState<'youtube' | 'gumlet' | 'vimeo' | 'unknown'>('unknown');
   const [videoData, setVideoData] = useState<{
     embedUrl?: string;
     gumletVideoId?: string;
     youtubeVideoId?: string;
+    vimeoVideoId?: string;
   }>({});
 
   // Keep latest callbacks in refs so the polling loop never sees stale closures
@@ -98,9 +99,10 @@ export function VideoPlayer({ video, onVideoEnded, onVideoPaused, onVideoPlay }:
   useEffect(() => {
     if (video) {
       let embedUrl = video.url;
-      let type: 'youtube' | 'gumlet' | 'unknown' = 'unknown';
+      let type: 'youtube' | 'gumlet' | 'vimeo' | 'unknown' = 'unknown';
       let gumletVideoId = '';
       let youtubeVideoId = '';
+      let vimeoVideoId = '';
       
       // Handle YouTube URLs
       if (video.url.includes('youtube.com') || video.url.includes('youtu.be')) {
@@ -160,12 +162,49 @@ export function VideoPlayer({ video, onVideoEnded, onVideoPaused, onVideoPlay }:
         
         console.log(`Gumlet URL detected: "${video.url}" -> ID: "${gumletVideoId}"`);
       }
-      
+      // Handle Vimeo URLs — embed natively via player.vimeo.com (no proxy needed)
+      else if (video.url.includes('vimeo.com')) {
+        type = 'vimeo';
+
+        // Supported formats:
+        //   https://vimeo.com/123456789
+        //   https://vimeo.com/123456789/abcd1234        (with private hash)
+        //   https://player.vimeo.com/video/123456789
+        //   https://vimeo.com/channels/foo/123456789
+        const playerMatch = video.url.match(/player\.vimeo\.com\/video\/(\d+)(?:\/([\w]+))?/);
+        const standardMatch = video.url.match(/vimeo\.com\/(?:channels\/[^/]+\/|groups\/[^/]+\/videos\/)?(\d+)(?:\/([\w]+))?/);
+
+        let hash = '';
+        if (playerMatch) {
+          vimeoVideoId = playerMatch[1];
+          hash = playerMatch[2] || '';
+        } else if (standardMatch) {
+          vimeoVideoId = standardMatch[1];
+          hash = standardMatch[2] || '';
+        }
+
+        if (vimeoVideoId) {
+          // Build a clean embed URL. The `h=` parameter carries the privacy hash
+          // that Vimeo requires for unlisted videos.
+          const params = new URLSearchParams({
+            title: '0',
+            byline: '0',
+            portrait: '0',
+            dnt: '1',
+          });
+          if (hash) params.set('h', hash);
+          embedUrl = `https://player.vimeo.com/video/${vimeoVideoId}?${params.toString()}`;
+        }
+
+        console.log(`Vimeo URL detected: "${video.url}" -> ID: "${vimeoVideoId}"${hash ? ` hash: "${hash}"` : ''}`);
+      }
+
       setPlayerType(type);
       setVideoData({
         embedUrl,
         gumletVideoId,
-        youtubeVideoId
+        youtubeVideoId,
+        vimeoVideoId,
       });
     }
   }, [video]);
@@ -219,6 +258,21 @@ export function VideoPlayer({ video, onVideoEnded, onVideoPaused, onVideoPlay }:
           onPlay={onVideoPlay}
         />
       );
+    } else if (playerType === 'vimeo' && videoData.embedUrl && videoData.vimeoVideoId) {
+      // Native Vimeo embed — runs entirely in the iframe sandbox, no proxy.
+      return (
+        <iframe
+          key={videoData.vimeoVideoId}
+          src={videoData.embedUrl}
+          className="w-full h-full border-none rounded-lg shadow-lg"
+          allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media"
+          title={video?.title || "Lecteur vidéo Vimeo éducatif"}
+          data-testid="iframe-vimeo-player"
+          allowFullScreen
+          referrerPolicy="strict-origin-when-cross-origin"
+          loading="lazy"
+        />
+      );
     } else if (playerType === 'youtube' && videoData.embedUrl) {
       // Use YouTube iframe embed with improved error handling
       return (
@@ -250,7 +304,7 @@ export function VideoPlayer({ video, onVideoEnded, onVideoPaused, onVideoPlay }:
               URL: {video?.url}
             </p>
             <p className="text-xs text-gray-400 mt-2">
-              Formats supportés: YouTube, Gumlet
+              Formats supportés: YouTube, Gumlet, Vimeo
             </p>
           </div>
         </div>
