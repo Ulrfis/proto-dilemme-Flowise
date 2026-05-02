@@ -15,6 +15,7 @@ interface MediaPanelProps {
   onTabChange: (tab: 'video' | 'web') => void;
   onVideoEnded?: () => void;
   onVideoPaused?: () => void;
+  onVideoPlay?: () => void;
 }
 
 export function MediaPanel({
@@ -26,6 +27,7 @@ export function MediaPanel({
   onTabChange,
   onVideoEnded,
   onVideoPaused,
+  onVideoPlay,
 }: MediaPanelProps) {
   if (!isOpen) {
     return null;
@@ -57,7 +59,12 @@ export function MediaPanel({
         {/* Scrollable Content */}
         <div className="flex-1 overflow-hidden">
           <TabsContent value="video" className="h-full overflow-y-auto m-0 p-3">
-            <VideoPlayer video={currentVideo} onVideoEnded={onVideoEnded} onVideoPaused={onVideoPaused} />
+            <VideoPlayer
+              video={currentVideo}
+              onVideoEnded={onVideoEnded}
+              onVideoPaused={onVideoPaused}
+              onVideoPlay={onVideoPlay}
+            />
           </TabsContent>
           
           <TabsContent value="web" className="h-full overflow-y-auto m-0 p-3">
