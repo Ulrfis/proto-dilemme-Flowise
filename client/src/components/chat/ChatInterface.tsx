@@ -323,8 +323,11 @@ export function ChatInterface({
           />
         ))}
 
-        {/* Standalone thinking indicator — Claude-style, no bubble */}
-        {isLoading && !messages.some((m) => m.isStreaming) && (
+        {/* Standalone thinking indicator — Claude-style, no bubble.
+            Shown while loading AND no streaming message has visible content yet
+            (use-flowise adds an empty isStreaming message immediately, so we
+            must check content too, not just isStreaming). */}
+        {isLoading && !messages.some((m) => m.isStreaming && m.content?.trim()) && (
           <div
             className="flex items-center gap-2.5 px-1 py-0.5"
             data-testid="thinking-standalone"
