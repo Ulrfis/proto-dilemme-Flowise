@@ -1,10 +1,19 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { analyticsEventSchema } from "@shared/schema";
-import OpenAI from "openai";
 import multer from "multer";
 import fs from "fs/promises";
-import { createReadStream } from "fs";
+import {
+  getActiveTTSProvider,
+  getActiveTTSProviderName,
+  getAvailableTTSProviders,
+} from "./providers/tts";
+import { ttsCache } from "./providers/tts/cache";
+import {
+  getActiveSTTProvider,
+  getActiveSTTProviderName,
+  getAvailableSTTProviders,
+} from "./providers/stt";
 
 // Allowed domains for the content proxy (prevents SSRF to internal networks)
 const PROXY_ALLOWED_DOMAINS = new Set([
@@ -48,11 +57,6 @@ function isPrivateIP(hostname: string): boolean {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  
-  // Initialize OpenAI for Whisper API
-  const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
 
   // Configure multer for audio file uploads
   const upload = multer({
@@ -70,75 +74,200 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
   });
 
-  // Speech-to-text endpoint using OpenAI Whisper
+  // Speech-to-text endpoint — delegates to the active STT provider.
+  // Public signature MUST stay identical: multipart/form-data with field "audio",
+  // returns { text, language }.
   app.post("/api/transcribe", upload.single('audio'), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ error: "No audio file provided" });
       }
 
-      console.log(`[Whisper] Processing audio file: ${req.file.originalname}, size: ${req.file.size} bytes`);
+      const provider = getActiveSTTProvider();
+      console.log(`[STT:${provider.name}] Processing audio: ${req.file.originalname}, size: ${req.file.size} bytes`);
 
-      // Create a readable stream for OpenAI
-      const audioStream = await fs.readFile(req.file.path);
-      const audioBuffer = Buffer.from(audioStream);
-
-      // Create a temporary file with the correct extension
-      const tempFile = {
-        name: req.file.originalname || 'audio.webm',
-        buffer: audioBuffer,
-      };
-
-      // Save buffer to file for OpenAI API
-      const tempPath = `/tmp/audio_${Date.now()}.webm`;
-      await fs.writeFile(tempPath, audioBuffer);
+      const audioBuffer = await fs.readFile(req.file.path);
 
       try {
-        // the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
-        const transcription = await openai.audio.transcriptions.create({
-          file: createReadStream(tempPath),
-          model: "whisper-1",
-          language: "fr", // French language
-          response_format: "json",
-        });
-
-        console.log(`[Whisper] Transcription successful: "${transcription.text.substring(0, 100)}..."`);
-
-        // Clean up temporary files
-        await fs.unlink(req.file.path).catch(err => console.warn('Failed to delete temp file:', err));
-        await fs.unlink(tempPath).catch(err => console.warn('Failed to delete processed file:', err));
-
-        res.json({
-          text: transcription.text,
+        const result = await provider.transcribe({
+          audio: audioBuffer,
+          filename: req.file.originalname || 'audio.webm',
+          mimeType: req.file.mimetype,
           language: 'fr',
         });
 
-      } catch (openaiError) {
-        console.error('[Whisper] OpenAI API error:', openaiError);
-        
-        // Clean up files on error
+        console.log(`[STT:${provider.name}] Transcription successful: "${result.text.substring(0, 100)}..."`);
+
+        await fs.unlink(req.file.path).catch(err => console.warn('Failed to delete temp file:', err));
+
+        res.json({
+          text: result.text,
+          language: result.language || 'fr',
+        });
+
+      } catch (providerError) {
+        console.error(`[STT:${provider.name}] Provider error:`, providerError);
         await fs.unlink(req.file.path).catch(() => {});
-        await fs.unlink(tempPath).catch(() => {});
-        
+
         res.status(500).json({
           error: "Erreur lors de la transcription audio",
-          details: "Le service de reconnaissance vocale a rencontré un problème"
+          details: providerError instanceof Error ? providerError.message : "Le service de reconnaissance vocale a rencontré un problème"
         });
       }
 
     } catch (error) {
-      console.error("[Whisper] Transcription error:", error);
-      
-      // Clean up file if it exists
+      console.error("[STT] Transcription error:", error);
+
       if (req.file) {
         await fs.unlink(req.file.path).catch(() => {});
       }
-      
+
       res.status(500).json({
         error: "Erreur lors du traitement audio",
         details: error instanceof Error ? error.message : String(error)
       });
     }
+  });
+
+  // Text-to-speech endpoint — delegates to the active TTS provider.
+  // Body: { text: string, voiceId?: string }
+  // Returns: audio stream (MP3 by default)
+  app.post("/api/tts", async (req, res) => {
+    try {
+      const { text, voiceId } = req.body || {};
+
+      if (!text || typeof text !== 'string' || !text.trim()) {
+        return res.status(400).json({ error: "Le champ 'text' est requis" });
+      }
+
+      // Hard cap to avoid runaway synthesis costs
+      const safeText = text.length > 5000 ? text.slice(0, 5000) : text;
+
+      const provider = getActiveTTSProvider();
+
+      if (provider.name === "none") {
+        return res.status(503).json({
+          error: "La synthèse vocale n'est pas configurée",
+          details: "Configurez TTS_PROVIDER et la clé API correspondante (ex: ELEVENLABS_API_KEY)."
+        });
+      }
+
+      const effectiveVoiceId =
+        typeof voiceId === "string" && voiceId.trim()
+          ? voiceId.trim()
+          : provider.getDefaultVoiceId?.() || "";
+
+      const cacheKey = ttsCache.buildKey({
+        text: safeText,
+        voiceId: effectiveVoiceId,
+        provider: provider.name,
+      });
+
+      const cached = ttsCache.get(cacheKey);
+      if (cached) {
+        console.log(
+          `[TTS:${provider.name}] Cache HIT (${safeText.length} caractères, ${cached.size} octets)`,
+        );
+        res.setHeader('Content-Type', cached.contentType);
+        res.setHeader('Content-Length', String(cached.audio.length));
+        res.setHeader('Cache-Control', 'no-store');
+        res.setHeader('X-TTS-Provider', provider.name);
+        res.setHeader('X-TTS-Cache', 'hit');
+        return res.send(cached.audio);
+      }
+
+      console.log(`[TTS:${provider.name}] Cache MISS — synthèse de ${safeText.length} caractères`);
+
+      try {
+        const result = await provider.synthesize({ text: safeText, voiceId: effectiveVoiceId || undefined });
+
+        ttsCache.set(cacheKey, result);
+
+        res.setHeader('Content-Type', result.contentType);
+        res.setHeader('Content-Length', String(result.audio.length));
+        res.setHeader('Cache-Control', 'no-store');
+        res.setHeader('X-TTS-Provider', provider.name);
+        res.setHeader('X-TTS-Cache', 'miss');
+        res.send(result.audio);
+      } catch (providerError) {
+        console.error(`[TTS:${provider.name}] Provider error:`, providerError);
+        res.status(502).json({
+          error: "Erreur lors de la synthèse vocale",
+          details: providerError instanceof Error ? providerError.message : "Le service vocal a rencontré un problème",
+          provider: provider.name,
+        });
+      }
+    } catch (error) {
+      console.error("[TTS] Endpoint error:", error);
+      res.status(500).json({
+        error: "Erreur lors du traitement TTS",
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // List available voices for the active TTS provider.
+  // Returns: { provider: string, defaultVoiceId?: string, voices: TTSVoice[] }
+  app.get("/api/tts/voices", async (_req, res) => {
+    try {
+      const provider = getActiveTTSProvider();
+
+      if (provider.name === "none") {
+        return res.json({
+          provider: provider.name,
+          defaultVoiceId: undefined,
+          voices: [],
+        });
+      }
+
+      if (typeof provider.listVoices !== "function") {
+        return res.json({
+          provider: provider.name,
+          defaultVoiceId: provider.getDefaultVoiceId?.(),
+          voices: [],
+        });
+      }
+
+      try {
+        const voices = await provider.listVoices();
+        res.setHeader("Cache-Control", "private, max-age=60");
+        res.json({
+          provider: provider.name,
+          defaultVoiceId: provider.getDefaultVoiceId?.(),
+          voices,
+        });
+      } catch (providerError) {
+        console.error(`[TTS:${provider.name}] listVoices error:`, providerError);
+        res.status(502).json({
+          error: "Impossible de récupérer la liste des voix",
+          details:
+            providerError instanceof Error
+              ? providerError.message
+              : "Le service vocal a rencontré un problème",
+          provider: provider.name,
+        });
+      }
+    } catch (error) {
+      console.error("[TTS] Voices endpoint error:", error);
+      res.status(500).json({
+        error: "Erreur lors de la récupération des voix",
+        details: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+  // Introspection endpoint — returns active and available voice providers.
+  app.get("/api/providers", (_req, res) => {
+    res.json({
+      tts: {
+        active: getActiveTTSProviderName(),
+        available: getAvailableTTSProviders(),
+      },
+      stt: {
+        active: getActiveSTTProviderName(),
+        available: getAvailableSTTProviders(),
+      },
+    });
   });
   
   // Analytics endpoint for anonymous event tracking

@@ -3,7 +3,7 @@
 > **Status**: 🟡 In Progress  
 > **Creator**: Ulrich Fischer  
 > **Started**: 2025-11-06  
-> **Last Updated**: 2026-05-02  
+> **Last Updated**: 2026-05-02 (Cache TTS + sélecteur de voix)  
 
 ---
 
@@ -91,6 +91,56 @@ How Peter helps: Conversational guide who asks questions, shares surprising fact
 ## Feature Chronicle
 
 *Each feature gets an entry. Major features (🔷) get full treatment. Minor features (🔹) get brief notes.*
+
+### [2026-05-02] — Cache TTS LRU (latence ÷ 28 sur les répétitions) 🔹
+
+**Intent** : Éviter de re-synthétiser la même phrase plusieurs fois et réduire la facture ElevenLabs.
+
+**What shipped** :
+- Module `server/providers/tts/cache.ts` : LRU simple (Map + suivi de récence), clé SHA-256 sur `provider + voiceId + text`, capacité 100 (override via `TTS_CACHE_MAX_ENTRIES`)
+- Auto-invalidation : signature interne dérivée de `TTS_PROVIDER` + `ELEVENLABS_VOICE_ID` ; tout changement vide le cache au prochain accès — impossible de servir une voix périmée par erreur
+- `POST /api/tts` résout le voiceId effectif puis interroge le cache. En-têtes `X-TTS-Cache: hit|miss` pour observabilité
+- Mesures locales : ~1128 ms sur miss (ElevenLabs), ~40 ms sur hit, MD5 identique des deux côtés
+
+**Why it matters** : Les phrases d'accueil de Peter ("Bonjour, je suis Peter…") sont entendues à chaque session. Avec le cache, seul le premier auditeur paie la latence et le coût.
+
+**Time** : ~30 minutes
+
+---
+
+### [2026-05-02] — Sélecteur de voix Peter dans l'en-tête du chat 🔷
+
+**Intent** : Permettre à l'enseignant de comparer plusieurs voix ElevenLabs en direct, sans rebooter ni toucher aux secrets.
+
+**What shipped** :
+- Interface `ITTSProvider` étendue avec `listVoices()` + `getDefaultVoiceId()` optionnels et un type partagé `TTSVoice` (id, name, description, language, isDefault)
+- ElevenLabs : `listVoices()` appelle `/v1/voices` avec cache mémoire de 5 min, construit la description à partir de `category` / `labels`, marque la voix configurée comme défaut. Tout est typé strictement (`ElevenLabsRawVoice`, `ElevenLabsVoicesResponse`, `ElevenLabsVoiceLabels`, `ElevenLabsFineTuning`) — pas un seul `any` dans le diff
+- OpenAI : `listVoices()` retourne les 6 voix officielles (alloy, echo, fable, onyx, nova, shimmer) avec descriptions FR
+- Nouveau endpoint `GET /api/tts/voices` → `{ provider, defaultVoiceId, voices }`
+- Frontend : `<Select>` discret dans l'en-tête (icône `Mic2`) à côté du toggle Lecture auto. Sélection persistée dans `localStorage:tts-voice-id` ; fallback automatique sur la voix par défaut si la voix mémorisée a été supprimée du compte ElevenLabs
+- Sélecteur masqué quand TTS est désactivé ou ne renvoie aucune voix
+
+**Why it matters** : L'enseignant peut maintenant tester "voix masculine grave", "voix féminine pédagogique", "voix de jeune adulte" sans interrompre le cours. Le bouton replay sur chaque message Peter respecte aussi le choix actif.
+
+**Time** : ~45 minutes
+
+---
+
+### [2026-05-02] — Pipeline TTS/STT multi-providers (voix de Peter) 🔷
+
+**Intent**: Permettre au créateur de basculer le provider vocal (TTS et STT) via variables d'environnement, sans toucher au code, pour comparer ElevenLabs, OpenAI et Deepgram en autonomie.
+
+**What shipped**:
+- Backend : couches d'abstraction `server/providers/tts/` (ElevenLabs, OpenAI, None) et `server/providers/stt/` (OpenAI Whisper, ElevenLabs Scribe, Deepgram Nova-3) avec fabrique paresseuse — pas d'instanciation de client tant qu'aucun appel n'est fait.
+- Endpoints : `POST /api/tts` (audio MP3), `GET /api/providers` (introspection), `POST /api/transcribe` refactoré pour déléguer au STT actif (signature publique inchangée).
+- Frontend : hook `useTTS` à instance Audio unique avec auto-cancel global, bouton haut-parleur sur chaque message Peter, toggle "Lecture auto" persistant (`localStorage:tts-autoplay`).
+- Autoplay : moteur unique côté `ChatInterface` qui déclenche la lecture exactement une fois sur l'arête `isStreaming: true → false` du dernier message Peter (via `lastAnnouncedIdRef` + `firstMountRef`). Aucun rejouage de l'historique au chargement, au toggle ON ou au reload.
+- Sécurité/CSP : `media-src` autorise `blob:` et `data:` ; toutes les clés provider restent côté serveur.
+- Code review : voix OpenAI typées strictement (union `"alloy" | "echo" | "fable" | "onyx" | "nova" | "shimmer"`) avec validation explicite — plus aucun `as any`. Bouton TTS et toggle masqués automatiquement quand `/api/providers` rapporte `tts.active === "none"`.
+
+**Tests e2e** : ttsCount=0 au chargement (autoplay off), ttsCount=0 après activation du toggle (pas de rejouage), ttsCount=1 après une nouvelle réponse Peter terminée, ttsCount=0 après reload (autoplay persisté), ttsCount=1 sur la nouvelle réponse, +1 sur clic manuel du bouton haut-parleur. `/api/providers` renvoie `tts=elevenlabs`, `stt=openai`.
+
+**Why it matters** : Ulrich peut maintenant comparer trois pipelines vocaux en changeant deux variables d'env. La voix de Peter peut évoluer au rythme des progrès du marché sans dette technique.
 
 ### [2026-05-02] — Code Quality Audit: Security, Performance & Reliability 🔷
 
