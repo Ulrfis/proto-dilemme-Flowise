@@ -178,13 +178,13 @@ export function VideoPlayer({ video, onVideoEnded, onVideoPaused }: VideoPlayerP
   };
 
   return (
-    <div className="h-full flex flex-col">
-      <div className="flex-1 aspect-video min-h-[500px]">
+    <div className="flex flex-col gap-3">
+      <div className="w-full aspect-video">
         {renderPlayer()}
       </div>
       
       {(video?.title || video?.description) && (
-        <div className="mt-6 p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
+        <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
           {video.title && (
             <h4 className="text-lg font-semibold text-gray-900 mb-2" data-testid="text-video-title">
               {video.title}
@@ -195,16 +195,6 @@ export function VideoPlayer({ video, onVideoEnded, onVideoPaused }: VideoPlayerP
               {video.description}
             </p>
           )}
-        </div>
-      )}
-      
-      {/* Debug info in development */}
-      {import.meta.env.DEV && video && (
-        <div className="mt-2 p-2 bg-gray-50 rounded text-xs text-gray-500">
-          <div><strong>Type:</strong> {playerType}</div>
-          <div><strong>URL:</strong> {video.url}</div>
-          {videoData.gumletVideoId && <div><strong>Gumlet ID:</strong> {videoData.gumletVideoId}</div>}
-          {videoData.youtubeVideoId && <div><strong>YouTube ID:</strong> {videoData.youtubeVideoId}</div>}
         </div>
       )}
     </div>
