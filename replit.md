@@ -123,6 +123,13 @@ Mesure de départ : ~30s entre l'envoi du message et la fin de la lecture vocale
 - **Logs SSE refactorés** (`server/routes.ts`) : 1 ligne au start (`[Flowise] start chatId=… q="…"`) + 1 ligne structurée à la fin (`[Flowise] end chatId=… ttft=…ms total=…ms connect=…ms tokens=… nodes=… tools=… unknownEvents=…`). Plus de `console.log("Unknown event")` répétés.
 - **À faire (T3, hors codebase)** : simplification du chatflow Flowise dans l'UI (15 nœuds dans le plus long chemin, 2 LLM calls). Voir `docs/flowise-chatflow-audit-report.md`.
 
+## Rendu des messages Peter (mai 2026)
+
+- **Titres markdown** (`##`, `###`, …) détectés et stylés dans `client/src/components/chat/ChatMessage.tsx` (fonction `renderMarkdown`). Les marqueurs `#` ne sont jamais affichés en brut. Côté TTS (`client/src/lib/tts-text.ts`, `plainifyForTTS`) ils sont également retirés pour que Peter ne lise pas "dièse dièse".
+- **Liens cliquables** : `getMessageType` détecte les liens markdown **en premier** ; le détecteur de listes utilise `/^\s*\*\s+/m` (début de ligne uniquement) pour éviter le faux positif sur le gras `**mot** texte`. Routage `onVideoClick` (YouTube, Vimeo, Gumlet, gumlet.tv) vs `onLinkClick` (autres).
+- **TTS sans URLs** : les liens markdown sont remplacés à voix haute par "vidéo à regarder dans le panneau" (préfixe 📹) ou "article à consulter dans le panneau". Les URLs nues sont aussi remplacées.
+- **Proxy article** : `/api/proxy` ouvert à tout HTTPS public (SSRF toujours bloqué via `isPrivateIP`). Le whitelist `PROXY_ALLOWED_DOMAINS` est conservé en commentaire pour réactivation rapide. Permet à Peter de citer librement frontiersin, plos, rts, etc.
+
 ## Integration Priorities
 1. Flowise chatbot API integration with proxy for security
 2. Gumlet video player for video URLs in chat

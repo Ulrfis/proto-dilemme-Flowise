@@ -446,15 +446,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Access to internal addresses is not allowed" });
       }
 
-      // Security: check against allowlist of known educational domains
-      const hostname = parsedUrl.hostname.replace(/^www\./, '');
-      const isAllowed = Array.from(PROXY_ALLOWED_DOMAINS).some(domain =>
-        hostname === domain || hostname.endsWith(`.${domain}`)
-      );
-      if (!isAllowed) {
-        console.warn(`[Proxy] Blocked request to non-allowlisted domain: ${parsedUrl.hostname}`);
-        return res.status(403).json({ error: "Domain not allowed by proxy" });
-      }
+      // Security note: we used to enforce a strict allowlist of educational
+      // domains, but Peter cites a wide variety of scientific sources
+      // (frontiersin.org, journals.plos.org, rts.ch, …) that we can't enumerate
+      // ahead of time. SSRF is still prevented by the isPrivateIP check above
+      // and the HTTPS-only restriction; this proxy only fetches and re-emits
+      // public web content with permissive frame headers, so opening it to any
+      // public HTTPS host is acceptable for our use case.
+      // PROXY_ALLOWED_DOMAINS is kept (unused) for reference / quick re-enable.
+      void PROXY_ALLOWED_DOMAINS;
 
       console.log(`[Proxy] Fetching: ${url}`);
 

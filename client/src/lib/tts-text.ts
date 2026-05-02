@@ -9,6 +9,8 @@ export function plainifyForTTS(content: string): string {
   return content
     // Image markdown — drop entirely.
     .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+    // Headings: strip the leading ##/###/etc so Peter doesn't say "dièse dièse".
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
     // Markdown links: replace with a spoken-friendly substitute, never the URL
     // and never the (often technical) link title like "journals.plos.org".
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, label: string) => {
