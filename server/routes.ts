@@ -448,7 +448,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Security: check against allowlist of known educational domains
       const hostname = parsedUrl.hostname.replace(/^www\./, '');
-      const isAllowed = [...PROXY_ALLOWED_DOMAINS].some(domain =>
+      const isAllowed = Array.from(PROXY_ALLOWED_DOMAINS).some(domain =>
         hostname === domain || hostname.endsWith(`.${domain}`)
       );
       if (!isAllowed) {

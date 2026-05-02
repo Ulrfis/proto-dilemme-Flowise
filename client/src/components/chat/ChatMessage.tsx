@@ -314,7 +314,8 @@ export function ChatMessage({
                       // Add text before the link (with markdown rendering)
                       if (titleIndex > lastIndex) {
                         const textBefore = processedLine.substring(lastIndex, titleIndex);
-                        parts.push(...(Array.isArray(renderMarkdown(textBefore)) ? renderMarkdown(textBefore) : [renderMarkdown(textBefore)]));
+                        const beforeResult = renderMarkdown(textBefore);
+                        parts.push(...(Array.isArray(beforeResult) ? beforeResult : [beforeResult]));
                       }
                       
                       // Determine if this is a video or regular link
@@ -341,7 +342,8 @@ export function ChatMessage({
                   // Add remaining text after the last link (with markdown rendering)
                   if (lastIndex < processedLine.length) {
                     const textAfter = processedLine.substring(lastIndex);
-                    parts.push(...(Array.isArray(renderMarkdown(textAfter)) ? renderMarkdown(textAfter) : [renderMarkdown(textAfter)]));
+                    const afterResult = renderMarkdown(textAfter);
+                    parts.push(...(Array.isArray(afterResult) ? afterResult : [afterResult]));
                   }
                   
                   return <div key={lineIndex}>{parts}</div>;
