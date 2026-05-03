@@ -17,14 +17,19 @@ const hashToIndex = (input: string): number => {
   return Math.abs(hash) % AVATAR_COUNT;
 };
 
+const DICEBEAR_STYLE: Record<'male' | 'female', string> = {
+  male: 'adventurer',
+  female: 'lorelei',
+};
+
 const generateGridAvatarUrl = (name: string, gender: 'male' | 'female'): string => {
-  const genderPath = gender === 'male' ? 'boy' : 'girl';
+  const style = DICEBEAR_STYLE[gender];
   const index = hashToIndex(name) + 1;
-  return `https://avatar.iran.liara.run/public/${genderPath}/${index}`;
+  return `https://api.dicebear.com/9.x/${style}/svg?seed=${index}`;
 };
 
 const isGridUrl = (url: string): boolean =>
-  /avatar\.iran\.liara\.run\/public\/(boy|girl)\/\d+$/.test(url);
+  /api\.dicebear\.com\/9\.x\/(adventurer|lorelei)\/svg\?seed=\d+$/.test(url);
 
 const isUploadedAvatarUrl = (url: string): boolean =>
   url.startsWith('data:image/');

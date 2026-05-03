@@ -13,18 +13,23 @@ const ACCEPTED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/web
 
 const AVATAR_COUNT = 18;
 
+const DICEBEAR_STYLE: Record<'male' | 'female', string> = {
+  male: 'adventurer',
+  female: 'lorelei',
+};
+
 const getAvatarGrid = (gender: 'male' | 'female'): string[] => {
-  const genderPath = gender === 'male' ? 'boy' : 'girl';
+  const style = DICEBEAR_STYLE[gender];
   return Array.from({ length: AVATAR_COUNT }, (_, i) =>
-    `https://avatar.iran.liara.run/public/${genderPath}/${i + 1}`
+    `https://api.dicebear.com/9.x/${style}/svg?seed=${i + 1}`
   );
 };
 
 const parseGridUrl = (url: string): { gender: 'male' | 'female'; index: number } | null => {
-  const match = url.match(/avatar\.iran\.liara\.run\/public\/(boy|girl)\/(\d+)$/);
+  const match = url.match(/api\.dicebear\.com\/9\.x\/(adventurer|lorelei)\/svg\?seed=(\d+)$/);
   if (!match) return null;
   return {
-    gender: match[1] === 'boy' ? 'male' : 'female',
+    gender: match[1] === 'adventurer' ? 'male' : 'female',
     index: parseInt(match[2], 10) - 1,
   };
 };

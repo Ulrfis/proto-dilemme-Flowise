@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { analytics } from "../lib/analytics";
 
 interface QueueItem {
   id: string;
@@ -55,16 +56,22 @@ export function useTTSQueue(): UseTTSQueueResult {
     item.status = "fetching";
     const controller = new AbortController();
     abortControllersRef.current.set(item.id, controller);
+
+    const sessionId = analytics.getSessionId();
+
     try {
       const response = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: item.text }),
+        body: JSON.stringify({ text: item.text, sessionId }),
         signal: controller.signal,
       });
       if (generation !== generationRef.current) return;
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        const errMsg = `HTTP ${response.status}`;
+        const provider = response.headers.get("X-TTS-Provider") || "server";
+        analytics.trackError({ component: "tts", errorType: `HTTP_${response.status}`, message: errMsg, provider });
+        throw new Error(errMsg);
       }
       const blob = await response.blob();
       if (generation !== generationRef.current) return;
@@ -79,6 +86,7 @@ export function useTTSQueue(): UseTTSQueueResult {
       }
       item.status = "error";
       item.error = err instanceof Error ? err.message : String(err);
+      analytics.trackError({ component: "tts", errorType: err instanceof Error ? err.name : "UnknownError", message: item.error });
       console.warn(`[TTSQueue] Fetch failed for "${item.text.slice(0, 40)}…":`, item.error);
     } finally {
       abortControllersRef.current.delete(item.id);
@@ -91,7 +99,6 @@ export function useTTSQueue(): UseTTSQueueResult {
     const nextIndex = playingIndexRef.current + 1;
 
     if (nextIndex >= queue.length) {
-      // Queue exhausted
       playingIndexRef.current = -1;
       setIsActive(false);
       return;
@@ -100,7 +107,6 @@ export function useTTSQueue(): UseTTSQueueResult {
     const item = queue[nextIndex];
     playingIndexRef.current = nextIndex;
 
-    // Wait for fetch to complete if not yet ready
     if (item.status === "fetching" && item.fetchPromise) {
       await item.fetchPromise;
     }
@@ -108,13 +114,11 @@ export function useTTSQueue(): UseTTSQueueResult {
     if (generation !== generationRef.current) return;
 
     if (item.status === "error" || !item.audioUrl) {
-      // Skip and move on
       if (item.error) setError(item.error);
       void playNext(generation);
       return;
     }
 
-    // Start prefetch of N+1 BEFORE we begin playing N (overlaps fetch with playback)
     const upcoming = queue[nextIndex + 1];
     if (upcoming && upcoming.status === "pending") {
       upcoming.fetchPromise = fetchItem(upcoming, generation);
@@ -138,6 +142,7 @@ export function useTTSQueue(): UseTTSQueueResult {
       if (generation !== generationRef.current) return;
       item.status = "error";
       item.error = "audio playback error";
+      analytics.trackError({ component: "tts", errorType: "AudioPlaybackError", message: "HTML audio element error during queue playback" });
       setError("Erreur de lecture audio");
       audioRef.current = null;
       void playNext(generation);
@@ -166,13 +171,10 @@ export function useTTSQueue(): UseTTSQueueResult {
 
     const isIdle = playingIndexRef.current === -1;
     if (isIdle) {
-      // Start the engine: fetch this first item and play it as soon as ready
       setIsActive(true);
       item.fetchPromise = fetchItem(item, generation);
       void playNext(generation);
     } else {
-      // Engine running: prefetch only if this item is the immediate next one,
-      // otherwise wait for playNext to trigger the prefetch when its turn comes.
       const nextToPlay = playingIndexRef.current + 1;
       if (queueRef.current.indexOf(item) === nextToPlay) {
         item.fetchPromise = fetchItem(item, generation);
@@ -183,12 +185,10 @@ export function useTTSQueue(): UseTTSQueueResult {
   const stop = useCallback(() => {
     generationRef.current += 1;
     cleanupAudio();
-    // Abort in-flight fetches
     Array.from(abortControllersRef.current.values()).forEach((ctrl) => {
       try { ctrl.abort(); } catch { /* ignore */ }
     });
     abortControllersRef.current.clear();
-    // Free pending object URLs
     for (const item of queueRef.current) {
       if (item.audioUrl) {
         try { URL.revokeObjectURL(item.audioUrl); } catch { /* ignore */ }

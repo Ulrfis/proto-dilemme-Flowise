@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Send, Mic, Loader2 } from "lucide-react";
+import { analytics } from "../../lib/analytics";
 
 interface ChatInputProps {
   onSendMessage: (message: string) => void;
@@ -22,6 +23,7 @@ export function ChatInput({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
+  const recordingStartRef = useRef<number>(0);
 
   // Web Audio API refs for the live waveform visualization
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -73,7 +75,6 @@ export function ChatInput({
         } else if (MediaRecorder.isTypeSupported('audio/wav')) {
           options.mimeType = 'audio/wav';
         } else {
-          // Use default format
           delete (options as any).mimeType;
         }
       }
@@ -95,11 +96,14 @@ export function ChatInput({
       mediaRecorder.onerror = (event) => {
         console.error('[Audio] MediaRecorder error:', event);
         setIsRecording(false);
+        analytics.trackError({ component: "recording", errorType: "MediaRecorderError", message: "MediaRecorder error during recording" });
         alert('Erreur lors de l\'enregistrement audio');
       };
 
-      mediaRecorder.start(1000); // Collect data every second
+      mediaRecorder.start(1000);
+      recordingStartRef.current = Date.now();
       setIsRecording(true);
+      analytics.trackRecordingStart({ provider: "browser" });
       console.log('[Audio] Recording started');
 
     } catch (error) {
@@ -107,6 +111,7 @@ export function ChatInput({
       setIsRecording(false);
       
       if (error instanceof Error) {
+        analytics.trackError({ component: "recording", errorType: error.name, message: error.message });
         if (error.name === 'NotAllowedError') {
           alert('Accès au microphone refusé. Veuillez autoriser l\'accès dans les paramètres de votre navigateur.');
         } else if (error.name === 'NotFoundError') {
@@ -124,6 +129,8 @@ export function ChatInput({
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
+      const durationMs = Date.now() - recordingStartRef.current;
+      analytics.trackRecordingStop({ durationMs });
     }
     
     if (streamRef.current) {
@@ -218,6 +225,9 @@ export function ChatInput({
       return;
     }
 
+    const sttStart = Date.now();
+    let sttTracked = false;
+
     try {
       setIsTranscribing(true);
       console.log('[Audio] Creating audio blob...');
@@ -228,7 +238,6 @@ export function ChatInput({
 
       console.log(`[Audio] Audio blob created: ${audioBlob.size} bytes`);
 
-      // Send to backend for transcription
       const formData = new FormData();
       formData.append('audio', audioBlob, 'recording.webm');
 
@@ -241,20 +250,36 @@ export function ChatInput({
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.details || 'Erreur de transcription');
+        const errMsg = errorData.details || 'Erreur de transcription';
+        sttTracked = true;
+        analytics.trackSTTCompleted({
+          latencyMs: Date.now() - sttStart,
+          provider: "browser",
+          wordCount: 0,
+          success: false,
+          errorType: `HTTP_${response.status}`,
+        });
+        analytics.trackError({ component: "stt", errorType: `HTTP_${response.status}`, message: errMsg });
+        throw new Error(errMsg);
       }
 
       const result = await response.json();
       console.log('[Audio] Transcription received:', result.text);
 
+      const wordCount = result.text?.trim() ? result.text.trim().split(/\s+/).length : 0;
+      sttTracked = true;
+      analytics.trackSTTCompleted({
+        latencyMs: Date.now() - sttStart,
+        provider: result.provider || "browser",
+        wordCount,
+        success: true,
+      });
+
       if (result.text?.trim()) {
-        // Create the complete message with transcribed text
         const newMessage = message + (message ? ' ' : '') + result.text.trim();
         console.log('[Audio] Auto-sending transcribed message:', newMessage);
-        
-        // Automatically send the message to Flowise
         onSendMessage(newMessage.trim());
-        setMessage(""); // Clear the input field
+        setMessage("");
       } else {
         console.warn('[Audio] Empty transcription result');
         alert('Aucune parole détectée. Essayez de parler plus fort ou plus près du microphone.');
@@ -264,6 +289,16 @@ export function ChatInput({
       console.error('[Audio] Transcription error:', error);
       
       if (error instanceof Error) {
+        if (!sttTracked) {
+          analytics.trackSTTCompleted({
+            latencyMs: Date.now() - sttStart,
+            provider: "browser",
+            wordCount: 0,
+            success: false,
+            errorType: error.name,
+          });
+          analytics.trackError({ component: "stt", errorType: error.name, message: error.message });
+        }
         alert('Erreur de transcription: ' + error.message);
       } else {
         alert('Erreur lors de la transcription audio');

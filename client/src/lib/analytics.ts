@@ -4,17 +4,30 @@ import { phCapture } from "./posthog";
 class Analytics {
   private sessionId: string;
   private startedAt = Date.now();
+  private lastEventAt = Date.now();
 
   constructor() {
     this.sessionId = `session_${Date.now()}_${crypto.randomUUID().replace(/-/g, '')}`;
   }
 
   async track(event: string, data?: Record<string, any>) {
-    phCapture(event, { sessionId: this.sessionId, ...(data || {}) });
+    const now = Date.now();
+    const stepMs = now - this.lastEventAt;
+    const sessionMs = now - this.startedAt;
+    this.lastEventAt = now;
+
+    const enriched = {
+      sessionId: this.sessionId,
+      stepMs,
+      sessionMs,
+      ...(data || {}),
+    };
+
+    phCapture(event, enriched);
     try {
       const analyticsEvent: AnalyticsEvent = {
         event,
-        data,
+        data: enriched,
         timestamp: new Date().toISOString(),
         sessionId: this.sessionId,
       };
@@ -28,6 +41,10 @@ class Analytics {
     }
   }
 
+  getSessionId(): string {
+    return this.sessionId;
+  }
+
   // ────────────────────────────────────────────────────────────────────
   // Page lifecycle
   trackPageView(page: string) {
@@ -38,7 +55,7 @@ class Analytics {
   // Identité + démarrage
   trackSessionStarted(props?: Record<string, any>) {
     this.startedAt = Date.now();
-    // Conservé en double : nom historique + nom FR demandé par le brief.
+    this.lastEventAt = Date.now();
     this.track("session_started", props);
   }
 
@@ -51,7 +68,7 @@ class Analytics {
   }
 
   // ────────────────────────────────────────────────────────────────────
-  // Chat (français = source de vérité, alias EN gardés pour rétro-compat)
+  // Chat
   trackChatStart() {
     this.track("chat_start");
   }
@@ -67,7 +84,76 @@ class Analytics {
   }
 
   // ────────────────────────────────────────────────────────────────────
-  // Médias
+  // Recording / STT
+  trackRecordingStart(props?: { provider?: string }) {
+    this.track("recording_started", { provider: "browser", ...props });
+  }
+
+  trackRecordingStop(props?: { durationMs?: number }) {
+    this.track("recording_stopped", props);
+  }
+
+  trackSTTCompleted(props: {
+    latencyMs: number;
+    provider: string;
+    wordCount: number;
+    success: boolean;
+    errorType?: string;
+  }) {
+    this.track("stt_completed", props);
+  }
+
+  // ────────────────────────────────────────────────────────────────────
+  // AI / Flowise
+  trackAIRequest(props: { provider: string; sessionId?: string }) {
+    this.track("ai_request_sent", props);
+  }
+
+  trackAIResponse(props: {
+    ttftMs?: number;
+    totalMs?: number;
+    provider: string;
+    success: boolean;
+    errorType?: string;
+  }) {
+    this.track("ai_response_received", props);
+  }
+
+  // ────────────────────────────────────────────────────────────────────
+  // Article / media engagement
+  trackArticleOpened(props: { url: string; title?: string }) {
+    this.track("article_opened", props);
+  }
+
+  trackArticleLoadMethod(props: {
+    url: string;
+    method: "proxy" | "reader" | "archive" | "failed";
+    latencyMs?: number;
+  }) {
+    this.track("article_load_method", props);
+  }
+
+  trackArticleReadTime(props: { url: string; readTimeSec: number }) {
+    this.track("article_read_time_sec", props);
+  }
+
+  trackVideoProgress(props: { url: string; progressPct: 25 | 50 | 75 | 100 }) {
+    this.track("video_progress_pct", props);
+  }
+
+  // ────────────────────────────────────────────────────────────────────
+  // Error tracking
+  trackError(props: {
+    component: string;
+    errorType: string;
+    message: string;
+    provider?: string;
+  }) {
+    this.track("error_occurred", props);
+  }
+
+  // ────────────────────────────────────────────────────────────────────
+  // Médias (legacy helpers kept for backward compat)
   trackVideoOpened(videoUrl: string) {
     this.track("video_ouverte", { url: videoUrl });
     this.track("video_opened", { url: videoUrl });
@@ -94,6 +180,7 @@ class Analytics {
     this.track("session_reset");
     this.sessionId = `session_${Date.now()}_${crypto.randomUUID().replace(/-/g, '')}`;
     this.startedAt = Date.now();
+    this.lastEventAt = Date.now();
   }
 
   trackSessionComplete() {

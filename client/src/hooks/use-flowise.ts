@@ -75,10 +75,6 @@ export function useFlowise(
     setTimeout(() => analytics.trackMessageSent(content.length), 0);
     void recordMessage("user", userMessage.content);
 
-    // Capture du prénom : le premier message de l'élève après le message
-    // de bienvenue est vraisemblablement sa réponse à "quel est ton prénom ?".
-    // On ne prend que les messages courts (≤40 chars) pour éviter de stocker
-    // une vraie réponse par erreur. updateSessionFirstName est idempotent.
     if (content.trim().length <= 40) {
       void updateSessionFirstName(content.trim());
     }
@@ -94,10 +90,15 @@ export function useFlowise(
 
     setMessages(prev => [...prev, peterMessage]);
 
+    // Track AI request start
+    const aiRequestStart = Date.now();
+    let firstTokenTime: number | undefined;
+    let aiTracked = false;
+    setTimeout(() => analytics.trackAIRequest({ provider: "flowise" }), 0);
+
     try {
       console.log('[use-flowise] Starting streaming...');
       
-      // Reset token buffer for new message
       tokenBufferRef.current = '';
       currentMessageIdRef.current = peterMessageId;
       if (batchTimeoutRef.current) {
@@ -107,11 +108,13 @@ export function useFlowise(
 
       await client.sendMessageStreaming(
         content.trim(),
-        // Token callback with batching - updates UI every 50ms instead of every token
+        // Token callback with batching
         (token: string) => {
+          if (firstTokenTime === undefined) {
+            firstTokenTime = Date.now() - aiRequestStart;
+          }
           tokenBufferRef.current += token;
           
-          // Only schedule a new batch update if one isn't pending
           if (!batchTimeoutRef.current) {
             batchTimeoutRef.current = setTimeout(() => {
               const bufferedContent = tokenBufferRef.current;
@@ -144,18 +147,14 @@ export function useFlowise(
         (fullText: string, metadata: any) => {
           console.log('[use-flowise] Stream complete, processing final message...');
           
-          // Clear any pending batch update
           if (batchTimeoutRef.current) {
             clearTimeout(batchTimeoutRef.current);
             batchTimeoutRef.current = null;
           }
 
-          // CRITICAL: Use metadata.fullText from server if available (server extracts JSON Response field)
-          // Otherwise fall back to locally accumulated fullText (from tokenBufferRef)
           const finalText = metadata?.fullText || tokenBufferRef.current || fullText;
           console.log('[use-flowise] Using text:', finalText.length, 'chars (from', metadata?.fullText ? 'server metadata' : 'local accumulation', ')');
 
-          // Extract media from the full streamed text
           const { cleanText, videos, links } = extractMediaFromText(finalText);
 
           setMessages(prev => prev.map(msg =>
@@ -178,21 +177,33 @@ export function useFlowise(
           setIsLoading(false);
           setCurrentStepLabel(null);
 
-          // Persistance Postgres (best-effort) + analytics PostHog
+          const totalMs = Date.now() - aiRequestStart;
+          const ttftMs = firstTokenTime ?? metadata?.firstTokenTime;
+
+          // AI response tracking (replaces old peter_replied timing)
+          aiTracked = true;
+          setTimeout(() => {
+            analytics.trackAIResponse({
+              ttftMs,
+              totalMs,
+              provider: "flowise",
+              success: true,
+            });
+          }, 0);
+
           if (cleanText && cleanText.trim()) {
             void recordMessage("peter", cleanText);
             setTimeout(
               () =>
                 analytics.trackPeterReplied(
                   cleanText.length,
-                  metadata?.firstTokenTime,
-                  metadata?.totalTime,
+                  ttftMs,
+                  totalMs,
                 ),
               0,
             );
           }
 
-          // Analytics tracking
           if (videos.length > 0 || links.length > 0) {
             setTimeout(() => {
               videos.forEach(video => analytics.trackVideoOpened(video));
@@ -200,7 +211,6 @@ export function useFlowise(
             }, 0);
           }
 
-          // Update info panel with final metadata if available
           if (onInfoDataUpdate && metadata) {
             const infoData: any = {};
             if (metadata.theme) infoData.theme = metadata.theme;
@@ -214,7 +224,6 @@ export function useFlowise(
           }
         },
         (error: Error) => {
-          // Ignore AbortError — it means we intentionally cancelled the stream
           if (error.name === 'AbortError') {
             console.log('[use-flowise] Stream aborted (new message started)');
             setCurrentStepLabel(null);
@@ -222,6 +231,19 @@ export function useFlowise(
           }
 
           console.error('[use-flowise] Stream error:', error);
+
+          const totalMs = Date.now() - aiRequestStart;
+          aiTracked = true;
+          setTimeout(() => {
+            analytics.trackAIResponse({
+              ttftMs: firstTokenTime,
+              totalMs,
+              provider: "flowise",
+              success: false,
+              errorType: error.name,
+            });
+            analytics.trackError({ component: "ai", errorType: error.name, message: error.message, provider: "flowise" });
+          }, 0);
 
           setMessages(prev => prev.map(msg =>
             msg.id === peterMessageId
@@ -238,11 +260,9 @@ export function useFlowise(
           setCurrentStepLabel(null);
         },
         abortController.signal,
-        // Progress callback (server-emitted FR labels for current Flowise step)
         (label: FlowiseProgressLabel) => {
           setCurrentStepLabel(label.label);
         },
-        // Sentence callback (each complete sentence as it appears in stream)
         (sentence: string) => {
           if (onSentenceRef.current) {
             try { onSentenceRef.current(sentence); }
@@ -257,6 +277,23 @@ export function useFlowise(
         return;
       }
       console.error("Error sending message:", error);
+
+      const totalMs = Date.now() - aiRequestStart;
+      const errName = (error instanceof Error) ? error.name : "UnknownError";
+      const errMsg = (error instanceof Error) ? error.message : String(error);
+      if (!aiTracked) {
+        aiTracked = true;
+        setTimeout(() => {
+          analytics.trackAIResponse({
+            ttftMs: firstTokenTime,
+            totalMs,
+            provider: "flowise",
+            success: false,
+            errorType: errName,
+          });
+          analytics.trackError({ component: "ai", errorType: errName, message: errMsg, provider: "flowise" });
+        }, 0);
+      }
 
       setMessages(prev => prev.map(msg =>
         msg.id === peterMessageId
@@ -295,7 +332,6 @@ export function useFlowise(
 
   const addWelcomeMessage = useCallback(() => {
     setMessages(prev => {
-      // Guard: don't add if welcome already present
       if (prev.some(m => m.id === 'peter_welcome')) return prev;
       const welcomeMessage: ChatMessage = {
         id: 'peter_welcome',
@@ -305,7 +341,6 @@ export function useFlowise(
       };
       return [...prev, welcomeMessage];
     });
-    // Persiste le message de bienvenue (best-effort, ignore les doublons côté serveur)
     void recordMessage("peter", PETER_WELCOME_MESSAGE);
   }, []);
 
