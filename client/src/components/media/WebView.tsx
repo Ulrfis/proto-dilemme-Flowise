@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/select";
 import { ExternalLink, RefreshCw, AlertCircle, Globe, BookOpen, Archive, FileText } from "lucide-react";
 import { MediaItem } from "../../types/chat";
+import { analytics } from "../../lib/analytics";
 
 interface WebViewProps {
   webpage: MediaItem | null;
@@ -90,6 +91,10 @@ export function WebView({ webpage }: WebViewProps) {
   const timeoutRef = useRef<NodeJS.Timeout>();
   const modeRef = useRef<ViewMode>('proxy');
   const preferredModeRef = useRef<PreferredMode>(preferredMode);
+  const articleOpenedAtRef = useRef<number | null>(null);
+  const articleUrlRef = useRef<string | null>(null);
+  const loadMethodFiredRef = useRef<string | null>(null);
+  const readTimeTrackedRef = useRef<string | null>(null);
 
   const setPreferredMode = (m: PreferredMode) => {
     preferredModeRef.current = m;
@@ -108,7 +113,16 @@ export function WebView({ webpage }: WebViewProps) {
     setMode(m);
   };
 
+  // Fire article_load_method once per article open — URL-only guard so a
+  // cascade (proxy→reader→archive) emits only the final resolved method.
+  const fireLoadMethod = (url: string, method: "proxy" | "reader" | "archive" | "failed", latencyMs?: number) => {
+    if (loadMethodFiredRef.current === url) return;
+    loadMethodFiredRef.current = url;
+    analytics.trackArticleLoadMethod({ url, method, latencyMs });
+  };
+
   const tryReaderMode = async (url: string) => {
+    const readerStart = Date.now();
     setModeAndRef('reader');
     setLoading(true);
     const ctrl = new AbortController();
@@ -120,12 +134,15 @@ export function WebView({ webpage }: WebViewProps) {
         const data: ReaderData = await resp.json();
         setReaderData(data);
         setLoading(false);
+        fireLoadMethod(url, "reader", Date.now() - readerStart);
       } else {
         if (preferredModeRef.current === 'reader') {
           console.warn('[WebView] Reader mode failed (forced reader mode — not cascading)');
           setModeAndRef('error');
           setFinalError(true);
           setLoading(false);
+          fireLoadMethod(url, "failed");
+          analytics.trackError({ component: "reader", errorType: `HTTP_${resp.status}`, message: `Reader failed with HTTP ${resp.status}` });
         } else {
           console.warn('[WebView] Reader mode failed, trying archive');
           tryArchiveMode(url);
@@ -138,6 +155,8 @@ export function WebView({ webpage }: WebViewProps) {
         setModeAndRef('error');
         setFinalError(true);
         setLoading(false);
+        fireLoadMethod(url, "failed");
+        analytics.trackError({ component: "reader", errorType: err instanceof Error ? err.name : "UnknownError", message: err instanceof Error ? err.message : String(err) });
       } else {
         console.warn('[WebView] Reader mode error:', err);
         tryArchiveMode(url);
@@ -165,13 +184,47 @@ export function WebView({ webpage }: WebViewProps) {
         setModeAndRef('error');
         setFinalError(true);
         setLoading(false);
+        if (webpage) {
+          fireLoadMethod(webpage.url, "failed");
+          analytics.trackError({ component: "proxy", errorType: "ArchiveTimeout", message: "Archive iframe timed out" });
+        }
       }
     }, 15000);
   };
 
+  // Track read time on article URL change or unmount (once per article URL)
+  useEffect(() => {
+    return () => {
+      const url = articleUrlRef.current;
+      if (articleOpenedAtRef.current !== null && url && readTimeTrackedRef.current !== url) {
+        readTimeTrackedRef.current = url;
+        const readTimeSec = Math.round((Date.now() - articleOpenedAtRef.current) / 1000);
+        if (readTimeSec >= 1) {
+          analytics.trackArticleReadTime({ url, readTimeSec });
+        }
+      }
+    };
+  }, [webpage?.url]);
+
   // Main entry: respect preferredMode, fall back to cascade for 'auto'
   useEffect(() => {
     if (!webpage) return;
+
+    // Fire read time for previous article before switching (once per URL guard)
+    const prevUrl = articleUrlRef.current;
+    if (articleOpenedAtRef.current !== null && prevUrl && prevUrl !== webpage.url && readTimeTrackedRef.current !== prevUrl) {
+      readTimeTrackedRef.current = prevUrl;
+      const readTimeSec = Math.round((Date.now() - articleOpenedAtRef.current) / 1000);
+      if (readTimeSec >= 1) {
+        analytics.trackArticleReadTime({ url: prevUrl, readTimeSec });
+      }
+    }
+
+    articleOpenedAtRef.current = Date.now();
+    articleUrlRef.current = webpage.url;
+    readTimeTrackedRef.current = null;
+    loadMethodFiredRef.current = null;
+    analytics.trackArticleOpened({ url: webpage.url, title: webpage.title });
 
     setLoading(true);
     setFinalError(false);
@@ -180,7 +233,6 @@ export function WebView({ webpage }: WebViewProps) {
 
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
 
-    // Snapshot preferred mode so the effect is stable
     const pref = preferredMode;
 
     if (pref === 'reader') {
@@ -221,12 +273,17 @@ export function WebView({ webpage }: WebViewProps) {
       .then(async (res) => {
         if (!res.ok) {
           console.warn(`[WebView] Proxy probe failed HTTP ${res.status}, trying reader`);
+          analytics.trackError({ component: "proxy", errorType: `HTTP_${res.status}`, message: `Proxy failed with HTTP ${res.status}` });
           tryReaderMode(webpage.url);
         }
+        // Probe success: do NOT emit article_load_method here.
+        // handleIframeLoad fires "proxy" once the iframe actually renders,
+        // ensuring the emitted method matches the confirmed render outcome.
       })
       .catch((err) => {
         if (err.name === 'AbortError') return;
         console.warn('[WebView] Proxy probe network error:', err);
+        analytics.trackError({ component: "proxy", errorType: err.name, message: err.message });
         tryReaderMode(webpage.url);
       });
 
@@ -248,16 +305,22 @@ export function WebView({ webpage }: WebViewProps) {
       setLoading(false);
       setFinalError(false);
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (webpage) {
+        fireLoadMethod(webpage.url, modeRef.current as "proxy" | "archive");
+      }
     }
   };
 
   const handleIframeError = () => {
     if (modeRef.current === 'proxy') {
       if (preferredMode === 'proxy') {
-        // Forced proxy — don't cascade, show error
         setModeAndRef('error');
         setFinalError(true);
         setLoading(false);
+        if (webpage) {
+          fireLoadMethod(webpage.url, "failed");
+          analytics.trackError({ component: "proxy", errorType: "IframeError", message: "Proxy iframe load error" });
+        }
       } else {
         console.warn('[WebView] Proxy iframe error, trying reader');
         if (webpage) tryReaderMode(webpage.url);
@@ -267,6 +330,10 @@ export function WebView({ webpage }: WebViewProps) {
       setModeAndRef('error');
       setFinalError(true);
       setLoading(false);
+      if (webpage) {
+        fireLoadMethod(webpage.url, "failed");
+        analytics.trackError({ component: "proxy", errorType: "ArchiveIframeError", message: "Archive iframe load error" });
+      }
     }
   };
 

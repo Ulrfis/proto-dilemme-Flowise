@@ -1,6 +1,48 @@
 import { useEffect, useRef, useState } from "react";
 import { MediaItem } from "../../types/chat";
 import { GumletPlayer } from '@gumlet/react-embed-player';
+import { analytics } from "../../lib/analytics";
+
+// ─── Typed postMessage payload schemas ────────────────────────────────────────
+
+interface GumletTimeupdateValue { seconds?: number; duration?: number; }
+interface GumletMessage {
+  context: 'player.js';
+  event: string;
+  value?: GumletTimeupdateValue;
+}
+function isGumletMessage(d: unknown): d is GumletMessage {
+  if (typeof d !== 'object' || d === null) return false;
+  const r = d as Record<string, unknown>;
+  return r['context'] === 'player.js' && typeof r['event'] === 'string';
+}
+
+interface YouTubeInfoDelivery {
+  event: 'infoDelivery';
+  info: Record<string, unknown>;
+}
+function isYouTubeInfoDelivery(d: unknown): d is YouTubeInfoDelivery {
+  if (typeof d !== 'object' || d === null) return false;
+  const r = d as Record<string, unknown>;
+  return r['event'] === 'infoDelivery' && typeof r['info'] === 'object' && r['info'] !== null;
+}
+
+interface VimeoTimeupdateMessage { event: 'timeupdate'; data: { percent: number; seconds: number; duration: number } }
+interface VimeoEndedMessage     { event: 'ended' }
+type VimeoMessage = VimeoTimeupdateMessage | VimeoEndedMessage;
+function isVimeoMessage(d: unknown): d is VimeoMessage {
+  if (typeof d !== 'object' || d === null) return false;
+  const ev = (d as Record<string, unknown>)['event'];
+  return ev === 'timeupdate' || ev === 'ended';
+}
+
+/** Parse a raw postMessage payload (string or object) into a typed value. */
+function parsePostMessage(raw: unknown): unknown {
+  if (typeof raw === 'string') {
+    try { return JSON.parse(raw); } catch { return null; }
+  }
+  return raw;
+}
 
 interface VideoPlayerProps {
   video: MediaItem | null;
@@ -28,13 +70,28 @@ export function VideoPlayer({ video, onVideoEnded, onVideoPaused, onVideoPlay }:
   onPausedRef.current = onVideoPaused;
   onPlayRef.current = onVideoPlay;
 
+  // Track which progress milestones have been fired for the current video
+  const progressFiredRef = useRef<Set<number>>(new Set());
+  const currentVideoUrlRef = useRef<string | null>(null);
+
+  // Reset progress tracking on new video
+  useEffect(() => {
+    if (video?.url !== currentVideoUrlRef.current) {
+      progressFiredRef.current = new Set();
+      currentVideoUrlRef.current = video?.url ?? null;
+    }
+  }, [video?.url]);
+
+  const fireProgressIfNeeded = (pct: number, url: string) => {
+    const milestone = pct >= 100 ? 100 : pct >= 75 ? 75 : pct >= 50 ? 50 : pct >= 25 ? 25 : 0;
+    if (milestone === 0) return;
+    if (!progressFiredRef.current.has(milestone)) {
+      progressFiredRef.current.add(milestone);
+      analytics.trackVideoProgress({ url, progressPct: milestone as 25 | 50 | 75 | 100 });
+    }
+  };
+
   // ---- Gumlet state tracking via postMessage ------------------------------
-  // The GumletPlayer's React callbacks (onPause/onEnded) have a stale-closure
-  // bug AND the imperative ref API (getPaused/getCurrentTime) returns Promises
-  // that never resolve when the player isn't fully ready. We bypass both by
-  // listening directly to the `player.js` protocol messages the iframe posts.
-  // The lib already subscribes to play/pause/ended/timeupdate internally, so
-  // these messages flow on the window — we just need to read them.
   useEffect(() => {
     if (playerType !== 'gumlet' || !videoData.gumletVideoId) return;
 
@@ -43,24 +100,24 @@ export function VideoPlayer({ video, onVideoEnded, onVideoPaused, onVideoPlay }:
     let lastTime = 0;
 
     const handler = (ev: MessageEvent) => {
-      // Only listen to messages from our specific iframe
       const iframe = document.querySelector<HTMLIFrameElement>(
         `iframe[src*="${videoData.gumletVideoId}"]`,
       );
       if (iframe && ev.source !== iframe.contentWindow) return;
 
-      let data: any = ev.data;
-      if (typeof data === 'string') {
-        try { data = JSON.parse(data); } catch { return; }
-      }
-      if (!data || data.context !== 'player.js') return;
+      const data = parsePostMessage(ev.data);
+      if (!isGumletMessage(data)) return;
 
-      const event = data.event;
-      const value = data.value;
+      const { event, value } = data;
 
       if (event === 'timeupdate' && value) {
         lastTime = value.seconds ?? lastTime;
         lastDuration = value.duration ?? lastDuration;
+
+        if (lastDuration > 0 && currentVideoUrlRef.current) {
+          const pct = (lastTime / lastDuration) * 100;
+          fireProgressIfNeeded(pct, currentVideoUrlRef.current);
+        }
 
         if (
           !endFired &&
@@ -75,10 +132,12 @@ export function VideoPlayer({ video, onVideoEnded, onVideoPaused, onVideoPlay }:
         if (endFired) return;
         endFired = true;
         console.log('[VideoPlayer] PM: ended event');
+        if (currentVideoUrlRef.current) {
+          fireProgressIfNeeded(100, currentVideoUrlRef.current);
+        }
         onEndedRef.current?.();
       } else if (event === 'pause') {
         if (endFired) return;
-        // Don't fire pause if we're at end of video (player auto-pauses on end)
         if (lastDuration > 0 && lastTime >= lastDuration - 0.5) return;
         console.log('[VideoPlayer] PM: paused');
         onPausedRef.current?.();
@@ -96,6 +155,88 @@ export function VideoPlayer({ video, onVideoEnded, onVideoPaused, onVideoPlay }:
     };
   }, [playerType, videoData.gumletVideoId]);
 
+  // ---- YouTube IFrame API progress tracking via postMessage ---------------
+  useEffect(() => {
+    if (playerType !== 'youtube' || !videoData.youtubeVideoId) return;
+
+    // Send the "listening" command so YouTube starts pushing infoDelivery messages.
+    // Retried at 0.5 s, 2 s, and 5 s to catch the iframe after it finishes loading.
+    const sendListening = () => {
+      const iframe = document.querySelector<HTMLIFrameElement>('[data-testid="iframe-youtube-player"]');
+      if (iframe?.contentWindow) {
+        iframe.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 1 }), '*');
+      }
+    };
+    const t1 = setTimeout(sendListening, 500);
+    const t2 = setTimeout(sendListening, 2000);
+    const t3 = setTimeout(sendListening, 5000);
+
+    const handler = (ev: MessageEvent) => {
+      const iframe = document.querySelector<HTMLIFrameElement>('[data-testid="iframe-youtube-player"]');
+      if (iframe && ev.source !== iframe.contentWindow) return;
+
+      const data = parsePostMessage(ev.data);
+      if (!isYouTubeInfoDelivery(data)) return;
+
+      const currentTime = data.info['currentTime'];
+      const duration    = data.info['duration'];
+      if (typeof currentTime === 'number' && typeof duration === 'number' && duration > 0 && currentVideoUrlRef.current) {
+        fireProgressIfNeeded((currentTime / duration) * 100, currentVideoUrlRef.current);
+      }
+    };
+
+    window.addEventListener('message', handler);
+    console.log('[VideoPlayer] YouTube postMessage listener attached for', videoData.youtubeVideoId);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      window.removeEventListener('message', handler);
+    };
+  }, [playerType, videoData.youtubeVideoId]);
+
+  // ---- Vimeo postMessage progress tracking --------------------------------
+  useEffect(() => {
+    if (playerType !== 'vimeo' || !videoData.vimeoVideoId) return;
+
+    // Subscribe to timeupdate events from the Vimeo player.
+    // Retried at 0.5 s and 2 s to account for iframe load time.
+    const subscribe = () => {
+      const iframe = document.querySelector<HTMLIFrameElement>('[data-testid="iframe-vimeo-player"]');
+      if (iframe?.contentWindow) {
+        iframe.contentWindow.postMessage(JSON.stringify({ method: 'addEventListener', value: 'timeupdate' }), '*');
+        iframe.contentWindow.postMessage(JSON.stringify({ method: 'addEventListener', value: 'ended' }), '*');
+      }
+    };
+    const t1 = setTimeout(subscribe, 500);
+    const t2 = setTimeout(subscribe, 2000);
+
+    const handler = (ev: MessageEvent) => {
+      const iframe = document.querySelector<HTMLIFrameElement>('[data-testid="iframe-vimeo-player"]');
+      if (iframe && ev.source !== iframe.contentWindow) return;
+
+      const data = parsePostMessage(ev.data);
+      if (!isVimeoMessage(data)) return;
+
+      if (data.event === 'timeupdate' && currentVideoUrlRef.current) {
+        fireProgressIfNeeded(data.data.percent * 100, currentVideoUrlRef.current);
+      } else if (data.event === 'ended' && currentVideoUrlRef.current) {
+        fireProgressIfNeeded(100, currentVideoUrlRef.current);
+        onEndedRef.current?.();
+      }
+    };
+
+    window.addEventListener('message', handler);
+    console.log('[VideoPlayer] Vimeo postMessage listener attached for', videoData.vimeoVideoId);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      window.removeEventListener('message', handler);
+    };
+  }, [playerType, videoData.vimeoVideoId]);
+
   useEffect(() => {
     if (video) {
       let embedUrl = video.url;
@@ -109,30 +250,26 @@ export function VideoPlayer({ video, onVideoEnded, onVideoPaused, onVideoPlay }:
         type = 'youtube';
         
         if (video.url.includes('youtu.be/')) {
-          // Short URL format: https://youtu.be/VIDEO_ID
           youtubeVideoId = video.url.split('youtu.be/')[1].split('?')[0].split('&')[0];
         } else if (video.url.includes('watch?v=')) {
-          // Long URL format: https://www.youtube.com/watch?v=VIDEO_ID
           const urlParams = new URLSearchParams(video.url.split('?')[1]);
           youtubeVideoId = urlParams.get('v') || '';
         } else if (video.url.includes('/embed/')) {
-          // Already embed format, extract video ID
           const embedMatch = video.url.match(/\/embed\/([^?&/]+)/);
           youtubeVideoId = embedMatch ? embedMatch[1] : '';
         }
         
         if (youtubeVideoId) {
-          // Clean YouTube embed with minimal distractions (updated for 2025)
           embedUrl = `https://www.youtube.com/embed/${youtubeVideoId}?` +
-            'rel=0&' +                    // Remove related videos at end
-            'modestbranding=1&' +         // Remove YouTube logo
-            'controls=1&' +               // Keep video controls
-            'disablekb=0&' +              // Allow keyboard controls
-            'fs=1&' +                     // Allow fullscreen
-            'iv_load_policy=3&' +         // Hide annotations
-            'cc_load_policy=0&' +         // Don't force closed captions
-            'playsinline=1&' +            // Play inline on mobile
-            'enablejsapi=0&' +            // Disable JS API to prevent CSP issues
+            'rel=0&' +
+            'modestbranding=1&' +
+            'controls=1&' +
+            'disablekb=0&' +
+            'fs=1&' +
+            'iv_load_policy=3&' +
+            'cc_load_policy=0&' +
+            'playsinline=1&' +
+            'enablejsapi=1&' +
             'origin=' + encodeURIComponent(window.location.origin);
         }
         
@@ -142,38 +279,26 @@ export function VideoPlayer({ video, onVideoEnded, onVideoPaused, onVideoPlay }:
       else if (video.url.includes('gumlet.io') || video.url.includes('gumlet.tv')) {
         type = 'gumlet';
         
-        // Extract video ID from various Gumlet URL formats
         if (video.url.includes('/embed/')) {
-          // Direct embed URL: https://play.gumlet.io/embed/VIDEO_ID
           const embedMatch = video.url.match(/\/embed\/([^?&/]+)/);
           gumletVideoId = embedMatch ? embedMatch[1] : '';
         } else if (video.url.includes('play.gumlet.io/')) {
           const playMatch = video.url.match(/play\.gumlet\.io\/([^?&/]+)/);
           gumletVideoId = playMatch ? playMatch[1] : '';
         } else if (video.url.includes('gumlet.tv/watch/')) {
-          // gumlet.tv watch URL: https://gumlet.tv/watch/VIDEO_ID
           const watchMatch = video.url.match(/gumlet\.tv\/watch\/([^?&/]+)/);
           gumletVideoId = watchMatch ? watchMatch[1] : '';
         } else {
-          // Generic gumlet.io URL - try to extract ID from path
           const pathMatch = video.url.match(/gumlet\.(?:io|tv)\/[^\/]*\/([^?&/]+)/);
           gumletVideoId = pathMatch ? pathMatch[1] : '';
         }
         
         console.log(`Gumlet URL detected: "${video.url}" -> ID: "${gumletVideoId}"`);
       }
-      // Handle Vimeo URLs — embed natively via player.vimeo.com (no proxy needed)
+      // Handle Vimeo URLs
       else if (video.url.includes('vimeo.com')) {
         type = 'vimeo';
 
-        // Supported formats:
-        //   https://vimeo.com/123456789
-        //   https://vimeo.com/123456789/abcd1234              (with private hash)
-        //   https://player.vimeo.com/video/123456789
-        //   https://vimeo.com/channels/foo/123456789
-        //   https://vimeo.com/groups/foo/videos/123456789
-        //   https://vimeo.com/manage/videos/123456789/abcd1234 (admin URL — Peter
-        //     sometimes pastes these; the public hash still works for embedding)
         const playerMatch = video.url.match(/player\.vimeo\.com\/video\/(\d+)(?:\/([\w]+))?/);
         const manageMatch = video.url.match(/vimeo\.com\/manage\/videos\/(\d+)(?:\/([\w]+))?/);
         const standardMatch = video.url.match(/vimeo\.com\/(?:channels\/[^/]+\/|groups\/[^/]+\/videos\/)?(\d+)(?:\/([\w]+))?/);
@@ -191,13 +316,12 @@ export function VideoPlayer({ video, onVideoEnded, onVideoPaused, onVideoPlay }:
         }
 
         if (vimeoVideoId) {
-          // Build a clean embed URL. The `h=` parameter carries the privacy hash
-          // that Vimeo requires for unlisted videos.
           const params = new URLSearchParams({
             title: '0',
             byline: '0',
             portrait: '0',
             dnt: '1',
+            api: '1',
           });
           if (hash) params.set('h', hash);
           embedUrl = `https://player.vimeo.com/video/${vimeoVideoId}?${params.toString()}`;
@@ -237,7 +361,6 @@ export function VideoPlayer({ video, onVideoEnded, onVideoPaused, onVideoPlay }:
 
   const renderPlayer = () => {
     if (playerType === 'gumlet' && videoData.gumletVideoId) {
-      // Use Gumlet React Player
       return (
         <GumletPlayer
           ref={gumletPlayerRef}
@@ -260,13 +383,17 @@ export function VideoPlayer({ video, onVideoEnded, onVideoPaused, onVideoPlay }:
           autoplay={false}
           preload={true}
           muted={false}
-          onEnded={onVideoEnded}
+          onEnded={() => {
+            if (currentVideoUrlRef.current) {
+              fireProgressIfNeeded(100, currentVideoUrlRef.current);
+            }
+            onVideoEnded?.();
+          }}
           onPause={onVideoPaused}
           onPlay={onVideoPlay}
         />
       );
     } else if (playerType === 'vimeo' && videoData.embedUrl && videoData.vimeoVideoId) {
-      // Native Vimeo embed — runs entirely in the iframe sandbox, no proxy.
       return (
         <iframe
           key={videoData.vimeoVideoId}
@@ -281,10 +408,9 @@ export function VideoPlayer({ video, onVideoEnded, onVideoPaused, onVideoPlay }:
         />
       );
     } else if (playerType === 'youtube' && videoData.embedUrl) {
-      // Use YouTube iframe embed with improved error handling
       return (
         <iframe
-          key={videoData.youtubeVideoId} // Force re-render when video changes
+          key={videoData.youtubeVideoId}
           src={videoData.embedUrl}
           className="w-full h-full border-none rounded-lg shadow-lg"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
@@ -297,7 +423,6 @@ export function VideoPlayer({ video, onVideoEnded, onVideoPaused, onVideoPlay }:
         />
       );
     } else {
-      // Fallback for unknown video types
       return (
         <div className="w-full h-full flex items-center justify-center bg-gray-100 rounded-lg">
           <div className="text-center text-gray-500 max-w-md p-6">

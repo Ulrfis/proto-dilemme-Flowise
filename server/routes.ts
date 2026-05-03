@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { Readability } from "@mozilla/readability";
 import { JSDOM } from "jsdom";
+import { PostHog } from "posthog-node";
 import {
   analyticsEventSchema,
   insertConversationSessionSchema,
@@ -35,6 +36,35 @@ import { flowiseFetch } from "./flowise-fetch";
 import { labelForFlowiseEvent, type ProgressLabel } from "./flowise-progress-labels";
 import { debugTraces, newTraceId, startRetentionScheduler, getRetentionInfo } from "./debug-traces";
 import { buildHealthResponse } from "./debug-health";
+
+// ── Server-side PostHog client (TTS / STT analytics) ─────────────────────────
+// Disabled silently when POSTHOG_SERVER_KEY / POSTHOG_PROJECT_API_KEY is absent.
+function createServerPostHog(): PostHog | null {
+  const key =
+    process.env.POSTHOG_SERVER_KEY ||
+    process.env.VITE_POSTHOG_KEY ||
+    "";
+  if (!key) return null;
+  const host = (process.env.VITE_POSTHOG_HOST || "https://eu.i.posthog.com")
+    .trim()
+    .replace(/\/+$/, "");
+  try {
+    const ph = new PostHog(key, { host, flushAt: 1, flushInterval: 0 });
+    return ph;
+  } catch (err) {
+    console.warn("[PostHog:server] init failed:", err);
+    return null;
+  }
+}
+
+const serverPostHog = createServerPostHog();
+
+function phServerCapture(distinctId: string, event: string, props: Record<string, any>) {
+  if (!serverPostHog) return;
+  try {
+    serverPostHog.capture({ distinctId, event, properties: props });
+  } catch {}
+}
 
 // Allowed domains for the content proxy (prevents SSRF to internal networks)
 const PROXY_ALLOWED_DOMAINS = new Set([
@@ -124,6 +154,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.json({
           text: result.text,
           language: result.language || 'fr',
+          provider: provider.name,
         });
 
       } catch (providerError) {
@@ -187,20 +218,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const ttsStart = Date.now();
       const textPreview = safeText.length > 80 ? safeText.slice(0, 80) + "…" : safeText;
 
+      const distinctId = (typeof req.body?.sessionId === "string" && req.body.sessionId) ? req.body.sessionId : "server";
+
+      // Server-side tts_requested — emitted before cache lookup so every
+      // synthesis intent is captured regardless of cache outcome.
+      phServerCapture(distinctId, "tts_requested", {
+        provider: provider.name,
+        charCount: safeText.length,
+      });
+
       const cached = ttsCache.get(cacheKey);
       if (cached) {
         console.log(
           `[TTS:${provider.name}] Cache HIT (${safeText.length} caractères, ${cached.size} octets)`,
         );
+        const latencyMs = Date.now() - ttsStart;
         debugTraces.recordTTS({
           id: newTraceId("tts"),
           textPreview,
           chars: safeText.length,
           startedAt: ttsStart,
-          durationMs: Date.now() - ttsStart,
+          durationMs: latencyMs,
           cacheHit: true,
           provider: provider.name,
           status: "ok",
+        });
+        phServerCapture(distinctId, "tts_completed", {
+          provider: provider.name,
+          cacheHit: true,
+          latencyMs,
+          charCount: safeText.length,
+          success: true,
         });
         res.setHeader('Content-Type', cached.contentType);
         res.setHeader('Content-Length', String(cached.audio.length));
@@ -217,15 +265,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         ttsCache.set(cacheKey, result);
 
+        const latencyMs = Date.now() - ttsStart;
         debugTraces.recordTTS({
           id: newTraceId("tts"),
           textPreview,
           chars: safeText.length,
           startedAt: ttsStart,
-          durationMs: Date.now() - ttsStart,
+          durationMs: latencyMs,
           cacheHit: false,
           provider: provider.name,
           status: "ok",
+        });
+        phServerCapture(distinctId, "tts_completed", {
+          provider: provider.name,
+          cacheHit: false,
+          latencyMs,
+          charCount: safeText.length,
+          success: true,
         });
 
         res.setHeader('Content-Type', result.contentType);
@@ -236,25 +292,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.send(result.audio);
       } catch (providerError) {
         console.error(`[TTS:${provider.name}] Provider error:`, providerError);
+        const latencyMs = Date.now() - ttsStart;
+        const errMsg = providerError instanceof Error ? providerError.message : String(providerError);
         debugTraces.recordTTS({
           id: newTraceId("tts"),
           textPreview,
           chars: safeText.length,
           startedAt: ttsStart,
-          durationMs: Date.now() - ttsStart,
+          durationMs: latencyMs,
           cacheHit: false,
           provider: provider.name,
           status: "error",
-          errorMessage: providerError instanceof Error ? providerError.message : String(providerError),
+          errorMessage: errMsg,
+        });
+        phServerCapture(distinctId, "tts_completed", {
+          provider: provider.name,
+          cacheHit: false,
+          latencyMs,
+          charCount: safeText.length,
+          success: false,
+        });
+        phServerCapture(distinctId, "error_occurred", {
+          component: "tts",
+          errorType: providerError instanceof Error ? providerError.name : "ProviderError",
+          message: errMsg,
+          provider: provider.name,
         });
         res.status(502).json({
           error: "Erreur lors de la synthèse vocale",
-          details: providerError instanceof Error ? providerError.message : "Le service vocal a rencontré un problème",
+          details: errMsg,
           provider: provider.name,
         });
       }
     } catch (error) {
       console.error("[TTS] Endpoint error:", error);
+      const topLevelDistinctId = (typeof req.body?.sessionId === "string" && req.body.sessionId) ? req.body.sessionId : "server";
+      phServerCapture(topLevelDistinctId, "error_occurred", {
+        component: "tts",
+        errorType: error instanceof Error ? error.name : "UnknownError",
+        message: error instanceof Error ? error.message : String(error),
+      });
       res.status(500).json({
         error: "Erreur lors du traitement TTS",
         details: error instanceof Error ? error.message : String(error)

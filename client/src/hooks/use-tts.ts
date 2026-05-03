@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { analytics } from "../lib/analytics";
 
 interface UseTTSOptions {
   voiceId?: string | null;
@@ -58,11 +59,9 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSResult {
       const trimmed = text?.trim();
       if (!trimmed) return;
 
-      // Cancel any other TTS playing across the app
       if (activeStopFn && activeStopFn !== stop) {
         activeStopFn();
       }
-      // Cancel current local instance
       cleanup();
 
       const requestId = `tts_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -75,9 +74,14 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSResult {
       const controller = new AbortController();
       abortRef.current = controller;
 
+      const sessionId = analytics.getSessionId();
+
       try {
         const requestVoiceId = voiceIdRef.current;
-        const body: { text: string; voiceId?: string } = { text: trimmed };
+        const body: { text: string; voiceId?: string; sessionId: string } = {
+          text: trimmed,
+          sessionId,
+        };
         if (requestVoiceId) {
           body.voiceId = requestVoiceId;
         }
@@ -97,6 +101,8 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSResult {
           } catch {
             // ignore
           }
+          const provider = response.headers.get("X-TTS-Provider") || "server";
+          analytics.trackError({ component: "tts", errorType: `HTTP_${response.status}`, message: detail, provider });
           throw new Error(detail);
         }
 
@@ -130,6 +136,7 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSResult {
           setIsPlaying(false);
           setIsLoading(false);
           setCurrentId(null);
+          analytics.trackError({ component: "tts", errorType: "AudioPlaybackError", message: "HTML audio element error" });
         };
 
         await audio.play();
@@ -139,6 +146,7 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSResult {
         const message =
           err instanceof Error ? err.message : "Erreur lors de la lecture vocale";
         console.error("[useTTS] play error:", err);
+        analytics.trackError({ component: "tts", errorType: err instanceof Error ? err.name : "UnknownError", message });
         setError(message);
         setIsLoading(false);
         setIsPlaying(false);
