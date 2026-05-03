@@ -1,4 +1,4 @@
-import { eq, asc, desc, sql } from "drizzle-orm";
+import { eq, asc, desc, sql, and, gte, lte, ilike, type SQL } from "drizzle-orm";
 import {
   AnalyticsEvent,
   conversationMessages,
@@ -29,7 +29,13 @@ export interface IStorage {
   createConversationSession(input?: InsertConversationSession): Promise<ConversationSession>;
   updateConversationSessionFirstName(id: string, firstName: string): Promise<void>;
   appendConversationMessage(input: InsertConversationMessage): Promise<ConversationMessage>;
-  listConversationSessions(opts?: { page?: number; pageSize?: number }): Promise<SessionListPage>;
+  listConversationSessions(opts?: {
+    page?: number;
+    pageSize?: number;
+    q?: string;
+    from?: Date;
+    to?: Date;
+  }): Promise<SessionListPage>;
   getConversationSession(id: string): Promise<ConversationSession | null>;
   listSessionMessages(sessionId: string): Promise<ConversationMessage[]>;
 }
@@ -70,10 +76,31 @@ export class DbStorage implements IStorage {
     return row;
   }
 
-  async listConversationSessions(opts: { page?: number; pageSize?: number } = {}): Promise<SessionListPage> {
+  async listConversationSessions(
+    opts: {
+      page?: number;
+      pageSize?: number;
+      q?: string;
+      from?: Date;
+      to?: Date;
+    } = {},
+  ): Promise<SessionListPage> {
     const page = Math.max(1, opts.page ?? 1);
     const pageSize = Math.min(200, Math.max(1, opts.pageSize ?? 50));
     const offset = (page - 1) * pageSize;
+
+    const filters: SQL[] = [];
+    if (opts.q && opts.q.trim()) {
+      filters.push(ilike(conversationSessions.firstName, `%${opts.q.trim()}%`));
+    }
+    if (opts.from) {
+      filters.push(gte(conversationSessions.createdAt, opts.from));
+    }
+    if (opts.to) {
+      filters.push(lte(conversationSessions.createdAt, opts.to));
+    }
+    const whereClause: SQL | undefined =
+      filters.length > 0 ? and(...filters) : undefined;
 
     const rows = await db
       .select({
@@ -87,6 +114,7 @@ export class DbStorage implements IStorage {
         conversationMessages,
         eq(conversationMessages.sessionId, conversationSessions.id),
       )
+      .where(whereClause)
       .groupBy(conversationSessions.id)
       .orderBy(desc(conversationSessions.createdAt))
       .limit(pageSize)
@@ -94,7 +122,8 @@ export class DbStorage implements IStorage {
 
     const [{ count }] = await db
       .select({ count: sql<number>`COUNT(*)::int` })
-      .from(conversationSessions);
+      .from(conversationSessions)
+      .where(whereClause);
 
     return { items: rows as SessionListItem[], total: count, page, pageSize };
   }
