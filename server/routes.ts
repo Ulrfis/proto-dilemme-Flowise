@@ -127,7 +127,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Speech-to-text endpoint — delegates to the active STT provider.
   // Public signature MUST stay identical: multipart/form-data with field "audio",
-  // returns { text, language }.
+  // returns { text, language, provider }.
   app.post("/api/transcribe", upload.single('audio'), async (req, res) => {
     try {
       if (!req.file) {
@@ -1297,6 +1297,97 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (err) {
       console.error("[debug:traces/flowise] error:", err);
       res.status(500).json({ error: "query failed" });
+    }
+  });
+
+  // GET /api/debug/traces/flowise/export?from=&to=&status=&sort=
+  // Returns up to 10 000 rows as a CSV download (no pagination).
+  app.get("/api/debug/traces/flowise/export", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    try {
+      const fromMs = parseInt(String(req.query.from ?? ""), 10);
+      const toMs = parseInt(String(req.query.to ?? ""), 10);
+      const statusFilter = String(req.query.status ?? "");
+      const sortParam = String(req.query.sort ?? "date_desc");
+
+      const filters = [];
+      if (!isNaN(fromMs)) filters.push(gte(flowiseTraces.startedAt, new Date(fromMs)));
+      if (!isNaN(toMs)) filters.push(lte(flowiseTraces.startedAt, new Date(toMs)));
+      if (statusFilter === "ok" || statusFilter === "error" || statusFilter === "aborted") {
+        filters.push(eq(flowiseTraces.status, statusFilter));
+      }
+      const where = filters.length > 0 ? and(...filters) : undefined;
+
+      const orderBy =
+        sortParam === "date_asc"
+          ? asc(flowiseTraces.startedAt)
+          : sortParam === "latency_asc"
+            ? asc(flowiseTraces.totalMs)
+            : sortParam === "latency_desc"
+              ? desc(flowiseTraces.totalMs)
+              : desc(flowiseTraces.startedAt);
+
+      const rows = await db
+        .select({
+          chatId: flowiseTraces.chatId,
+          question: flowiseTraces.question,
+          startedAt: flowiseTraces.startedAt,
+          connectMs: flowiseTraces.connectMs,
+          ttftMs: flowiseTraces.ttftMs,
+          totalMs: flowiseTraces.totalMs,
+          tokens: flowiseTraces.tokens,
+          status: flowiseTraces.status,
+          errorMessage: flowiseTraces.errorMessage,
+          firstName: conversationSessions.firstName,
+        })
+        .from(flowiseTraces)
+        .leftJoin(
+          conversationSessions,
+          sql`${conversationSessions.id}::text = ${flowiseTraces.chatId}`,
+        )
+        .where(where)
+        .orderBy(orderBy)
+        .limit(10_000);
+
+      const escapeCsv = (v: unknown): string => {
+        if (v == null) return "";
+        let s = String(v);
+        // Prevent formula injection: prefix cells starting with =, +, -, @ with a tab
+        if (s.length > 0 && "=+-@".includes(s[0])) {
+          s = `\t${s}`;
+        }
+        if (s.includes(",") || s.includes('"') || s.includes("\n") || s.includes("\t")) {
+          return `"${s.replace(/"/g, '""')}"`;
+        }
+        return s;
+      };
+
+      const header = "chatId,firstName,question,startedAt,status,totalMs,connectMs,ttftMs,tokens,errorMessage";
+      const csvLines = rows.map((r) =>
+        [
+          escapeCsv(r.chatId),
+          escapeCsv(r.firstName ?? ""),
+          escapeCsv(r.question),
+          escapeCsv(r.startedAt.toISOString()),
+          escapeCsv(r.status),
+          escapeCsv(r.totalMs),
+          escapeCsv(r.connectMs),
+          escapeCsv(r.ttftMs ?? ""),
+          escapeCsv(r.tokens ?? ""),
+          escapeCsv(r.errorMessage ?? ""),
+        ].join(","),
+      );
+
+      const csv = [header, ...csvLines].join("\n");
+      const filename = `flowise-traces-${new Date().toISOString().slice(0, 10)}.csv`;
+
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader("Cache-Control", "no-store");
+      res.send(csv);
+    } catch (err) {
+      console.error("[debug:traces/flowise/export] error:", err);
+      res.status(500).json({ error: "export failed" });
     }
   });
 

@@ -13,6 +13,7 @@ import {
   Trash2,
   ChevronDown,
   Search,
+  Download,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
@@ -453,15 +454,31 @@ function Paginator({
 export default function DebugPage() {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [now, setNow] = useState(Date.now());
-  const [quickRange, setQuickRange] = useState<QuickRange>("today");
-  const [customFrom, setCustomFrom] = useState("");
-  const [customTo, setCustomTo] = useState("");
+  const [quickRange, setQuickRange] = useState<QuickRange>(() => {
+    const VALID: QuickRange[] = ["1h", "today", "7d", "custom"];
+    const stored = localStorage.getItem("debug_quickRange") as QuickRange | null;
+    return stored && VALID.includes(stored) ? stored : "today";
+  });
+  const [customFrom, setCustomFrom] = useState(
+    () => localStorage.getItem("debug_customFrom") ?? "",
+  );
+  const [customTo, setCustomTo] = useState(
+    () => localStorage.getItem("debug_customTo") ?? "",
+  );
   const [flowisePage, setFlowisePage] = useState(0);
   const [ttsPage, setTtsPage] = useState(0);
   const [adminToken, setAdminToken] = useState(() => sessionStorage.getItem("debug_admin_token") ?? "");
   const [tokenInput, setTokenInput] = useState("");
-  const [flowiseStatus, setFlowiseStatus] = useState<FlowiseStatus>("all");
-  const [flowiseSort, setFlowiseSort] = useState<FlowiseSort>("date_desc");
+  const [flowiseStatus, setFlowiseStatus] = useState<FlowiseStatus>(() => {
+    const VALID: FlowiseStatus[] = ["all", "ok", "error", "aborted"];
+    const stored = localStorage.getItem("debug_flowiseStatus") as FlowiseStatus | null;
+    return stored && VALID.includes(stored) ? stored : "all";
+  });
+  const [flowiseSort, setFlowiseSort] = useState<FlowiseSort>(() => {
+    const VALID: FlowiseSort[] = ["date_desc", "date_asc", "latency_asc", "latency_desc"];
+    const stored = localStorage.getItem("debug_flowiseSort") as FlowiseSort | null;
+    return stored && VALID.includes(stored) ? stored : "date_desc";
+  });
   const [flowiseSearch, setFlowiseSearch] = useState("");
 
   const handleTokenSubmit = (e: React.FormEvent) => {
@@ -974,7 +991,7 @@ export default function DebugPage() {
               {QUICK_RANGES.map((r) => (
                 <button
                   key={r.value}
-                  onClick={() => setQuickRange(r.value)}
+                  onClick={() => { setQuickRange(r.value); localStorage.setItem("debug_quickRange", r.value); }}
                   className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
                     quickRange === r.value
                       ? "bg-violet-600 text-white"
@@ -994,7 +1011,7 @@ export default function DebugPage() {
                 <input
                   type="datetime-local"
                   value={customFrom}
-                  onChange={(e) => setCustomFrom(e.target.value)}
+                  onChange={(e) => { setCustomFrom(e.target.value); localStorage.setItem("debug_customFrom", e.target.value); }}
                   className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-violet-600"
                 />
               </div>
@@ -1003,7 +1020,7 @@ export default function DebugPage() {
                 <input
                   type="datetime-local"
                   value={customTo}
-                  onChange={(e) => setCustomTo(e.target.value)}
+                  onChange={(e) => { setCustomTo(e.target.value); localStorage.setItem("debug_customTo", e.target.value); }}
                   className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-violet-600"
                 />
               </div>
@@ -1124,7 +1141,7 @@ export default function DebugPage() {
 
         {/* Historical Flowise table */}
         <section>
-          <div className="flex items-baseline justify-between mb-3">
+          <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
               Latence Flowise — historique filtré
               {histFlowise.data && (
@@ -1133,11 +1150,51 @@ export default function DebugPage() {
                 </span>
               )}
             </h3>
+            {adminToken && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700"
+                onClick={() => {
+                  const params = new URLSearchParams({
+                    from: String(range.from),
+                    to: String(range.to),
+                    sort: flowiseSort,
+                  });
+                  if (flowiseStatus !== "all") params.set("status", flowiseStatus);
+                  const url = `/api/debug/traces/flowise/export?${params}`;
+                  const a = document.createElement("a");
+                  a.href = url;
+                  const headers = new Headers({ Authorization: `Bearer ${adminToken}` });
+                  fetch(url, { headers })
+                    .then((res) => {
+                      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                      const disposition = res.headers.get("Content-Disposition") ?? "";
+                      const match = disposition.match(/filename="([^"]+)"/);
+                      const filename = match ? match[1] : "flowise-traces.csv";
+                      return res.blob().then((blob) => ({ blob, filename }));
+                    })
+                    .then(({ blob, filename }) => {
+                      const objectUrl = URL.createObjectURL(blob);
+                      a.href = objectUrl;
+                      a.download = filename;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      URL.revokeObjectURL(objectUrl);
+                    })
+                    .catch((err) => console.error("[export csv]", err));
+                }}
+              >
+                <Download className="w-3.5 h-3.5 mr-1.5" />
+                Export CSV
+              </Button>
+            )}
           </div>
 
           {/* Filter bar */}
           <div className="flex flex-wrap items-center gap-2 mb-3">
-            <Select value={flowiseStatus} onValueChange={(v) => setFlowiseStatus(v as FlowiseStatus)}>
+            <Select value={flowiseStatus} onValueChange={(v) => { setFlowiseStatus(v as FlowiseStatus); localStorage.setItem("debug_flowiseStatus", v); }}>
               <SelectTrigger className="h-8 text-xs bg-slate-800 border-slate-700 text-slate-200 w-32">
                 <SelectValue placeholder="Statut" />
               </SelectTrigger>
@@ -1149,7 +1206,7 @@ export default function DebugPage() {
               </SelectContent>
             </Select>
 
-            <Select value={flowiseSort} onValueChange={(v) => setFlowiseSort(v as FlowiseSort)}>
+            <Select value={flowiseSort} onValueChange={(v) => { setFlowiseSort(v as FlowiseSort); localStorage.setItem("debug_flowiseSort", v); }}>
               <SelectTrigger className="h-8 text-xs bg-slate-800 border-slate-700 text-slate-200 w-44">
                 <SelectValue placeholder="Tri" />
               </SelectTrigger>

@@ -26,12 +26,21 @@ const getAvatarGrid = (gender: 'male' | 'female'): string[] => {
 };
 
 const parseGridUrl = (url: string): { gender: 'male' | 'female'; index: number } | null => {
-  const match = url.match(/api\.dicebear\.com\/9\.x\/(adventurer|lorelei)\/svg\?seed=(\d+)$/);
-  if (!match) return null;
-  return {
-    gender: match[1] === 'adventurer' ? 'male' : 'female',
-    index: parseInt(match[2], 10) - 1,
-  };
+  const dicebear = url.match(/api\.dicebear\.com\/9\.x\/(adventurer|lorelei)\/svg\?seed=(\d+)$/);
+  if (dicebear) {
+    return {
+      gender: dicebear[1] === 'adventurer' ? 'male' : 'female',
+      index: parseInt(dicebear[2], 10) - 1,
+    };
+  }
+  const legacy = url.match(/avatar\.iran\.liara\.run\/public\/(boy|girl)\/(\d+)$/);
+  if (legacy) {
+    return {
+      gender: legacy[1] === 'boy' ? 'male' : 'female',
+      index: parseInt(legacy[2], 10) - 1,
+    };
+  }
+  return null;
 };
 
 interface AvatarSelectorProps {
