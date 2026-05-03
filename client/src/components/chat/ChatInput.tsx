@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Send, Mic, MicOff, Loader2 } from "lucide-react";
+import { Send, Mic, Loader2 } from "lucide-react";
 
 interface ChatInputProps {
   onSendMessage: (message: string) => void;
@@ -353,7 +353,7 @@ export function ChatInput({
               {isTranscribing ? (
                 <Loader2 className="w-3 h-3 animate-spin" />
               ) : isRecording ? (
-                <MicOff className="w-3 h-3" />
+                <Send className="w-3 h-3" />
               ) : (
                 <Mic className="w-3 h-3" />
               )}
