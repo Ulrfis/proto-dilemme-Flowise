@@ -1,10 +1,16 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import { Readability } from "@mozilla/readability";
+import { JSDOM } from "jsdom";
 import {
   analyticsEventSchema,
   insertConversationSessionSchema,
   insertConversationMessageSchema,
+  flowiseTraces,
+  ttsTraces,
 } from "@shared/schema";
+import { db } from "./db";
+import { and, gte, lte, desc, sql } from "drizzle-orm";
 import { storage } from "./storage";
 import multer from "multer";
 import fs from "fs/promises";
@@ -26,7 +32,7 @@ import { OpenAISTTProvider } from "./providers/stt/openai";
 import { DeepgramSTTProvider } from "./providers/stt/deepgram";
 import { flowiseFetch } from "./flowise-fetch";
 import { labelForFlowiseEvent, type ProgressLabel } from "./flowise-progress-labels";
-import { debugTraces, newTraceId } from "./debug-traces";
+import { debugTraces, newTraceId, startRetentionScheduler, getRetentionInfo } from "./debug-traces";
 import { buildHealthResponse } from "./debug-health";
 
 // Allowed domains for the content proxy (prevents SSRF to internal networks)
@@ -532,6 +538,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Rotating User-Agent pool for anti-bot evasion
+  const PROXY_USER_AGENTS = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  ];
+
+  function buildProxyHeaders(): Record<string, string> {
+    const ua = PROXY_USER_AGENTS[Math.floor(Math.random() * PROXY_USER_AGENTS.length)];
+    return {
+      'User-Agent': ua,
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+      'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Referer': 'https://www.google.com/',
+      'Cookie': '',
+      'DNT': '1',
+      'Connection': 'keep-alive',
+      'Upgrade-Insecure-Requests': '1',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'cross-site',
+      'Cache-Control': 'max-age=0',
+    };
+  }
+
+  async function fetchWithRetry(url: string, maxAttempts = 3): Promise<Response> {
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      if (attempt > 0) {
+        const delay = Math.pow(2, attempt - 1) * 1000; // 1s, 2s
+        await new Promise(r => setTimeout(r, delay));
+      }
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 20000);
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: buildProxyHeaders(),
+          redirect: 'follow',
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        console.log(`[Proxy] Attempt ${attempt + 1}: HTTP ${response.status} for ${url}`);
+        if (response.status === 429 || response.status === 503) {
+          lastError = new Error(`HTTP ${response.status}: ${response.statusText}`);
+          continue; // retry
+        }
+        return response;
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        console.warn(`[Proxy] Attempt ${attempt + 1} failed: ${lastError.message}`);
+      }
+    }
+    throw lastError ?? new Error('All retry attempts failed');
+  }
+
   // Web content proxy endpoint to bypass CORS and X-Frame-Options
   app.get("/api/proxy", async (req, res) => {
     try {
@@ -571,26 +636,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log(`[Proxy] Fetching: ${url}`);
 
-      // Enhanced headers to maximize compatibility
-      const headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-        'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'DNT': '1',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Cache-Control': 'max-age=0'
-      };
-
-      const response = await fetch(url, {
-        method: 'GET',
-        headers,
-        redirect: 'follow'
-      });
+      const response = await fetchWithRetry(url);
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -640,6 +686,90 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ 
         error: "Failed to proxy content",
         details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Reader mode endpoint: extracts clean article content using Readability
+  app.get("/api/reader", async (req, res) => {
+    try {
+      const { url } = req.query;
+
+      if (!url || typeof url !== 'string') {
+        return res.status(400).json({ error: "URL parameter is required" });
+      }
+
+      let parsedUrl: URL;
+      try {
+        parsedUrl = new URL(url);
+      } catch {
+        return res.status(400).json({ error: "Invalid URL format" });
+      }
+
+      if (parsedUrl.protocol !== 'https:') {
+        return res.status(400).json({ error: "Only HTTPS URLs are allowed" });
+      }
+
+      if (isPrivateIP(parsedUrl.hostname)) {
+        return res.status(403).json({ error: "Access to internal addresses is not allowed" });
+      }
+
+      console.log(`[Reader] Fetching: ${url}`);
+
+      const response = await fetchWithRetry(url);
+
+      if (!response.ok) {
+        return res.status(response.status).json({
+          error: `Upstream returned ${response.status}`,
+          details: response.statusText,
+        });
+      }
+
+      const html = await response.text();
+
+      // Parse with JSDOM and extract with Readability
+      const dom = new JSDOM(html, { url });
+      const reader = new Readability(dom.window.document);
+      const article = reader.parse();
+
+      if (!article || !article.content) {
+        return res.status(422).json({ error: "Could not extract article content" });
+      }
+
+      // Rewrite relative image URLs to absolute (use full page URL as base, not just origin)
+      const withAbsoluteImages = article.content.replace(
+        /(<img[^>]+src=["'])(?!https?:\/\/)([^"']+)(["'])/gi,
+        (match, prefix, src, suffix) => {
+          try {
+            const abs = new URL(src, url).href;
+            return `${prefix}${abs}${suffix}`;
+          } catch {
+            return match;
+          }
+        }
+      );
+
+      // Strip dangerous attributes server-side: event handlers and javascript: URLs.
+      // Readability already removes <script> tags; this cleans up inline vectors.
+      const content = withAbsoluteImages
+        // Remove all event handler attributes (onerror="…", onclick="…", etc.)
+        .replace(/\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*)/gi, '')
+        // Replace javascript: scheme in href/src/action with a safe placeholder
+        .replace(/((?:href|src|action)\s*=\s*["'])javascript:[^"']*(?=["'])/gi, '$1#');
+
+      res.json({
+        title: article.title,
+        content,
+        byline: article.byline,
+        siteName: article.siteName || parsedUrl.hostname,
+        excerpt: article.excerpt,
+      });
+
+    } catch (error) {
+      console.error("[Reader] Error:", error);
+      res.status(500).json({
+        error: "Failed to extract article",
+        details: error instanceof Error ? error.message : String(error),
       });
     }
   });
@@ -892,11 +1022,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Start the trace retention scheduler (purge on boot + daily)
+  startRetentionScheduler();
+
   // ────────────────────────────────────────────────────────────────────
   // Debug endpoints — surface internal state for the /debug panel.
   // No auth: read-only, no secrets exposed, only aggregated metrics.
   // ────────────────────────────────────────────────────────────────────
   const serverStartedAt = Date.now();
+
+  // GET /api/debug/retention — row counts + last purge info (no auth required)
+  app.get("/api/debug/retention", async (_req, res) => {
+    try {
+      const [flowiseCount, ttsCount] = await Promise.all([
+        db.select({ count: sql<number>`COUNT(*)::int` }).from(flowiseTraces),
+        db.select({ count: sql<number>`COUNT(*)::int` }).from(ttsTraces),
+      ]);
+      const info = getRetentionInfo();
+      res.setHeader("Cache-Control", "no-store");
+      res.json({
+        retentionDays: info.retentionDays,
+        flowiseCount: Number(flowiseCount[0]?.count ?? 0),
+        ttsCount: Number(ttsCount[0]?.count ?? 0),
+        lastPurge: info.lastPurge
+          ? {
+              ranAt: info.lastPurge.ranAt,
+              flowiseDeleted: info.lastPurge.flowiseDeleted,
+              ttsDeleted: info.lastPurge.ttsDeleted,
+            }
+          : null,
+      });
+    } catch (err) {
+      console.error("[debug:retention] error:", err);
+      res.status(500).json({ error: "retention query failed" });
+    }
+  });
 
   app.get("/api/debug/health", async (_req, res) => {
     try {
@@ -920,6 +1080,174 @@ export async function registerRoutes(app: Express): Promise<Server> {
       flowise: snap.flowise,
       tts: snap.tts,
     });
+  });
+
+  // GET /api/debug/traces/flowise?from=&to=&limit=&offset=
+  app.get("/api/debug/traces/flowise", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    try {
+      const fromMs = parseInt(String(req.query.from ?? ""), 10);
+      const toMs = parseInt(String(req.query.to ?? ""), 10);
+      const limit = Math.min(1000, Math.max(1, parseInt(String(req.query.limit ?? "500"), 10) || 500));
+      const offset = Math.max(0, parseInt(String(req.query.offset ?? "0"), 10) || 0);
+      const filters = [];
+      if (!isNaN(fromMs)) filters.push(gte(flowiseTraces.startedAt, new Date(fromMs)));
+      if (!isNaN(toMs)) filters.push(lte(flowiseTraces.startedAt, new Date(toMs)));
+      const where = filters.length > 0 ? and(...filters) : undefined;
+      const [rows, [{ total }]] = await Promise.all([
+        db
+          .select()
+          .from(flowiseTraces)
+          .where(where)
+          .orderBy(desc(flowiseTraces.startedAt))
+          .limit(limit)
+          .offset(offset),
+        db
+          .select({ total: sql<number>`COUNT(*)::int` })
+          .from(flowiseTraces)
+          .where(where),
+      ]);
+      const items = rows.map((r) => ({
+        id: r.id,
+        chatId: r.chatId,
+        question: r.question,
+        startedAt: r.startedAt.getTime(),
+        finishedAt: r.finishedAt.getTime(),
+        connectMs: r.connectMs,
+        ttftMs: r.ttftMs,
+        totalMs: r.totalMs,
+        tokens: r.tokens,
+        chars: r.chars,
+        nodes: r.nodes,
+        tools: r.tools,
+        unknownEvents: r.unknownEvents,
+        status: r.status,
+        errorMessage: r.errorMessage ?? undefined,
+      }));
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ items, total, limit, offset });
+    } catch (err) {
+      console.error("[debug:traces/flowise] error:", err);
+      res.status(500).json({ error: "query failed" });
+    }
+  });
+
+  // GET /api/debug/traces/tts?from=&to=&limit=&offset=
+  app.get("/api/debug/traces/tts", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    try {
+      const fromMs = parseInt(String(req.query.from ?? ""), 10);
+      const toMs = parseInt(String(req.query.to ?? ""), 10);
+      const limit = Math.min(1000, Math.max(1, parseInt(String(req.query.limit ?? "500"), 10) || 500));
+      const offset = Math.max(0, parseInt(String(req.query.offset ?? "0"), 10) || 0);
+      const filters = [];
+      if (!isNaN(fromMs)) filters.push(gte(ttsTraces.startedAt, new Date(fromMs)));
+      if (!isNaN(toMs)) filters.push(lte(ttsTraces.startedAt, new Date(toMs)));
+      const where = filters.length > 0 ? and(...filters) : undefined;
+      const [rows, [{ total }]] = await Promise.all([
+        db
+          .select()
+          .from(ttsTraces)
+          .where(where)
+          .orderBy(desc(ttsTraces.startedAt))
+          .limit(limit)
+          .offset(offset),
+        db
+          .select({ total: sql<number>`COUNT(*)::int` })
+          .from(ttsTraces)
+          .where(where),
+      ]);
+      const items = rows.map((r) => ({
+        id: r.id,
+        textPreview: r.textPreview,
+        chars: r.chars,
+        startedAt: r.startedAt.getTime(),
+        durationMs: r.durationMs,
+        cacheHit: r.cacheHit,
+        provider: r.provider,
+        status: r.status,
+        errorMessage: r.errorMessage ?? undefined,
+      }));
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ items, total, limit, offset });
+    } catch (err) {
+      console.error("[debug:traces/tts] error:", err);
+      res.status(500).json({ error: "query failed" });
+    }
+  });
+
+  // GET /api/debug/traces/stats?from=&to=&granularity=hour|day
+  app.get("/api/debug/traces/stats", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    interface FlowiseStatRow {
+      bucket: Date;
+      median_total_ms: string | number | null;
+      median_ttft_ms: string | number | null;
+      count: number;
+      error_count: number;
+    }
+    interface TtsStatRow {
+      bucket: Date;
+      count: number;
+      error_count: number;
+    }
+    try {
+      const fromMs = parseInt(String(req.query.from ?? ""), 10);
+      const toMs = parseInt(String(req.query.to ?? ""), 10);
+      const granularity = req.query.granularity === "day" ? "day" : "hour";
+
+      const fromDate = !isNaN(fromMs) ? new Date(fromMs) : new Date(Date.now() - 86_400_000);
+      const toDate = !isNaN(toMs) ? new Date(toMs) : new Date();
+
+      const [flowiseResult, ttsResult] = await Promise.all([
+        db.execute(sql`
+          SELECT
+            date_trunc(${granularity}, started_at) AS bucket,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY total_ms) AS median_total_ms,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY ttft_ms) AS median_ttft_ms,
+            COUNT(*)::int AS count,
+            COUNT(*) FILTER (WHERE status = 'error')::int AS error_count
+          FROM flowise_traces
+          WHERE started_at >= ${fromDate} AND started_at <= ${toDate}
+          GROUP BY 1
+          ORDER BY 1
+        `),
+        db.execute(sql`
+          SELECT
+            date_trunc(${granularity}, started_at) AS bucket,
+            COUNT(*)::int AS count,
+            COUNT(*) FILTER (WHERE status = 'error')::int AS error_count
+          FROM tts_traces
+          WHERE started_at >= ${fromDate} AND started_at <= ${toDate}
+          GROUP BY 1
+          ORDER BY 1
+        `),
+      ]);
+
+      const flowiseRows = flowiseResult.rows as unknown as FlowiseStatRow[];
+      const ttsRows = ttsResult.rows as unknown as TtsStatRow[];
+
+      res.setHeader("Cache-Control", "no-store");
+      res.json({
+        granularity,
+        flowise: flowiseRows.map((r) => ({
+          bucket: r.bucket,
+          medianTotalMs: Number(r.median_total_ms ?? 0),
+          medianTtftMs: Number(r.median_ttft_ms ?? 0),
+          count: Number(r.count),
+          errorCount: Number(r.error_count),
+        })),
+        tts: ttsRows.map((r) => ({
+          bucket: r.bucket,
+          count: Number(r.count),
+          errorCount: Number(r.error_count),
+          errorRate: Number(r.count) > 0 ? Number(r.error_count) / Number(r.count) : 0,
+        })),
+      });
+    } catch (err) {
+      console.error("[debug:traces/stats] error:", err);
+      res.status(500).json({ error: "stats query failed" });
+    }
   });
 
   // Flowise proxy endpoint for secure API calls

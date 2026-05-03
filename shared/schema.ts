@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { pgTable, uuid, text, timestamp, index } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, index, integer, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 
 // ─── Analytics event (transitoire, envoyée au backend pour log) ─────────────
@@ -78,3 +78,51 @@ export type InsertConversationSession = z.infer<typeof insertConversationSession
 export type InsertConversationMessage = z.infer<typeof insertConversationMessageSchema>;
 export type ConversationSession = typeof conversationSessions.$inferSelect;
 export type ConversationMessage = typeof conversationMessages.$inferSelect;
+
+// ─── Debug traces Postgres ──────────────────────────────────────────────────
+// Persistance des traces Flowise et TTS pour historique et graphiques.
+
+export const flowiseTraces = pgTable(
+  "flowise_traces",
+  {
+    id: text("id").primaryKey(),
+    chatId: text("chat_id").notNull(),
+    question: text("question").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }).notNull(),
+    connectMs: integer("connect_ms").notNull(),
+    ttftMs: integer("ttft_ms").notNull(),
+    totalMs: integer("total_ms").notNull(),
+    tokens: integer("tokens").notNull(),
+    chars: integer("chars").notNull(),
+    nodes: integer("nodes").notNull(),
+    tools: integer("tools").notNull(),
+    unknownEvents: integer("unknown_events").notNull(),
+    status: text("status", { enum: ["ok", "error", "aborted"] }).notNull(),
+    errorMessage: text("error_message"),
+  },
+  (t) => ({
+    byStartedAt: index("flowise_traces_started_at_idx").on(t.startedAt),
+  }),
+);
+
+export const ttsTraces = pgTable(
+  "tts_traces",
+  {
+    id: text("id").primaryKey(),
+    textPreview: text("text_preview").notNull(),
+    chars: integer("chars").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    durationMs: integer("duration_ms").notNull(),
+    cacheHit: boolean("cache_hit").notNull(),
+    provider: text("provider").notNull(),
+    status: text("status", { enum: ["ok", "error"] }).notNull(),
+    errorMessage: text("error_message"),
+  },
+  (t) => ({
+    byStartedAt: index("tts_traces_started_at_idx").on(t.startedAt),
+  }),
+);
+
+export type FlowiseTrace = typeof flowiseTraces.$inferSelect;
+export type TtsTrace = typeof ttsTraces.$inferSelect;
