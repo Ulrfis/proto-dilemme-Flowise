@@ -2,6 +2,41 @@
 
 Tous les changements notables de ce projet seront documentés dans ce fichier.
 
+## [2026-05-03] — Avatars, debug persistant, affichage articles, TTS liens, README
+
+### 🗣️ TTS : Peter lit l'intégralité de la réponse — liens silencieux (fix bug)
+- **Bug 1 — splitter de phrases coupait les phrases contenant des URLs** : `sentence-split.ts` ne protégeait pas les liens markdown `[label](url)`, les URLs nues `https://…` ni les domaines nus (`lemonde.fr`, etc.) avant d'exécuter la regex de découpage. Les points à l'intérieur d'un domaine (ex. `lemonde.fr`) faisaient échouer le match en position 0, entraînant un saut silencieux qui **abandonnait le début de la phrase**. Fix : ajout d'une passe de protection qui remplace ces tokens par des placeholders opaques avant le split, puis les restaure après.
+- **Bug 2 — règle "Sources :" supprimait des phrases entières** : la règle 7 de `plainifyForTTS` dans `tts-text.ts` supprimait tout le contenu d'une phrase commençant par `Sources? :`. Peter ne lisait donc plus rien après une citation de sources. Fix : règle supprimée — les liens/URLs/domaines sont déjà strippés silencieusement par les règles 3-5, le texte environnant est préservé et lu normalement.
+
+### 👤 Avatars — grille de vignettes, migration URLs, upload photo
+- **Grille de vignettes** dans la modale avatar : helper `getAvatarGrid(gender)` qui génère 18 URLs numérotées (`avatar.iran.liara.run/public/boy|girl/{1..18}`) par genre, grille scrollable 6 colonnes, sélection mise en évidence avec `ring-2 ring-offset-2 ring-primary`. Changement de genre préserve l'index sélectionné (ou sélectionne index 0 par défaut).
+- **Migration des URLs legacy** : `migrateAvatarUrl()` dans `use-user-avatar.ts` convertit les anciennes URLs username-based (`/public/boy?username=…`) en URL de grille numérotée déterministe (hash stable du prénom). Idempotent sur les URLs déjà au nouveau format.
+- **Upload de photo** : bouton "Télécharger une photo" dans la modale ; fichier accepté PNG/JPEG/WebP/GIF ≤ 2 Mo → `FileReader` → data URL stockée dans `localStorage`. Validation type + taille avec toast d'erreur. La grille se désélectionne quand une photo custom est active.
+
+### 🔍 Console debug — persistance, rétention, filtres/tri/groupement, accès admin
+- **Persistance des traces en base** (`flowise_traces` + `tts_traces` dans Postgres via Drizzle) : `server/debug-traces.ts` insère en fire-and-forget à côté du buffer mémoire existant. 3 nouveaux endpoints GET `/api/debug/traces/flowise`, `/api/debug/traces/tts` (paginés, `from/to/limit/offset`) et `/api/debug/traces/stats` (médiane via `percentile_cont`), tous protégés Bearer `ADMIN_PASSWORD`.
+- **Rétention automatique** : `startRetentionScheduler()` purge au boot puis toutes les 24h les traces plus vieilles que `DEBUG_TRACES_RETENTION_DAYS` (défaut 30 j). GET `/api/debug/retention` (public, no-store) retourne le comptage et la date de dernière purge.
+- **Section HISTORY** dans `/debug` : saisie mot de passe inline (token en `sessionStorage`), sélecteur de plage de dates, deux Recharts `LineChart` (latence Flowise + TTS dans le temps), tables paginées 50 traces/page, refresh toutes les 15 s.
+- **Filtres + tri + groupement par session** : filtre `status` (ok/error/aborted), tri `sort` (date_desc, date_asc, latency_asc, latency_desc), recherche texte libre (prénom + question). Les traces sont groupées par session dans un `SessionGroup` accordion affichant prénom, nombre de tours, médiane de latence (color-codée) et badge erreur. LEFT JOIN `conversation_sessions` sur le chatId pour enrichir les traces du prénom.
+- **Accès admin renforcé** sur tous les endpoints historiques ; la section LIVE (buffer mémoire, refresh 3 s) ne nécessite pas de mot de passe.
+
+### 🌐 Affichage articles — cascade proxy → lecteur → archive → carte d'erreur
+- **Cascade complète** dans `WebView.tsx` : proxy probe (15 s timeout) → mode Lecteur (`/api/reader` Readability + JSDOM, 12 s timeout) → archive Wayback Machine (15 s timeout) → carte d'erreur finale.
+- **Endpoint `/api/reader`** : fetch avec rotation de User-Agent + retry exponentiel (3 essais, 1s/2s), parse JSDOM + Readability, réécrit les URLs d'images relatives en absolues, strip les attributs event-handler et `javascript:` côté serveur. Retourne `{title, content, byline, siteName, excerpt}`.
+- **Sécurité** : SSRF bloqué (HTTPS-only + `isPrivateIP`), sanitisation client `DOMPurify` en défense en profondeur.
+- **Barre de progression** pendant le chargement avec badge de mode actif (🌐 Proxy / 📖 Lecteur / 🗄️ Archive).
+- **Carte d'erreur informative** (fond gris neutre au lieu de l'alerte ambrée) : favicon du site (Google S2 favicons), titre + extrait de l'article (issus de la tentative `/api/reader` préservée via `readerFallback` même après cascade vers archive), bouton teal "Lire l'article". Si le lecteur a échoué, tentative de récupération metadata en background parallèle à l'archive.
+- **Cache LRU reader** côté serveur : 50 entrées, TTL 5 min, contournement via `?nocache=1`.
+- **Sélecteur de mode de lecture** dans la barre URL : Auto / 🌐 Proxy / 📖 Lecteur / 🗄️ Archive, persisté dans `localStorage:webview_preferred_mode`. Les modes forcés ne cascadent pas en cas d'échec — vont directement à la carte d'erreur.
+
+### 🎙️ Bouton d'enregistrement — icône Send pendant la capture
+- Icône `MicOff` (microphone barré) remplacée par `Send` lorsque `isRecording === true`. Sémantique immédiate : cliquer envoie l'audio enregistré, pas "désactiver le micro".
+
+### 📄 README GitHub
+- Nouveau `README.md` complet : vue d'ensemble, features, diagramme d'architecture ASCII, tech stack, getting started, toutes les variables d'environnement par catégorie, structure de projet annotée, décisions de conception, console admin, events PostHog, pipeline TTS/STT, commandes de test, index de la doc.
+
+---
+
 ## [2026-05-03] — Filtres admin, funnel PostHog, test automatisé identité
 
 ### 🔍 Filtres + export CSV/PDF dans la console admin (tâche #6) — livré

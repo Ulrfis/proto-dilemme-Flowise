@@ -3,7 +3,7 @@
 > **Status**: 🟡 In Progress  
 > **Creator**: Ulrich Fischer  
 > **Started**: 2025-11-06  
-> **Last Updated**: 2026-05-03 (Filtres + export CSV/PDF console admin livrés ; tests parcours identité + roadmap funnel PostHog)  
+> **Last Updated**: 2026-05-03 (TTS liens fix ; avatars grille/upload ; debug persistant + filtres ; cascade articles ; carte d'erreur ; README GitHub)
 
 ---
 
@@ -132,6 +132,87 @@ How Peter helps: Conversational guide who asks questions, shares surprising fact
 **Why it matters** : Une liste brute de 30 sessions sans filtre ni export est une console de développeur, pas un outil enseignant. Ulrich peut maintenant cibler une période ou un élève en 2 clics, et sortir une conversation au format tableur ou imprimable sans dépendre d'aucune brique externe.
 
 **Files** : `client/src/pages/admin-sessions.tsx`, `client/src/pages/admin-session-detail.tsx`, `server/routes.ts`, `server/storage.ts`.
+
+---
+
+### [2026-05-03] — TTS : Peter lit l'intégralité de la réponse, liens silencieux 🔷
+
+**Intent** : Les élèves signalaient que Peter s'arrêtait de parler dès qu'il citait une source. Le bug était silencieux — aucun message d'erreur, Peter finissait juste par un silence au milieu de sa réponse. Objectif : Peter doit toujours lire TOUT son texte ; les liens, URLs et noms de domaine doivent être strippés discrètement, jamais lus à voix haute.
+
+**Causes racines** :
+1. `sentence-split.ts` ne protégeait pas les tokens URL avant d'exécuter la regex de découpage. Les points dans `lemonde.fr` faisaient échouer le match au début de la phrase → le splitter avançait jusqu'au prochain point → le début de la phrase était **silencieusement abandonné**. Pour une phrase comme `"Voici un article : [lien](https://lemonde.fr/article). C'est important."`, Peter ne disait jamais `"Voici un article"`.
+2. `plainifyForTTS` (règle 7) supprimait l'intégralité d'une phrase commençant par `Sources?:` — Peter ne lisait rien après une citation de sources.
+
+**What shipped** :
+- `client/src/lib/sentence-split.ts` : passe de protection avant le split — les liens markdown `[label](url)`, URLs nues `https://…` et domaines nus sont remplacés par des placeholders opaques `\u0001N\u0001`, puis restaurés après découpage. Même mécanisme que les abréviations (M., etc.) déjà en place.
+- `client/src/lib/tts-text.ts` : règle "Sources :" supprimée — les liens/URLs/domaines sont déjà strippés par les règles 3-5, le texte environnant est lu normalement.
+
+**Résultat vérifié** : `"Voici un article : [lien](url). C'est important."` → Peter dit `"Voici un article."` puis `"C'est important."` — aucune coupure, aucune URL prononcée.
+
+**Files** : `client/src/lib/sentence-split.ts`, `client/src/lib/tts-text.ts`.
+
+---
+
+### [2026-05-03] — Avatars : grille de vignettes + migration + upload photo 🔷
+
+**Intent** : La modale de personnalisation d'avatar affichait un aperçu flottant mais aucune grille de choix — l'élève ne voyait qu'un avatar aléatoire et ne pouvait pas choisir. Les anciens avatars stockés (URLs username-based) ne se pré-sélectionnaient pas à la réouverture. Et certains élèves veulent utiliser leur propre photo.
+
+**What shipped** :
+- **Grille de vignettes** (`AvatarSelector.tsx`) : `getAvatarGrid(gender)` génère 18 URLs numérotées par genre (`avatar.iran.liara.run/public/boy|girl/{1..18}`), affichées dans une grille scrollable 6 colonnes. La vignette active a un `ring-2 ring-offset-2 ring-primary`. Changer de genre conserve l'index ou sélectionne index 0 par défaut.
+- **Migration des URLs legacy** (`use-user-avatar.ts`) : `migrateAvatarUrl()` convertit les URLs `/public/boy?username=…` en URL de grille numérotée via un hash stable du prénom — l'élève garde le même avatar visuellement après migration. Idempotent.
+- **Upload de photo** : bouton "Télécharger une photo" dans la modale, input `accept="image/*"` limité à 2 Mo, `FileReader` → data URL en `localStorage`. Validation type/taille avec toast. La grille se désélectionne quand une photo custom est active. Réouverture de la modale détecte les data URLs et conserve la sélection.
+
+**Why it matters** : La personnalisation de l'avatar est un petit geste d'appropriation pour l'élève — il se sent "chez lui" dans la conversation. La photo propre est particulièrement utile pour les présentations en classe.
+
+**Files** : `client/src/components/avatar/AvatarSelector.tsx`, `client/src/hooks/use-user-avatar.ts`.
+
+---
+
+### [2026-05-03] — Console debug : traces persistantes, rétention, filtres/tri/groupement 🔷
+
+**Intent** : La console `/debug` existante ne montrait que le buffer mémoire — perdu à chaque redémarrage. Ulrich ne pouvait pas comparer les latences Flowise d'une journée à l'autre ni analyser les sessions problématiques après coup. Objectif : traces persistantes en base, visualisation historique avec filtres, et accès sécurisé.
+
+**What shipped** :
+- **Deux nouvelles tables Postgres** : `flowise_traces` et `tts_traces` (Drizzle, index sur `started_at`). `server/debug-traces.ts` insère en fire-and-forget à côté du buffer mémoire — zéro impact sur la latence des appels.
+- **Endpoints historiques** (tous Bearer `ADMIN_PASSWORD`) : `GET /api/debug/traces/flowise` (paginé, `from/to/limit/offset`, filtre `status`, tri `sort`), `GET /api/debug/traces/tts` (même structure), `GET /api/debug/traces/stats` (médiane `percentile_cont` par tranche horaire ou journalière).
+- **Rétention automatique** : `startRetentionScheduler()` purge au boot puis toutes les 24h selon `DEBUG_TRACES_RETENTION_DAYS` (défaut 30 j, min 1 j). `GET /api/debug/retention` retourne window, comptage et date de dernière purge.
+- **Section HISTORY** dans `debug.tsx` : mot de passe inline (token `sessionStorage`), sélecteur de plage de dates, deux `LineChart` Recharts, tables paginées 50/page, refresh toutes les 15 s.
+- **Filtres + tri + groupement par session** : filtre statut (ok/error/aborted), tri date/latence, recherche texte libre (prénom + question). Accordion `SessionGroup` avec prénom (JOIN `conversation_sessions`), tours, médiane latence color-codée, badge erreur.
+
+**Why it matters** : Quand une classe s'est mal passée la veille, Ulrich peut maintenant ouvrir `/debug`, filtrer par date, voir quelles sessions avaient des latences >8 s et si c'était Flowise ou TTS qui ramet — sans grep de logs.
+
+**Files** : `server/debug-traces.ts`, `server/routes.ts` (5 nouveaux endpoints), `client/src/pages/debug.tsx`, `shared/debug-types.ts`.
+
+---
+
+### [2026-05-03] — Affichage articles : cascade proxy → lecteur → archive → carte d'erreur 🔷
+
+**Intent** : Le proxy article montrait soit un iframe bloqué par le site (page blanche), soit un JSON d'erreur brut. Les élèves se retrouvaient devant un écran vide ou une erreur technique sans savoir quoi faire. Objectif : afficher TOUJOURS quelque chose d'utile, jusqu'au dernier recours.
+
+**What shipped** :
+- **Cascade en 4 niveaux** (`WebView.tsx`) : probe proxy → mode Lecteur (Readability) → archive Wayback Machine → carte d'erreur. Chaque étape a son timeout (15 s / 12 s / 15 s). Barre de progression avec badge de mode actif (🌐 / 📖 / 🗄️).
+- **Endpoint `/api/reader`** : fetch avec pool de 5 User-Agents rotatifs + `fetchWithRetry` (3 essais, backoff 1s/2s, timeout 20 s AbortController), parse JSDOM + Readability, réécrit les URLs d'images relatives, strip event-handlers et `javascript:` côté serveur. Retourne `{title, content, byline, siteName, excerpt}`.
+- **Sanitisation client** : `DOMPurify` (browser-native) en deuxième couche avant `dangerouslySetInnerHTML`.
+- **Sélecteur de mode de lecture** dans la barre URL : Auto / Proxy / Lecteur / Archive, persisté dans `localStorage:webview_preferred_mode`. Modes forcés → pas de cascade, erreur directe si échec.
+- **Cache LRU reader** côté serveur : 50 entrées, TTL 5 min (`?nocache=1` pour débuguer).
+- **Carte d'erreur informative** : fond gris neutre (plus d'alerte ambrée anxiogène), favicon (Google S2), titre + extrait de l'article (`readerFallback` préservé à travers la cascade, ou récupéré en background si reader avait échoué), bouton teal "Lire l'article".
+
+**Why it matters** : Les sources que Peter cite (lemonde.fr, frontiersin.org, plos.org…) ont des politiques d'intégration très variables. Avec la cascade, l'élève voit le contenu dans ≥80 % des cas. Quand tout échoue, il voit le titre + un extrait de l'article et peut l'ouvrir en un clic — au lieu d'une page blanche ou d'un message d'erreur technique.
+
+**Files** : `client/src/components/media/WebView.tsx`, `server/routes.ts` (`/api/reader`, `/api/proxy` amélioré).
+**Packages ajoutés** : `@mozilla/readability`, `jsdom`, `dompurify`.
+
+---
+
+### [2026-05-03] — Bouton enregistrement : icône Send pendant la capture 🔹
+
+- Icône `MicOff` (microphone barré) → `Send` quand `isRecording === true` dans `ChatInput.tsx`. Le bouton communique maintenant clairement "envoyer l'audio" au lieu de "couper le micro".
+
+---
+
+### [2026-05-03] — README GitHub 🔹
+
+- `README.md` complet créé : vue d'ensemble, features, diagramme d'architecture ASCII (browser → Express → Postgres), tech stack, getting started, toutes les variables d'environnement par catégorie (required / TTS / STT / analytics), structure de projet annotée, décisions de conception, admin console, events PostHog, pipeline TTS/STT, commandes Playwright, index de la documentation technique.
 
 ---
 
