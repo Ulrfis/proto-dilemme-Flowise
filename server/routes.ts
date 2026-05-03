@@ -127,7 +127,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Speech-to-text endpoint — delegates to the active STT provider.
   // Public signature MUST stay identical: multipart/form-data with field "audio",
-  // returns { text, language }.
+  // returns { text, language, provider }.
   app.post("/api/transcribe", upload.single('audio'), async (req, res) => {
     try {
       if (!req.file) {
