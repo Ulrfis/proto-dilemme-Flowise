@@ -97,21 +97,32 @@ export function WebView({ webpage }: WebViewProps) {
         setLoading(false);
       } else {
         console.warn('[WebView] Reader mode failed, trying archive');
-        tryArchiveMode();
+        tryArchiveMode(url);
       }
     } catch (err) {
       clearTimeout(readerTimeout);
       console.warn('[WebView] Reader mode error:', err);
-      tryArchiveMode();
+      tryArchiveMode(url);
     }
   };
 
-  const tryArchiveMode = () => {
+  const tryArchiveMode = (url: string) => {
     setModeAndRef('archive');
     setLoading(true);
-    // Keep readerData as readerFallback before clearing it so the error
-    // card can still display title + excerpt if all methods fail.
-    setReaderData(prev => { setReaderFallback(prev); return null; });
+    // Explicit sequential update — no side-effect inside a state setter.
+    // If reader already succeeded and left data in readerData, preserve it.
+    setReaderFallback(readerData);
+    setReaderData(null);
+    // Background metadata fetch: if reader failed (readerData is null),
+    // try again quietly so the error card has title + excerpt to show.
+    if (!readerData) {
+      fetch(`/api/reader?url=${encodeURIComponent(url)}`)
+        .then(r => r.ok ? r.json() : null)
+        .then((data: ReaderData | null) => {
+          if (data?.title) setReaderFallback(data);
+        })
+        .catch(() => { /* metadata is best-effort; ignore failures */ });
+    }
     // Set a timeout — if iframe doesn't load in 15s, show final error
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
