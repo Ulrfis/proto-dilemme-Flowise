@@ -19,6 +19,8 @@ export interface ServiceHealth {
 export interface FlowiseTraceDTO {
   id: string;
   chatId: string;
+  /** First name of the user, joined from conversation_sessions. Absent when no session match. */
+  firstName?: string;
   question: string;
   startedAt: number;
   finishedAt: number;

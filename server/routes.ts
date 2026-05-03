@@ -8,9 +8,10 @@ import {
   insertConversationMessageSchema,
   flowiseTraces,
   ttsTraces,
+  conversationSessions,
 } from "@shared/schema";
 import { db } from "./db";
-import { and, gte, lte, desc, sql } from "drizzle-orm";
+import { and, gte, lte, desc, asc, eq, sql } from "drizzle-orm";
 import { storage } from "./storage";
 import multer from "multer";
 import fs from "fs/promises";
@@ -1082,7 +1083,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
-  // GET /api/debug/traces/flowise?from=&to=&limit=&offset=
+  // GET /api/debug/traces/flowise?from=&to=&limit=&offset=&status=&sort=
   app.get("/api/debug/traces/flowise", async (req, res) => {
     if (!requireAdmin(req, res)) return;
     try {
@@ -1090,16 +1091,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const toMs = parseInt(String(req.query.to ?? ""), 10);
       const limit = Math.min(1000, Math.max(1, parseInt(String(req.query.limit ?? "500"), 10) || 500));
       const offset = Math.max(0, parseInt(String(req.query.offset ?? "0"), 10) || 0);
+      const statusFilter = String(req.query.status ?? "");
+      const sortParam = String(req.query.sort ?? "date_desc");
+
       const filters = [];
       if (!isNaN(fromMs)) filters.push(gte(flowiseTraces.startedAt, new Date(fromMs)));
       if (!isNaN(toMs)) filters.push(lte(flowiseTraces.startedAt, new Date(toMs)));
+      if (statusFilter === "ok" || statusFilter === "error" || statusFilter === "aborted") {
+        filters.push(eq(flowiseTraces.status, statusFilter));
+      }
       const where = filters.length > 0 ? and(...filters) : undefined;
+
+      const orderBy =
+        sortParam === "date_asc"
+          ? asc(flowiseTraces.startedAt)
+          : sortParam === "latency_asc"
+            ? asc(flowiseTraces.totalMs)
+            : sortParam === "latency_desc"
+              ? desc(flowiseTraces.totalMs)
+              : desc(flowiseTraces.startedAt);
+
       const [rows, [{ total }]] = await Promise.all([
         db
-          .select()
+          .select({
+            id: flowiseTraces.id,
+            chatId: flowiseTraces.chatId,
+            question: flowiseTraces.question,
+            startedAt: flowiseTraces.startedAt,
+            finishedAt: flowiseTraces.finishedAt,
+            connectMs: flowiseTraces.connectMs,
+            ttftMs: flowiseTraces.ttftMs,
+            totalMs: flowiseTraces.totalMs,
+            tokens: flowiseTraces.tokens,
+            chars: flowiseTraces.chars,
+            nodes: flowiseTraces.nodes,
+            tools: flowiseTraces.tools,
+            unknownEvents: flowiseTraces.unknownEvents,
+            status: flowiseTraces.status,
+            errorMessage: flowiseTraces.errorMessage,
+            firstName: conversationSessions.firstName,
+          })
           .from(flowiseTraces)
+          .leftJoin(
+            conversationSessions,
+            sql`${conversationSessions.id}::text = ${flowiseTraces.chatId}`,
+          )
           .where(where)
-          .orderBy(desc(flowiseTraces.startedAt))
+          .orderBy(orderBy)
           .limit(limit)
           .offset(offset),
         db
@@ -1110,6 +1148,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const items = rows.map((r) => ({
         id: r.id,
         chatId: r.chatId,
+        firstName: r.firstName ?? undefined,
         question: r.question,
         startedAt: r.startedAt.getTime(),
         finishedAt: r.finishedAt.getTime(),
