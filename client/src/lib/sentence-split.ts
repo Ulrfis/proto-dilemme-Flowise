@@ -14,9 +14,39 @@ const ABBREVIATIONS = [
 
 const PLACEHOLDER = "\u0001"; // unique marker unlikely to appear in text
 
+// Domains we strip out of TTS — same list as in tts-text.ts. We protect the
+// inner dots so the sentence splitter doesn't fragment a sentence that
+// contains a bare domain or a URL.
+const DOMAIN_TLDS = "com|org|net|fr|ch|be|ca|tv|io|edu|gov|info|news|app|dev|tech|eu|de|uk|it|es|nl";
+
 function protectAbbreviations(text: string): { protected: string; tokens: string[] } {
   const tokens: string[] = [];
   let result = text;
+
+  // 1) Protect entire markdown links `[label](url)` — we wrap them as a single
+  //    opaque token so neither the inner `.` of the URL nor the closing `)`
+  //    can confuse the splitter. Restored 1:1 later for downstream TTS cleanup.
+  result = result.replace(/\[[^\]]+\]\([^)]+\)/g, (m) => {
+    tokens.push(m);
+    return PLACEHOLDER + (tokens.length - 1) + PLACEHOLDER;
+  });
+
+  // 2) Protect bare URLs.
+  result = result.replace(/https?:\/\/\S+/g, (m) => {
+    tokens.push(m);
+    return PLACEHOLDER + (tokens.length - 1) + PLACEHOLDER;
+  });
+
+  // 3) Protect bare domains like "lemonde.fr/article-1" or "frontiersin.org".
+  result = result.replace(
+    new RegExp(`\\b(?:[a-z0-9-]+\\.)+(?:${DOMAIN_TLDS})(?:\\/\\S*)?`, "gi"),
+    (m) => {
+      tokens.push(m);
+      return PLACEHOLDER + (tokens.length - 1) + PLACEHOLDER;
+    },
+  );
+
+  // 4) Protect known abbreviations.
   for (const abbr of ABBREVIATIONS) {
     const escaped = abbr.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     result = result.replace(new RegExp(escaped, "g"), () => {
@@ -24,11 +54,13 @@ function protectAbbreviations(text: string): { protected: string; tokens: string
       return PLACEHOLDER + (tokens.length - 1) + PLACEHOLDER;
     });
   }
-  // Decimal numbers like 3.14 — protect the dot
+
+  // 5) Decimal numbers like 3.14 — protect the dot.
   result = result.replace(/(\d)\.(\d)/g, (_m, a, b) => {
     tokens.push(".");
     return a + PLACEHOLDER + (tokens.length - 1) + PLACEHOLDER + b;
   });
+
   return { protected: result, tokens };
 }
 

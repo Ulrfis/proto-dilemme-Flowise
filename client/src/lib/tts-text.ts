@@ -27,16 +27,12 @@ export function plainifyForTTS(content: string): string {
       /\b(?:[a-z0-9-]+\.)+(?:com|org|net|fr|ch|be|ca|tv|io|edu|gov|info|news|app|dev|tech|eu|de|uk|it|es|nl)(?:\/\S*)?/gi,
       " ",
     )
-    // 6. Bold / italic markers — must run BEFORE the "Source:" pass so that
-    // "**Source** :" is matched too.
+    // 6. Bold / italic markers.
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .replace(/\*([^*\n]+)\*/g, "$1")
-    // 7. Citations "Source : …" / "Sources : …" — drop the entire segment up
-    // to the next strong punctuation OR newline.
-    .replace(
-      /(^|[.!?]\s+|\n)\s*sources?(?:\s*[\(（][^)）]*[\)）])?\s*(?:[:：]|—|-)\s*[^.!?\n]*[.!?\n]?/gim,
-      "$1",
-    )
+    // 7. (Removed) — we used to drop entire "Sources : …" sentences here, but
+    //    Peter must read all the surrounding text. Links inside such sentences
+    //    are already stripped above (rules 3-5).
     // 8. Drop entire lines that became empty after link removal (e.g. bullet
     //    list whose only content was a link).
     .replace(/^[ \t]*[-*•·][ \t]*$/gm, "")
