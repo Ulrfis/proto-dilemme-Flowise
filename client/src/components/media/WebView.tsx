@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import DOMPurify from "dompurify";
 import { Button } from "@/components/ui/button";
-import { ExternalLink, RefreshCw, AlertCircle, Globe, BookOpen, Archive } from "lucide-react";
+import { ExternalLink, RefreshCw, AlertCircle, Globe, BookOpen, Archive, FileText } from "lucide-react";
 import { MediaItem } from "../../types/chat";
 
 interface WebViewProps {
@@ -64,6 +64,8 @@ export function WebView({ webpage }: WebViewProps) {
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<ViewMode>('proxy');
   const [readerData, setReaderData] = useState<ReaderData | null>(null);
+  // Preserved even when cascading past reader → archive → error
+  const [readerFallback, setReaderFallback] = useState<ReaderData | null>(null);
   const [finalError, setFinalError] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -107,7 +109,9 @@ export function WebView({ webpage }: WebViewProps) {
   const tryArchiveMode = () => {
     setModeAndRef('archive');
     setLoading(true);
-    setReaderData(null);
+    // Keep readerData as readerFallback before clearing it so the error
+    // card can still display title + excerpt if all methods fail.
+    setReaderData(prev => { setReaderFallback(prev); return null; });
     // Set a timeout — if iframe doesn't load in 15s, show final error
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
@@ -127,6 +131,7 @@ export function WebView({ webpage }: WebViewProps) {
     setLoading(true);
     setFinalError(false);
     setReaderData(null);
+    setReaderFallback(null);
     setModeAndRef('proxy');
 
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -295,29 +300,65 @@ export function WebView({ webpage }: WebViewProps) {
           </div>
         )}
 
-        {/* Final error state */}
-        {finalError && (
-          <div className="absolute inset-0 flex items-center justify-center bg-amber-50 border border-amber-200 rounded-lg z-20 p-6">
-            <div className="text-center max-w-md">
-              <AlertCircle className="w-12 h-12 text-amber-500 mx-auto mb-3" />
-              <div className="text-amber-800 font-medium mb-2">
-                Cet article ne peut pas s'afficher ici
+        {/* Final error state — informational card with article preview */}
+        {finalError && (() => {
+          const hostname = (() => { try { return new URL(webpage.url).hostname; } catch { return webpage.url; } })();
+          const faviconUrl = `https://www.google.com/s2/favicons?sz=32&domain_url=${encodeURIComponent(webpage.url)}`;
+          const title = readerFallback?.title;
+          const excerpt = readerFallback?.excerpt;
+          const siteName = readerFallback?.siteName || hostname;
+          return (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-50 border border-gray-200 rounded-lg z-20 p-6">
+              <div className="max-w-sm w-full">
+                {/* Site header */}
+                <div className="flex items-center gap-2 mb-4">
+                  <img
+                    src={faviconUrl}
+                    alt=""
+                    className="w-5 h-5 rounded-sm flex-shrink-0"
+                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                  />
+                  <span className="text-sm text-gray-500 font-medium truncate">{siteName}</span>
+                </div>
+
+                {/* Article preview card */}
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-4">
+                  {title ? (
+                    <>
+                      <div className="flex items-start gap-2 mb-2">
+                        <FileText className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
+                        <h3 className="text-sm font-semibold text-gray-800 leading-snug line-clamp-3">{title}</h3>
+                      </div>
+                      {excerpt && (
+                        <p className="text-xs text-gray-500 leading-relaxed line-clamp-3 mt-2">{excerpt}</p>
+                      )}
+                    </>
+                  ) : (
+                    <div className="flex items-center gap-2 text-gray-400">
+                      <Globe className="w-4 h-4 flex-shrink-0" />
+                      <span className="text-sm truncate">{webpage.url}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Explanation */}
+                <p className="text-xs text-gray-400 text-center mb-4">
+                  Ce site ne peut pas s'afficher ici — ouvre-le dans un onglet pour le lire.
+                </p>
+
+                {/* CTA */}
+                <Button
+                  onClick={handleExternalOpen}
+                  className="w-full bg-accent hover:bg-accent/90 text-white"
+                  data-testid="button-open-external-fallback"
+                >
+                  <ExternalLink className="w-4 h-4 mr-2" />
+                  Lire l'article
+                </Button>
               </div>
-              <div className="text-amber-700 text-sm mb-4">
-                Le site <strong>{(() => { try { return new URL(webpage.url).hostname; } catch { return webpage.url; } })()}</strong> bloque l'affichage intégré.
-                Le proxy, l'extraction et l'archive ont tous échoué.
-              </div>
-              <Button
-                onClick={handleExternalOpen}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
-                data-testid="button-open-external-fallback"
-              >
-                <ExternalLink className="w-4 h-4 mr-2" />
-                Ouvrir dans un nouvel onglet
-              </Button>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Reader view */}
         {mode === 'reader' && readerData && !loading && (
