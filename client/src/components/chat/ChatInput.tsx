@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Send, Mic, MicOff, Loader2 } from "lucide-react";
@@ -23,6 +23,12 @@ export function ChatInput({
   const audioChunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
 
+  // Web Audio API refs for the live waveform visualization
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
   // Audio recording functions
   const startRecording = useCallback(async () => {
     try {
@@ -38,6 +44,23 @@ export function ChatInput({
       
       streamRef.current = stream;
       audioChunksRef.current = [];
+
+      try {
+        const AudioContextClass =
+          window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioContextClass) {
+          const audioContext = new AudioContextClass();
+          const source = audioContext.createMediaStreamSource(stream);
+          const analyser = audioContext.createAnalyser();
+          analyser.fftSize = 128;
+          analyser.smoothingTimeConstant = 0.7;
+          source.connect(analyser);
+          audioContextRef.current = audioContext;
+          analyserRef.current = analyser;
+        }
+      } catch (vizErr) {
+        console.warn('[Audio] Waveform analyser unavailable:', vizErr);
+      }
 
       // Use webm format for better browser compatibility
       const options = { mimeType: 'audio/webm;codecs=opus' };
@@ -107,7 +130,87 @@ export function ChatInput({
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
     }
+
+    if (animationFrameRef.current !== null) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
+    }
+    analyserRef.current = null;
   }, [isRecording]);
+
+  // Drive the waveform animation while recording.
+  useEffect(() => {
+    if (!isRecording) return;
+
+    const canvas = canvasRef.current;
+    const analyser = analyserRef.current;
+    if (!canvas || !analyser) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // HiDPI scaling — keep the canvas crisp on retina screens.
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = canvas.offsetWidth || 400;
+    const cssH = canvas.offsetHeight || 36;
+    canvas.width = Math.round(cssW * dpr);
+    canvas.height = Math.round(cssH * dpr);
+    ctx.scale(dpr, dpr);
+
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+    const BAR_COUNT = 40;
+    const BAR_WIDTH = 2;
+    const GAP = (cssW - BAR_COUNT * BAR_WIDTH) / (BAR_COUNT - 1);
+
+    const draw = () => {
+      analyser.getByteFrequencyData(dataArray);
+      ctx.clearRect(0, 0, cssW, cssH);
+
+      for (let i = 0; i < BAR_COUNT; i++) {
+        const v = dataArray[Math.floor((i * bufferLength) / BAR_COUNT)] / 255;
+        const barH = Math.max(2, v * cssH * 0.9);
+        const x = i * (BAR_WIDTH + GAP);
+        const y = (cssH - barH) / 2;
+        const alpha = (0.4 + v * 0.6).toFixed(2);
+        ctx.fillStyle = `rgba(168, 85, 247, ${alpha})`;
+        ctx.fillRect(x, y, BAR_WIDTH, barH);
+      }
+
+      animationFrameRef.current = requestAnimationFrame(draw);
+    };
+
+    animationFrameRef.current = requestAnimationFrame(draw);
+
+    return () => {
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+    };
+  }, [isRecording]);
+
+  // Safety net: on unmount, release everything.
+  useEffect(() => {
+    return () => {
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close().catch(() => {});
+        audioContextRef.current = null;
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+      }
+    };
+  }, []);
 
   const processRecording = useCallback(async () => {
     if (audioChunksRef.current.length === 0) {
@@ -205,17 +308,26 @@ export function ChatInput({
     <div className="border-t border-gray-200 p-2">
       <form onSubmit={handleSubmit} className="flex items-center space-x-2">
         <div className="flex-1 relative">
-          <Input
-            type="text"
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder={placeholder}
-            disabled={disabled || isTranscribing}
-            data-testid="input-chat-message"
-            className={isAudioSupported ? "pr-20 h-9" : "pr-12 h-9"}
-            aria-label="Message pour Peter"
-          />
+          {isRecording ? (
+            <canvas
+              ref={canvasRef}
+              className={`block w-full h-9 rounded-md bg-purple-50 border border-purple-200 ${isAudioSupported ? "pr-20" : "pr-12"}`}
+              aria-label="Enregistrement audio en cours"
+              data-testid="canvas-waveform"
+            />
+          ) : (
+            <Input
+              type="text"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder={placeholder}
+              disabled={disabled || isTranscribing}
+              data-testid="input-chat-message"
+              className={isAudioSupported ? "pr-20 h-9" : "pr-12 h-9"}
+              aria-label="Message pour Peter"
+            />
+          )}
           {isAudioSupported && (
             <Button
               type="button"
