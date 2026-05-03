@@ -1,10 +1,10 @@
 // Strip markdown formatting so the TTS doesn't read characters like "*" or "[".
 //
-// Special handling for links: Peter must NOT read URLs or domain names out loud.
-// Instead we substitute a short French phrase that tells the listener a link is
-// available in the side panel — without saying the URL itself. Videos (we tag
-// them with a 📹 prefix in extractMediaFromText) get a "vidéo à regarder"
-// phrase, regular links get "article à consulter".
+// Special handling for links: Peter must NEVER mention the links out loud —
+// they're shown clickable in the chat and side panel. We strip them silently
+// (no substitute phrase, no URL, no domain). Introducing punctuation like
+// " : ", " — ", " – " just before/after the removed link is also cleaned up,
+// and bullet lines whose only content was a link are dropped entirely.
 //
 // Special handling for citations: any sentence starting with "Source:" /
 // "Sources:" is dropped entirely so Peter goes straight to the next sentence.
@@ -17,34 +17,43 @@ export function plainifyForTTS(content: string): string {
     .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
     // 2. Headings: strip the leading ##/###/etc.
     .replace(/^\s{0,3}#{1,6}\s+/gm, "")
-    // 3. Markdown links → spoken substitute (never the URL nor the title).
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, label: string) => {
-      if (label.trim().startsWith("📹")) return " — vidéo à regarder dans le panneau ";
-      return " — article à consulter dans le panneau ";
-    })
-    // 4. Bare URLs that slipped through.
-    .replace(/https?:\/\/\S+/g, " — lien à consulter dans le panneau ")
-    // 5. Bare domain mentions like "vimeo.com", "rts.ch", "frontiersin.org".
+    // 3. Markdown links → silently removed (no URL, no label, no substitute).
+    .replace(/\[[^\]]+\]\([^)]+\)/g, " ")
+    // 4. Bare URLs that slipped through — silent removal.
+    .replace(/https?:\/\/\S+/g, " ")
+    // 5. Bare domain mentions like "vimeo.com", "rts.ch", "frontiersin.org" —
+    //    silent removal so Peter never spells out a domain.
     .replace(
       /\b(?:[a-z0-9-]+\.)+(?:com|org|net|fr|ch|be|ca|tv|io|edu|gov|info|news|app|dev|tech|eu|de|uk|it|es|nl)(?:\/\S*)?/gi,
-      " — lien à consulter dans le panneau ",
+      " ",
     )
     // 6. Bold / italic markers — must run BEFORE the "Source:" pass so that
     // "**Source** :" is matched too.
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .replace(/\*([^*\n]+)\*/g, "$1")
     // 7. Citations "Source : …" / "Sources : …" — drop the entire segment up
-    // to the next strong punctuation OR newline. Anchored to start-of-line or
-    // start of sentence so we never eat ordinary phrases like
-    // "la source de plastique est dangereuse" mid-sentence.
+    // to the next strong punctuation OR newline.
     .replace(
       /(^|[.!?]\s+|\n)\s*sources?(?:\s*[\(（][^)）]*[\)）])?\s*(?:[:：]|—|-)\s*[^.!?\n]*[.!?\n]?/gim,
       "$1",
     )
-    // 8. Line-starting bullets only.
+    // 8. Drop entire lines that became empty after link removal (e.g. bullet
+    //    list whose only content was a link).
+    .replace(/^[ \t]*[-*•·][ \t]*$/gm, "")
+    // 9. Line-starting bullets only.
     .replace(/^\s*[-*]\s+/gm, "")
-    // 9. Inline code.
+    // 10. Inline code.
     .replace(/`([^`]+)`/g, "$1")
-    .replace(/\s+/g, " ")
+    // 11. Clean dangling introducing punctuation left after a removed link
+    //     (e.g. "Lis cet article :    ." → "Lis cet article.").
+    .replace(/\s*[:：]\s*(?=[.!?\n]|$)/g, "")
+    .replace(/\s+[—–-]\s+(?=[.!?\n]|$)/g, "")
+    // 12. Remove a stray period that was preceded only by whitespace
+    //     (link removal can leave " ." at line start).
+    .replace(/(^|\n)\s*\.\s*/g, "$1")
+    // 13. Collapse any whitespace runs created by the deletions.
+    .replace(/[ \t]+/g, " ")
+    .replace(/\s*\n\s*/g, " ")
+    .replace(/\s+([.!?,;])/g, "$1")
     .trim();
 }
