@@ -89,7 +89,7 @@ export function AvatarSelector({
       if (parsed && parsed.gender === currentGender) {
         setSelectedIndex(parsed.index);
       } else {
-        setSelectedIndex(null);
+        setSelectedIndex(0);
       }
     }
   }, [isOpen, currentName, currentGender, currentAvatarUrl]);
