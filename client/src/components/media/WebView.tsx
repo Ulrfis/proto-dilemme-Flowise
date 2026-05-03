@@ -1,6 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import DOMPurify from "dompurify";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ExternalLink, RefreshCw, AlertCircle, Globe, BookOpen, Archive, FileText } from "lucide-react";
 import { MediaItem } from "../../types/chat";
 
@@ -9,6 +16,9 @@ interface WebViewProps {
 }
 
 type ViewMode = 'proxy' | 'reader' | 'archive' | 'error';
+type PreferredMode = 'auto' | 'proxy' | 'reader' | 'archive';
+
+const PREFERRED_MODE_KEY = 'webview_preferred_mode';
 
 interface ReaderData {
   title: string;
@@ -64,13 +74,28 @@ export function WebView({ webpage }: WebViewProps) {
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<ViewMode>('proxy');
   const [readerData, setReaderData] = useState<ReaderData | null>(null);
-  // Preserved even when cascading past reader → archive → error
   const [readerFallback, setReaderFallback] = useState<ReaderData | null>(null);
   const [finalError, setFinalError] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
+  const [preferredMode, setPreferredModeState] = useState<PreferredMode>(() => {
+    try {
+      const stored = localStorage.getItem(PREFERRED_MODE_KEY);
+      if (stored === 'auto' || stored === 'proxy' || stored === 'reader' || stored === 'archive') {
+        return stored;
+      }
+    } catch { /* ignore */ }
+    return 'auto';
+  });
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const timeoutRef = useRef<NodeJS.Timeout>();
   const modeRef = useRef<ViewMode>('proxy');
+  const preferredModeRef = useRef<PreferredMode>(preferredMode);
+
+  const setPreferredMode = (m: PreferredMode) => {
+    preferredModeRef.current = m;
+    setPreferredModeState(m);
+    try { localStorage.setItem(PREFERRED_MODE_KEY, m); } catch { /* ignore */ }
+  };
 
   const handleExternalOpen = () => {
     if (webpage) {
@@ -96,25 +121,35 @@ export function WebView({ webpage }: WebViewProps) {
         setReaderData(data);
         setLoading(false);
       } else {
-        console.warn('[WebView] Reader mode failed, trying archive');
-        tryArchiveMode(url);
+        if (preferredModeRef.current === 'reader') {
+          console.warn('[WebView] Reader mode failed (forced reader mode — not cascading)');
+          setModeAndRef('error');
+          setFinalError(true);
+          setLoading(false);
+        } else {
+          console.warn('[WebView] Reader mode failed, trying archive');
+          tryArchiveMode(url);
+        }
       }
     } catch (err) {
       clearTimeout(readerTimeout);
-      console.warn('[WebView] Reader mode error:', err);
-      tryArchiveMode(url);
+      if (preferredModeRef.current === 'reader') {
+        console.warn('[WebView] Reader mode error (forced reader mode — not cascading):', err);
+        setModeAndRef('error');
+        setFinalError(true);
+        setLoading(false);
+      } else {
+        console.warn('[WebView] Reader mode error:', err);
+        tryArchiveMode(url);
+      }
     }
   };
 
   const tryArchiveMode = (url: string) => {
     setModeAndRef('archive');
     setLoading(true);
-    // Explicit sequential update — no side-effect inside a state setter.
-    // If reader already succeeded and left data in readerData, preserve it.
     setReaderFallback(readerData);
     setReaderData(null);
-    // Background metadata fetch: if reader failed (readerData is null),
-    // try again quietly so the error card has title + excerpt to show.
     if (!readerData) {
       fetch(`/api/reader?url=${encodeURIComponent(url)}`)
         .then(r => r.ok ? r.json() : null)
@@ -123,7 +158,6 @@ export function WebView({ webpage }: WebViewProps) {
         })
         .catch(() => { /* metadata is best-effort; ignore failures */ });
     }
-    // Set a timeout — if iframe doesn't load in 15s, show final error
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
       if (modeRef.current === 'archive') {
@@ -135,7 +169,7 @@ export function WebView({ webpage }: WebViewProps) {
     }, 15000);
   };
 
-  // Main cascade entry: probe proxy, then fall through reader → archive → error
+  // Main entry: respect preferredMode, fall back to cascade for 'auto'
   useEffect(() => {
     if (!webpage) return;
 
@@ -143,13 +177,45 @@ export function WebView({ webpage }: WebViewProps) {
     setFinalError(false);
     setReaderData(null);
     setReaderFallback(null);
-    setModeAndRef('proxy');
 
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
 
-    const ctrl = new AbortController();
+    // Snapshot preferred mode so the effect is stable
+    const pref = preferredMode;
 
-    // Probe the proxy first. We do a HEAD-like GET so the response is cached.
+    if (pref === 'reader') {
+      tryReaderMode(webpage.url);
+      return;
+    }
+
+    if (pref === 'archive') {
+      setModeAndRef('archive');
+      timeoutRef.current = setTimeout(() => {
+        if (modeRef.current === 'archive') {
+          setModeAndRef('error');
+          setFinalError(true);
+          setLoading(false);
+        }
+      }, 15000);
+      return () => { if (timeoutRef.current) clearTimeout(timeoutRef.current); };
+    }
+
+    if (pref === 'proxy') {
+      setModeAndRef('proxy');
+      timeoutRef.current = setTimeout(() => {
+        if (modeRef.current === 'proxy') {
+          console.warn('[WebView] Proxy iframe timeout (forced proxy mode)');
+          setModeAndRef('error');
+          setFinalError(true);
+          setLoading(false);
+        }
+      }, 15000);
+      return () => { if (timeoutRef.current) clearTimeout(timeoutRef.current); };
+    }
+
+    // 'auto' — original cascade logic
+    setModeAndRef('proxy');
+    const ctrl = new AbortController();
     const proxyUrl = `/api/proxy?url=${encodeURIComponent(webpage.url)}`;
     fetch(proxyUrl, { signal: ctrl.signal })
       .then(async (res) => {
@@ -157,7 +223,6 @@ export function WebView({ webpage }: WebViewProps) {
           console.warn(`[WebView] Proxy probe failed HTTP ${res.status}, trying reader`);
           tryReaderMode(webpage.url);
         }
-        // If OK, the iframe will handle the rest via onLoad
       })
       .catch((err) => {
         if (err.name === 'AbortError') return;
@@ -165,7 +230,6 @@ export function WebView({ webpage }: WebViewProps) {
         tryReaderMode(webpage.url);
       });
 
-    // Proxy iframe timeout fallback
     timeoutRef.current = setTimeout(() => {
       if (modeRef.current === 'proxy') {
         console.warn('[WebView] Proxy iframe timeout, trying reader');
@@ -177,7 +241,7 @@ export function WebView({ webpage }: WebViewProps) {
       ctrl.abort();
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
-  }, [webpage?.url, retryKey]);
+  }, [webpage?.url, retryKey, preferredMode]);
 
   const handleIframeLoad = () => {
     if (modeRef.current === 'proxy' || modeRef.current === 'archive') {
@@ -189,8 +253,15 @@ export function WebView({ webpage }: WebViewProps) {
 
   const handleIframeError = () => {
     if (modeRef.current === 'proxy') {
-      console.warn('[WebView] Proxy iframe error, trying reader');
-      if (webpage) tryReaderMode(webpage.url);
+      if (preferredMode === 'proxy') {
+        // Forced proxy — don't cascade, show error
+        setModeAndRef('error');
+        setFinalError(true);
+        setLoading(false);
+      } else {
+        console.warn('[WebView] Proxy iframe error, trying reader');
+        if (webpage) tryReaderMode(webpage.url);
+      }
     } else if (modeRef.current === 'archive') {
       console.warn('[WebView] Archive iframe error, showing final error');
       setModeAndRef('error');
@@ -242,7 +313,7 @@ export function WebView({ webpage }: WebViewProps) {
     <div className="h-full flex flex-col">
       {/* URL bar */}
       <div className="mb-2 p-2 bg-white border border-gray-200 rounded-lg shadow-sm">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <div className="flex items-center space-x-2 flex-1 min-w-0">
             <svg className="w-4 h-4 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
@@ -259,13 +330,36 @@ export function WebView({ webpage }: WebViewProps) {
               {modeInfo.label}
             </span>
           </div>
-          <div className="flex items-center space-x-1 ml-2">
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {/* Preferred mode selector */}
+            <Select
+              value={preferredMode}
+              onValueChange={(v) => {
+                if (v === 'auto' || v === 'proxy' || v === 'reader' || v === 'archive') {
+                  setPreferredMode(v);
+                }
+              }}
+            >
+              <SelectTrigger
+                className="h-8 text-xs w-[110px] border-gray-200 bg-gray-50 hover:bg-gray-100"
+                data-testid="select-preferred-mode"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">⚡ Auto</SelectItem>
+                <SelectItem value="proxy">🌐 Proxy</SelectItem>
+                <SelectItem value="reader">📖 Lecteur</SelectItem>
+                <SelectItem value="archive">🗄️ Archive</SelectItem>
+              </SelectContent>
+            </Select>
+
             <Button
               size="sm"
               variant="outline"
               onClick={resetAll}
               data-testid="button-retry"
-              className="bg-green-50 text-green-600 border-green-200 hover:bg-green-100 flex-shrink-0 h-8 px-2"
+              className="bg-green-50 text-green-600 border-green-200 hover:bg-green-100 h-8 px-2"
             >
               <RefreshCw className="w-3 h-3 mr-1" />
               Retry
@@ -275,7 +369,7 @@ export function WebView({ webpage }: WebViewProps) {
               variant="outline"
               onClick={handleExternalOpen}
               data-testid="button-open-external"
-              className="bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100 flex-shrink-0 h-8 px-2"
+              className="bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100 h-8 px-2"
             >
               <ExternalLink className="w-3 h-3 mr-1" />
               Ouvrir

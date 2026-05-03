@@ -11,11 +11,20 @@ import {
   Zap,
   History,
   Trash2,
+  ChevronDown,
+  Search,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { LatencyBar } from "../components/debug/LatencyBar";
 import { ServiceStatusCard } from "../components/debug/ServiceStatusCard";
 import {
@@ -38,6 +47,115 @@ import type {
 
 const TARGET_END_TO_END_MS = 8000;
 const PAGE_SIZE = 50;
+
+// ─── Filter / sort types ──────────────────────────────────────────────────────
+type FlowiseStatus = "all" | "ok" | "error" | "aborted";
+type FlowiseSort = "date_desc" | "date_asc" | "latency_asc" | "latency_desc";
+
+// ─── Session group ────────────────────────────────────────────────────────────
+interface SessionGroupData {
+  chatId: string;
+  firstName?: string;
+  traces: FlowiseTraceDTO[];
+  turnCount: number;
+  medianLatencyMs: number;
+  hasError: boolean;
+  lastTraceAt: number;
+}
+
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+}
+
+/**
+ * Groups traces by chatId while preserving the API-provided sort order within
+ * each session. The session list order follows the first appearance of each
+ * chatId in the API-sorted trace array.
+ */
+function groupTracesBySession(traces: FlowiseTraceDTO[]): SessionGroupData[] {
+  const map = new Map<string, FlowiseTraceDTO[]>();
+  for (const t of traces) {
+    const existing = map.get(t.chatId);
+    if (existing) {
+      existing.push(t);
+    } else {
+      map.set(t.chatId, [t]);
+    }
+  }
+  const groups: SessionGroupData[] = [];
+  for (const [chatId, ts] of map.entries()) {
+    groups.push({
+      chatId,
+      firstName: ts.find((t) => t.firstName)?.firstName,
+      traces: ts,
+      turnCount: ts.length,
+      medianLatencyMs: median(ts.map((t) => t.totalMs)),
+      hasError: ts.some((t) => t.status === "error"),
+      lastTraceAt: Math.max(...ts.map((t) => t.startedAt)),
+    });
+  }
+  return groups;
+}
+
+function SessionGroup({
+  group,
+  scaleMs,
+}: {
+  group: SessionGroupData;
+  scaleMs: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const latencyColor =
+    group.medianLatencyMs > TARGET_END_TO_END_MS
+      ? "text-rose-400"
+      : group.medianLatencyMs > TARGET_END_TO_END_MS * 0.75
+        ? "text-amber-400"
+        : "text-emerald-400";
+
+  return (
+    <div className="border border-slate-700 rounded-lg overflow-hidden">
+      <button
+        className="w-full flex items-center gap-3 px-4 py-3 bg-slate-800/60 hover:bg-slate-800 transition-colors text-left"
+        onClick={() => setOpen((o) => !o)}
+      >
+        <ChevronDown
+          className={`w-4 h-4 flex-shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
+        />
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <span className="font-medium text-slate-100 text-sm truncate">
+            {group.firstName ?? (
+              <span className="font-mono text-slate-400 text-xs">{group.chatId.slice(0, 12)}…</span>
+            )}
+          </span>
+          {group.hasError && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-rose-900/60 text-rose-300 text-[10px] uppercase tracking-wide flex-shrink-0">
+              erreur
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-4 flex-shrink-0 text-xs">
+          <span className="text-slate-500">
+            {group.turnCount} tour{group.turnCount > 1 ? "s" : ""}
+          </span>
+          <span className={`font-mono ${latencyColor}`}>
+            {(group.medianLatencyMs / 1000).toFixed(2)} s
+          </span>
+          <span className="text-slate-500 font-mono">{formatRelative(group.lastTraceAt)}</span>
+        </div>
+      </button>
+      {open && (
+        <div className="p-4 space-y-3 bg-slate-900/40">
+          {group.traces.map((trace) => (
+            <FlowiseTraceRow key={trace.id} trace={trace} scaleMs={scaleMs} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── Date range types ────────────────────────────────────────────────────────
 type QuickRange = "1h" | "today" | "7d" | "custom";
@@ -342,6 +460,9 @@ export default function DebugPage() {
   const [ttsPage, setTtsPage] = useState(0);
   const [adminToken, setAdminToken] = useState(() => sessionStorage.getItem("debug_admin_token") ?? "");
   const [tokenInput, setTokenInput] = useState("");
+  const [flowiseStatus, setFlowiseStatus] = useState<FlowiseStatus>("all");
+  const [flowiseSort, setFlowiseSort] = useState<FlowiseSort>("date_desc");
+  const [flowiseSearch, setFlowiseSearch] = useState("");
 
   const handleTokenSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -365,11 +486,15 @@ export default function DebugPage() {
     return span > 2 * 86_400_000 ? "day" : "hour";
   }, [range]);
 
-  // Reset pages when range changes
+  // Reset pages when range or filters change
   useEffect(() => {
     setFlowisePage(0);
     setTtsPage(0);
   }, [range]);
+
+  useEffect(() => {
+    setFlowisePage(0);
+  }, [flowiseStatus, flowiseSort]);
 
   // ── Retention / row counts (60s cadence, public endpoint) ───────────────
   const retention = useQuery<RetentionResponse>({
@@ -390,14 +515,18 @@ export default function DebugPage() {
 
   // ── Historical DB-backed queries (15s cadence, date-filtered, admin-only) ─
   const histFlowise = useQuery<FlowisePage>({
-    queryKey: ["/api/debug/traces/flowise", range.from, range.to, flowisePage, adminToken],
-    queryFn: () =>
-      fetchJson<FlowisePage>(
-        `/api/debug/traces/flowise?from=${range.from}&to=${range.to}&limit=${PAGE_SIZE}&offset=${
-          flowisePage * PAGE_SIZE
-        }`,
-        adminToken || undefined,
-      ),
+    queryKey: ["/api/debug/traces/flowise", range.from, range.to, flowisePage, adminToken, flowiseStatus, flowiseSort],
+    queryFn: () => {
+      const params = new URLSearchParams({
+        from: String(range.from),
+        to: String(range.to),
+        limit: String(PAGE_SIZE),
+        offset: String(flowisePage * PAGE_SIZE),
+        sort: flowiseSort,
+      });
+      if (flowiseStatus !== "all") params.set("status", flowiseStatus);
+      return fetchJson<FlowisePage>(`/api/debug/traces/flowise?${params}`, adminToken || undefined);
+    },
     enabled: !!adminToken,
     refetchInterval: autoRefresh && !!adminToken ? 15_000 : false,
   });
@@ -453,6 +582,18 @@ export default function DebugPage() {
     const max = Math.max(TARGET_END_TO_END_MS, ...items.map((t) => t.totalMs));
     return max * 1.05;
   }, [histFlowise.data]);
+
+  const sessionGroups = useMemo(() => {
+    const items = histFlowise.data?.items ?? [];
+    const groups = groupTracesBySession(items);
+    if (!flowiseSearch.trim()) return groups;
+    const q = flowiseSearch.trim().toLowerCase();
+    return groups.filter(
+      (g) =>
+        (g.firstName && g.firstName.toLowerCase().includes(q)) ||
+        g.traces.some((t) => t.question.toLowerCase().includes(q)),
+    );
+  }, [histFlowise.data, flowiseSearch]);
 
   const ttsHitRate = useMemo(() => {
     const c = health.data?.cache;
@@ -988,11 +1129,50 @@ export default function DebugPage() {
               Latence Flowise — historique filtré
               {histFlowise.data && (
                 <span className="ml-2 text-slate-600 font-normal normal-case">
-                  ({histFlowise.data.total} traces)
+                  ({histFlowise.data.total} traces · {sessionGroups.length} session{sessionGroups.length !== 1 ? "s" : ""})
                 </span>
               )}
             </h3>
           </div>
+
+          {/* Filter bar */}
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            <Select value={flowiseStatus} onValueChange={(v) => setFlowiseStatus(v as FlowiseStatus)}>
+              <SelectTrigger className="h-8 text-xs bg-slate-800 border-slate-700 text-slate-200 w-32">
+                <SelectValue placeholder="Statut" />
+              </SelectTrigger>
+              <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
+                <SelectItem value="all">Tous</SelectItem>
+                <SelectItem value="ok">OK</SelectItem>
+                <SelectItem value="error">Erreur</SelectItem>
+                <SelectItem value="aborted">Abandonné</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={flowiseSort} onValueChange={(v) => setFlowiseSort(v as FlowiseSort)}>
+              <SelectTrigger className="h-8 text-xs bg-slate-800 border-slate-700 text-slate-200 w-44">
+                <SelectValue placeholder="Tri" />
+              </SelectTrigger>
+              <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
+                <SelectItem value="date_desc">Date — plus récent</SelectItem>
+                <SelectItem value="date_asc">Date — plus ancien</SelectItem>
+                <SelectItem value="latency_asc">Latence — croissante</SelectItem>
+                <SelectItem value="latency_desc">Latence — décroissante</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <div className="relative flex-1 min-w-[160px] max-w-xs">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Rechercher prénom ou question…"
+                value={flowiseSearch}
+                onChange={(e) => setFlowiseSearch(e.target.value)}
+                className="w-full h-8 pl-7 pr-3 text-xs bg-slate-800 border border-slate-700 rounded-md text-slate-200 placeholder-slate-500 focus:outline-none focus:border-violet-500"
+              />
+            </div>
+          </div>
+
           <div className="rounded-lg border border-slate-700 bg-slate-900/40 p-4">
             {histFlowise.isLoading ? (
               <div className="text-sm text-slate-500 py-4 text-center">Chargement…</div>
@@ -1000,23 +1180,28 @@ export default function DebugPage() {
               <div className="text-sm text-rose-400 py-4 text-center">
                 Erreur lors du chargement des traces.
               </div>
-            ) : (histFlowise.data?.items ?? []).length === 0 ? (
+            ) : sessionGroups.length === 0 ? (
               <div className="text-sm text-slate-500 py-4 text-center">
                 Aucune requête Flowise sur cette plage.
               </div>
             ) : (
               <>
-                <div className="space-y-3">
-                  {(histFlowise.data?.items ?? []).map((trace) => (
-                    <FlowiseTraceRow key={trace.id} trace={trace} scaleMs={histFlowiseScale} />
+                <div className="space-y-2">
+                  {sessionGroups.map((group) => (
+                    <SessionGroup key={group.chatId} group={group} scaleMs={histFlowiseScale} />
                   ))}
                 </div>
-                <Paginator
-                  page={flowisePage}
-                  total={histFlowise.data?.total ?? 0}
-                  pageSize={PAGE_SIZE}
-                  onPage={setFlowisePage}
-                />
+                <div className="mt-3">
+                  <Paginator
+                    page={flowisePage}
+                    total={histFlowise.data?.total ?? 0}
+                    pageSize={PAGE_SIZE}
+                    onPage={setFlowisePage}
+                  />
+                  <p className="text-[10px] text-slate-600 mt-1.5 text-center">
+                    Pagination par traces — les sessions affichées correspondent aux traces de la page courante.
+                  </p>
+                </div>
               </>
             )}
           </div>
