@@ -26,8 +26,11 @@ const generateGridAvatarUrl = (name: string, gender: 'male' | 'female'): string 
 const isGridUrl = (url: string): boolean =>
   /avatar\.iran\.liara\.run\/public\/(boy|girl)\/\d+$/.test(url);
 
+const isUploadedAvatarUrl = (url: string): boolean =>
+  url.startsWith('data:image/');
+
 const migrateAvatarUrl = (state: UserAvatarState): UserAvatarState => {
-  if (isGridUrl(state.avatarUrl)) return state;
+  if (isGridUrl(state.avatarUrl) || isUploadedAvatarUrl(state.avatarUrl)) return state;
   return { ...state, avatarUrl: generateGridAvatarUrl(state.name, state.gender) };
 };
 

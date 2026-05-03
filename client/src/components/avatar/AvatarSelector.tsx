@@ -1,11 +1,15 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Shuffle } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { Shuffle, Upload } from "lucide-react";
+
+const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
+const ACCEPTED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif'];
 
 const AVATAR_COUNT = 18;
 
@@ -43,8 +47,51 @@ export function AvatarSelector({
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [previewAvatarUrl, setPreviewAvatarUrl] = useState(currentAvatarUrl);
   const [isOpen, setIsOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
 
   const avatarGrid = getAvatarGrid(tempGender);
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
+      toast({
+        title: "Format non supporté",
+        description: "Veuillez choisir une image (PNG, JPG, WebP ou GIF).",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (file.size > MAX_UPLOAD_BYTES) {
+      toast({
+        title: "Image trop volumineuse",
+        description: "La taille maximale est de 2 Mo.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result === 'string') {
+        setSelectedIndex(null);
+        setPreviewAvatarUrl(result);
+      }
+    };
+    reader.onerror = () => {
+      toast({
+        title: "Erreur de lecture",
+        description: "Impossible de lire le fichier sélectionné.",
+        variant: "destructive",
+      });
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleThumbnailClick = (url: string, index: number) => {
     setSelectedIndex(index);
@@ -65,6 +112,8 @@ export function AvatarSelector({
     setSelectedIndex(targetIndex);
     setPreviewAvatarUrl(newGrid[targetIndex]);
   };
+
+  const isCustomUpload = previewAvatarUrl.startsWith('data:image/');
 
   const handleSave = () => {
     if (tempName.trim()) {
@@ -88,6 +137,8 @@ export function AvatarSelector({
       const parsed = parseGridUrl(currentAvatarUrl);
       if (parsed && parsed.gender === currentGender) {
         setSelectedIndex(parsed.index);
+      } else if (currentAvatarUrl.startsWith('data:image/')) {
+        setSelectedIndex(null);
       } else {
         setSelectedIndex(0);
       }
@@ -170,7 +221,7 @@ export function AvatarSelector({
                     type="button"
                     onClick={() => handleThumbnailClick(url, index)}
                     className={`rounded-full focus:outline-none transition-all ${
-                      selectedIndex === index
+                      selectedIndex === index && !isCustomUpload
                         ? 'ring-2 ring-offset-2 ring-primary'
                         : 'hover:ring-2 hover:ring-offset-2 hover:ring-muted-foreground/40'
                     }`}
@@ -188,16 +239,37 @@ export function AvatarSelector({
             </div>
           </div>
 
-          {/* Random Button */}
-          <Button 
-            variant="outline" 
-            onClick={handleRandomAvatar}
-            className="w-full bg-accent border-accent text-accent-foreground hover:bg-accent/80"
-            data-testid="button-random-avatar"
-          >
-            <Shuffle className="w-4 h-4 mr-2" />
-            Avatar aléatoire
-          </Button>
+          {/* Upload + Random Buttons */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={ACCEPTED_IMAGE_TYPES.join(',')}
+            onChange={handleFileChange}
+            className="hidden"
+            data-testid="input-avatar-upload"
+          />
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+              className={`w-full border-accent text-accent-foreground hover:bg-accent/80 ${
+                isCustomUpload ? 'bg-accent ring-2 ring-primary' : 'bg-accent'
+              }`}
+              data-testid="button-upload-avatar"
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              Télécharger une photo
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleRandomAvatar}
+              className="w-full bg-accent border-accent text-accent-foreground hover:bg-accent/80"
+              data-testid="button-random-avatar"
+            >
+              <Shuffle className="w-4 h-4 mr-2" />
+              Avatar aléatoire
+            </Button>
+          </div>
 
           {/* Action Buttons */}
           <div className="flex justify-end space-x-2">
