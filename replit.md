@@ -46,6 +46,9 @@ The application features a split-screen interface with a chat panel (1/3 width) 
 - **YouTube**: Integrated for playing video content without distracting overlays.
 - **Rectify**: Session recording and behavior tracking analytics.
 - **PostHog**: Product analytics for tracking events and user engagement.
+  - Funnel & dashboard spec: see `docs/posthog-funnel-dashboard.md`.
+  - Dashboard "Usage – Dilemme Plastique": https://eu.posthog.com/project/107669/dashboard/656972
+  - Setup script (idempotent): `node scripts/posthog-setup-dashboard.mjs` (requires `POSTHOG_PERSONAL_API_KEY` + `POSTHOG_PROJECT_ID`).
 - **ElevenLabs**: TTS (Text-to-Speech) and STT (Speech-to-Text) provider.
 - **OpenAI**: TTS and STT provider.
 - **Deepgram**: Optional STT provider.

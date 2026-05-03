@@ -488,7 +488,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         200,
         Math.max(1, parseInt(String(req.query.pageSize ?? "50"), 10) || 50),
       );
-      const result = await storage.listConversationSessions({ page, pageSize });
+      const q = typeof req.query.q === "string" ? req.query.q.slice(0, 80) : undefined;
+      const parseDate = (v: unknown): Date | undefined => {
+        if (typeof v !== "string" || !v.trim()) return undefined;
+        const d = new Date(v);
+        return isNaN(d.getTime()) ? undefined : d;
+      };
+      const from = parseDate(req.query.from);
+      const to = parseDate(req.query.to);
+      const result = await storage.listConversationSessions({ page, pageSize, q, from, to });
       res.json(result);
     } catch (err) {
       console.error("[admin] list error", err);
