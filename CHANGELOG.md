@@ -2,6 +2,29 @@
 
 Tous les changements notables de ce projet seront documentés dans ce fichier.
 
+## [2026-05-03] — Filtres admin, funnel PostHog, test automatisé identité
+
+### 🔍 Filtres + export CSV/PDF dans la console admin (tâche #6) — prévu
+- Ajout de filtres par date (période), par prénom et par statut dans la liste des sessions `/admin/sessions`.
+- Bouton "Exporter CSV" → fichier avec colonnes `session_id`, prénom, date, nombre de messages, pour analyse hors-ligne.
+- Bouton "Exporter PDF" (vue détail session) → résumé de la conversation avec en-tête pédagogique, pour archivage.
+- Aucune donnée personnelle supplémentaire collectée — uniquement ce qui est déjà en base.
+- Statut : **prévu** — en attente d'exécution.
+
+### 📊 Funnel PostHog + dashboard métriques (tâche #7) — prévu
+- Funnel PostHog `aventure_demarree → identity_captured → peter_replied` pour mesurer le taux de complétion du parcours élève bout en bout.
+- Dashboard PostHog dédié avec métriques clés : sessions démarrées / complétées, durée moyenne, nombre de messages par session, taux de drop.
+- Aucun event supplémentaire nécessaire — tous les events critiques sont déjà trackés depuis la tâche #5.
+- Statut : **prévu** — en attente d'exécution.
+
+### 🧪 Test automatisé parcours identité — Playwright e2e (tâche #8) — en cours
+- Suite de tests e2e Playwright couvrant le parcours complet : chargement landing → démarrage session → envoi prénom → vérification `PATCH /api/sessions/:id` → confirmation lisibilité via `GET /api/admin/sessions/:id`.
+- Test unitaire sur `updateSessionFirstName()` pour valider l'idempotence (une seule mise à jour par session).
+- CI-ready : mode `headless`, réutilise `DATABASE_URL` de test.
+- Statut : **en cours**.
+
+---
+
 ## [2026-05-03] — Suppression formulaire landing : prénom capturé en conversation
 
 ### 🎯 Changement UX
