@@ -10,8 +10,7 @@ const PAGE_SIZE = 50;
 
 interface SessionRow {
   id: string;
-  firstName: string;
-  lastName: string;
+  firstName: string | null;
   createdAt: string;
   messageCount: number;
 }
@@ -160,7 +159,6 @@ export default function AdminSessionsPage() {
               <tr>
                 <th className="text-left px-4 py-2">Date</th>
                 <th className="text-left px-4 py-2">Prénom</th>
-                <th className="text-left px-4 py-2">Nom</th>
                 <th className="text-right px-4 py-2">Messages</th>
                 <th className="text-left px-4 py-2">ID</th>
                 <th className="px-4 py-2"></th>
@@ -169,14 +167,14 @@ export default function AdminSessionsPage() {
             <tbody>
               {data === null && !loading && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-gray-500">
+                  <td colSpan={5} className="px-4 py-6 text-center text-gray-500">
                     Aucune donnée chargée.
                   </td>
                 </tr>
               )}
               {data && data.items.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-gray-500">
+                  <td colSpan={5} className="px-4 py-6 text-center text-gray-500">
                     Aucune conversation enregistrée pour le moment.
                   </td>
                 </tr>
@@ -186,8 +184,7 @@ export default function AdminSessionsPage() {
                   <td className="px-4 py-2 whitespace-nowrap">
                     {new Date(s.createdAt).toLocaleString("fr-FR")}
                   </td>
-                  <td className="px-4 py-2">{s.firstName}</td>
-                  <td className="px-4 py-2">{s.lastName}</td>
+                  <td className="px-4 py-2">{s.firstName ?? <span className="text-gray-400 italic">inconnu</span>}</td>
                   <td className="px-4 py-2 text-right tabular-nums" data-testid={`count-session-${s.id}`}>
                     {s.messageCount}
                   </td>

@@ -26,7 +26,8 @@ export interface IStorage {
   logAnalyticsEvent(event: AnalyticsEvent): Promise<void>;
 
   // Conversations persistées
-  createConversationSession(input: InsertConversationSession): Promise<ConversationSession>;
+  createConversationSession(input?: InsertConversationSession): Promise<ConversationSession>;
+  updateConversationSessionFirstName(id: string, firstName: string): Promise<void>;
   appendConversationMessage(input: InsertConversationMessage): Promise<ConversationMessage>;
   listConversationSessions(opts?: { page?: number; pageSize?: number }): Promise<SessionListPage>;
   getConversationSession(id: string): Promise<ConversationSession | null>;
@@ -43,13 +44,20 @@ export class DbStorage implements IStorage {
   }
 
   async createConversationSession(
-    input: InsertConversationSession,
+    input: InsertConversationSession = {},
   ): Promise<ConversationSession> {
     const [row] = await db
       .insert(conversationSessions)
       .values(input)
       .returning();
     return row;
+  }
+
+  async updateConversationSessionFirstName(id: string, firstName: string): Promise<void> {
+    await db
+      .update(conversationSessions)
+      .set({ firstName: firstName.trim().slice(0, 80) })
+      .where(eq(conversationSessions.id, id));
   }
 
   async appendConversationMessage(
@@ -71,7 +79,6 @@ export class DbStorage implements IStorage {
       .select({
         id: conversationSessions.id,
         firstName: conversationSessions.firstName,
-        lastName: conversationSessions.lastName,
         createdAt: conversationSessions.createdAt,
         messageCount: sql<number>`COALESCE(COUNT(${conversationMessages.id}), 0)::int`,
       })

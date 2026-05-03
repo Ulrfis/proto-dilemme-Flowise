@@ -15,8 +15,7 @@ interface MsgRow {
 interface SessionDetail {
   session: {
     id: string;
-    firstName: string;
-    lastName: string;
+    firstName: string | null;
     createdAt: string;
   };
   messages: MsgRow[];
@@ -76,7 +75,7 @@ export default function AdminSessionDetailPage() {
           <>
             <header className="bg-white rounded-xl shadow p-4 mb-4">
               <h1 className="text-xl font-semibold">
-                {data.session.firstName} {data.session.lastName}
+                {data.session.firstName ?? <span className="text-gray-400 italic font-normal">Prénom inconnu</span>}
               </h1>
               <p className="text-sm text-gray-500">
                 Démarré le{" "}

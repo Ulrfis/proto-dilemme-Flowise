@@ -435,18 +435,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/sessions", async (req, res) => {
     try {
-      const parsed = insertConversationSessionSchema.parse({
-        firstName: String(req.body?.firstName ?? "").trim().slice(0, 80),
-        lastName: String(req.body?.lastName ?? "").trim().slice(0, 80),
-      });
-      if (!parsed.firstName || !parsed.lastName) {
-        return res.status(400).json({ error: "firstName et lastName requis" });
-      }
-      const session = await storage.createConversationSession(parsed);
+      // Session anonyme — le prénom sera mis à jour via PATCH quand Peter le recueille.
+      const session = await storage.createConversationSession({});
       res.status(201).json({ id: session.id, createdAt: session.createdAt });
     } catch (err) {
       console.error("[sessions] create error", err);
-      res.status(400).json({ error: "Données invalides" });
+      res.status(500).json({ error: "Création de session échouée" });
+    }
+  });
+
+  app.patch("/api/sessions/:id", async (req, res) => {
+    try {
+      const sessionId = req.params.id;
+      const firstName = String(req.body?.firstName ?? "").trim().slice(0, 80);
+      if (!firstName) return res.status(400).json({ error: "firstName requis" });
+      const exists = await storage.getConversationSession(sessionId);
+      if (!exists) return res.status(404).json({ error: "session introuvable" });
+      await storage.updateConversationSessionFirstName(sessionId, firstName);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[sessions] patch error", err);
+      res.status(500).json({ error: "Mise à jour échouée" });
     }
   });
 

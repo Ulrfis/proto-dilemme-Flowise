@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { ChatMessage } from "../types/chat";
 import { FlowiseClient, extractMediaFromText, type FlowiseProgressLabel } from "../lib/flowise";
 import { analytics } from "../lib/analytics";
-import { recordMessage } from "../lib/conversation-session";
+import { recordMessage, updateSessionFirstName } from "../lib/conversation-session";
 import { PETER_WELCOME_MESSAGE, PETER_INTRO_MESSAGE } from "../../../shared/welcome-message";
 
 // Token batching configuration for smoother streaming
@@ -74,6 +74,14 @@ export function useFlowise(
     setCurrentStepLabel("Peter prépare sa réponse…");
     setTimeout(() => analytics.trackMessageSent(content.length), 0);
     void recordMessage("user", userMessage.content);
+
+    // Capture du prénom : le premier message de l'élève après le message
+    // de bienvenue est vraisemblablement sa réponse à "quel est ton prénom ?".
+    // On ne prend que les messages courts (≤40 chars) pour éviter de stocker
+    // une vraie réponse par erreur. updateSessionFirstName est idempotent.
+    if (content.trim().length <= 40) {
+      void updateSessionFirstName(content.trim());
+    }
 
     const peterMessageId = `peter_${Date.now()}`;
     const peterMessage: ChatMessage = {
