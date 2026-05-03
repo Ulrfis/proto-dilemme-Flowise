@@ -39,13 +39,13 @@ export const flowiseResponseSchema = z.object({
 export type FlowiseResponse = z.infer<typeof flowiseResponseSchema>;
 
 // ─── Persistance Postgres ───────────────────────────────────────────────────
-// Une session = un binôme prénom/nom + un fil de messages.
-// Volontairement simple : pas de updatedAt, pas de soft-delete.
+// Une session = un ID unique + un prénom optionnel (capturé en conversation).
+// Le prénom est renseigné plus tard via PATCH quand Peter le recueille.
+// Volontairement simple : pas de updatedAt, pas de soft-delete, pas de nom.
 
 export const conversationSessions = pgTable("conversation_sessions", {
   id: uuid("id").defaultRandom().primaryKey(),
-  firstName: text("first_name").notNull(),
-  lastName: text("last_name").notNull(),
+  firstName: text("first_name"),          // nullable — mis à jour en cours de conv
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

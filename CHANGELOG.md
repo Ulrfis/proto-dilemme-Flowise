@@ -2,6 +2,21 @@
 
 Tous les changements notables de ce projet seront documentés dans ce fichier.
 
+## [2026-05-03] — Suppression formulaire landing : prénom capturé en conversation
+
+### 🎯 Changement UX
+- Formulaire prénom/nom retiré de la landing page. Retour au bouton simple "Démarrer l'aventure !".
+- Le prénom est capturé automatiquement pendant la conversation : quand l'élève envoie un message court (≤ 40 chars, typiquement sa réponse à "quel est ton prénom ?"), `updateSessionFirstName()` met à jour la session en base via `PATCH /api/sessions/:id`. Idempotent — une seule mise à jour par session.
+- Pas de nom de famille — seulement le prénom et l'ID de session.
+
+### 🗃️ Schéma simplifié
+- `conversation_sessions` : `id` UUID, `first_name` TEXT nullable (pas de `last_name`), `created_at`.
+- `POST /api/sessions {}` — session anonyme, aucun champ requis.
+- `PATCH /api/sessions/:id {firstName}` — nouveau endpoint pour mettre à jour le prénom.
+- Console admin : colonne "Prénom" affiche "inconnu" si null, pas de colonne Nom.
+
+---
+
 ## [2026-05-02] — Persistance Postgres + PostHog
 
 ### 🗃️ Conversations stockées en base
