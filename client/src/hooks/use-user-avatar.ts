@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
 interface UserAvatarState {
   name: string;
@@ -68,15 +68,6 @@ export function useUserAvatar() {
     }
   };
 
-  // Effect to ensure avatar URL is always correctly generated
-  useEffect(() => {
-    if (userAvatar.name && userAvatar.gender) {
-      const expectedUrl = generateAvatarUrl(userAvatar.name, userAvatar.gender);
-      if (userAvatar.avatarUrl !== expectedUrl) {
-        updateAvatar(userAvatar.name, userAvatar.gender, expectedUrl);
-      }
-    }
-  }, [userAvatar.name, userAvatar.gender, userAvatar.avatarUrl]);
 
   return {
     ...userAvatar,
