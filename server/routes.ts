@@ -1,5 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import { Readability } from "@mozilla/readability";
+import { JSDOM } from "jsdom";
 import {
   analyticsEventSchema,
   insertConversationSessionSchema,
@@ -536,6 +538,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Rotating User-Agent pool for anti-bot evasion
+  const PROXY_USER_AGENTS = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  ];
+
+  function buildProxyHeaders(): Record<string, string> {
+    const ua = PROXY_USER_AGENTS[Math.floor(Math.random() * PROXY_USER_AGENTS.length)];
+    return {
+      'User-Agent': ua,
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+      'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Referer': 'https://www.google.com/',
+      'Cookie': '',
+      'DNT': '1',
+      'Connection': 'keep-alive',
+      'Upgrade-Insecure-Requests': '1',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'cross-site',
+      'Cache-Control': 'max-age=0',
+    };
+  }
+
+  async function fetchWithRetry(url: string, maxAttempts = 3): Promise<Response> {
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      if (attempt > 0) {
+        const delay = Math.pow(2, attempt - 1) * 1000; // 1s, 2s
+        await new Promise(r => setTimeout(r, delay));
+      }
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 20000);
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: buildProxyHeaders(),
+          redirect: 'follow',
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        console.log(`[Proxy] Attempt ${attempt + 1}: HTTP ${response.status} for ${url}`);
+        if (response.status === 429 || response.status === 503) {
+          lastError = new Error(`HTTP ${response.status}: ${response.statusText}`);
+          continue; // retry
+        }
+        return response;
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        console.warn(`[Proxy] Attempt ${attempt + 1} failed: ${lastError.message}`);
+      }
+    }
+    throw lastError ?? new Error('All retry attempts failed');
+  }
+
   // Web content proxy endpoint to bypass CORS and X-Frame-Options
   app.get("/api/proxy", async (req, res) => {
     try {
@@ -575,26 +636,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log(`[Proxy] Fetching: ${url}`);
 
-      // Enhanced headers to maximize compatibility
-      const headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-        'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'DNT': '1',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Cache-Control': 'max-age=0'
-      };
-
-      const response = await fetch(url, {
-        method: 'GET',
-        headers,
-        redirect: 'follow'
-      });
+      const response = await fetchWithRetry(url);
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -644,6 +686,90 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ 
         error: "Failed to proxy content",
         details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Reader mode endpoint: extracts clean article content using Readability
+  app.get("/api/reader", async (req, res) => {
+    try {
+      const { url } = req.query;
+
+      if (!url || typeof url !== 'string') {
+        return res.status(400).json({ error: "URL parameter is required" });
+      }
+
+      let parsedUrl: URL;
+      try {
+        parsedUrl = new URL(url);
+      } catch {
+        return res.status(400).json({ error: "Invalid URL format" });
+      }
+
+      if (parsedUrl.protocol !== 'https:') {
+        return res.status(400).json({ error: "Only HTTPS URLs are allowed" });
+      }
+
+      if (isPrivateIP(parsedUrl.hostname)) {
+        return res.status(403).json({ error: "Access to internal addresses is not allowed" });
+      }
+
+      console.log(`[Reader] Fetching: ${url}`);
+
+      const response = await fetchWithRetry(url);
+
+      if (!response.ok) {
+        return res.status(response.status).json({
+          error: `Upstream returned ${response.status}`,
+          details: response.statusText,
+        });
+      }
+
+      const html = await response.text();
+
+      // Parse with JSDOM and extract with Readability
+      const dom = new JSDOM(html, { url });
+      const reader = new Readability(dom.window.document);
+      const article = reader.parse();
+
+      if (!article || !article.content) {
+        return res.status(422).json({ error: "Could not extract article content" });
+      }
+
+      // Rewrite relative image URLs to absolute (use full page URL as base, not just origin)
+      const withAbsoluteImages = article.content.replace(
+        /(<img[^>]+src=["'])(?!https?:\/\/)([^"']+)(["'])/gi,
+        (match, prefix, src, suffix) => {
+          try {
+            const abs = new URL(src, url).href;
+            return `${prefix}${abs}${suffix}`;
+          } catch {
+            return match;
+          }
+        }
+      );
+
+      // Strip dangerous attributes server-side: event handlers and javascript: URLs.
+      // Readability already removes <script> tags; this cleans up inline vectors.
+      const content = withAbsoluteImages
+        // Remove all event handler attributes (onerror="…", onclick="…", etc.)
+        .replace(/\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*)/gi, '')
+        // Replace javascript: scheme in href/src/action with a safe placeholder
+        .replace(/((?:href|src|action)\s*=\s*["'])javascript:[^"']*(?=["'])/gi, '$1#');
+
+      res.json({
+        title: article.title,
+        content,
+        byline: article.byline,
+        siteName: article.siteName || parsedUrl.hostname,
+        excerpt: article.excerpt,
+      });
+
+    } catch (error) {
+      console.error("[Reader] Error:", error);
+      res.status(500).json({
+        error: "Failed to extract article",
+        details: error instanceof Error ? error.message : String(error),
       });
     }
   });

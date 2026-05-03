@@ -1,20 +1,74 @@
 import { useState, useEffect, useRef } from "react";
+import DOMPurify from "dompurify";
 import { Button } from "@/components/ui/button";
-import { ExternalLink, RefreshCw, AlertCircle } from "lucide-react";
+import { ExternalLink, RefreshCw, AlertCircle, Globe, BookOpen, Archive } from "lucide-react";
 import { MediaItem } from "../../types/chat";
 
 interface WebViewProps {
   webpage: MediaItem | null;
 }
 
+type ViewMode = 'proxy' | 'reader' | 'archive' | 'error';
+
+interface ReaderData {
+  title: string;
+  content: string;
+  byline?: string;
+  siteName?: string;
+  excerpt?: string;
+}
+
+function ReaderView({ title, content, byline, siteName, sourceUrl }: ReaderData & { sourceUrl: string }) {
+  return (
+    <div className="w-full h-full overflow-y-auto bg-white p-6">
+      <div className="max-w-2xl mx-auto">
+        <div className="text-xs text-gray-400 uppercase tracking-wide mb-3 flex items-center gap-1">
+          <BookOpen className="w-3 h-3" />
+          {siteName || (() => { try { return new URL(sourceUrl).hostname; } catch { return sourceUrl; } })()}
+        </div>
+        <h1 className="text-2xl font-bold text-gray-900 leading-tight mb-3">{title}</h1>
+        {byline && (
+          <p className="text-sm text-gray-500 mb-4">{byline}</p>
+        )}
+        <hr className="border-gray-200 mb-6" />
+        <div
+          className="prose prose-sm max-w-none text-gray-800 leading-relaxed
+            [&_img]:max-w-full [&_img]:h-auto [&_img]:rounded [&_img]:my-4
+            [&_p]:mb-4 [&_h2]:text-xl [&_h2]:font-bold [&_h2]:mt-6 [&_h2]:mb-3
+            [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:mt-4 [&_h3]:mb-2
+            [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-4 [&_li]:mb-1
+            [&_a]:text-blue-600 [&_a]:underline [&_blockquote]:border-l-4
+            [&_blockquote]:border-gray-300 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:text-gray-600"
+          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(content, { USE_PROFILES: { html: true } }) }}
+        />
+      </div>
+    </div>
+  );
+}
+
+const MODE_LABELS: Record<ViewMode, { icon: React.ReactNode; label: string; color: string }> = {
+  proxy:   { icon: <Globe className="w-3 h-3" />,    label: "🌐 Proxy",   color: "bg-blue-100 text-blue-700" },
+  reader:  { icon: <BookOpen className="w-3 h-3" />, label: "📖 Lecteur", color: "bg-green-100 text-green-700" },
+  archive: { icon: <Archive className="w-3 h-3" />,  label: "🗄️ Archive", color: "bg-purple-100 text-purple-700" },
+  error:   { icon: <AlertCircle className="w-3 h-3" />, label: "Erreur", color: "bg-red-100 text-red-700" },
+};
+
+const LOADING_MESSAGES: Record<ViewMode, string> = {
+  proxy:   "Chargement via proxy…",
+  reader:  "Extraction du contenu…",
+  archive: "Chargement depuis l'archive…",
+  error:   "",
+};
+
 export function WebView({ webpage }: WebViewProps) {
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const [proxyError, setProxyError] = useState<{ status: number; message: string } | null>(null);
-  const [mode, setMode] = useState<'proxy' | 'fallback'>('proxy');
-  const [retryCount, setRetryCount] = useState(0);
+  const [mode, setMode] = useState<ViewMode>('proxy');
+  const [readerData, setReaderData] = useState<ReaderData | null>(null);
+  const [finalError, setFinalError] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const timeoutRef = useRef<NodeJS.Timeout>();
+  const modeRef = useRef<ViewMode>('proxy');
 
   const handleExternalOpen = () => {
     if (webpage) {
@@ -22,61 +76,84 @@ export function WebView({ webpage }: WebViewProps) {
     }
   };
 
-  const resetAndRetry = () => {
+  const setModeAndRef = (m: ViewMode) => {
+    modeRef.current = m;
+    setMode(m);
+  };
+
+  const tryReaderMode = async (url: string) => {
+    setModeAndRef('reader');
     setLoading(true);
-    setError(false);
-    setRetryCount(prev => prev + 1);
-    
-    // Only try fallback mode on retry
-    if (retryCount === 0) {
-      setMode('fallback');
-    } else {
-      setMode('proxy');
-      setRetryCount(0);
+    const ctrl = new AbortController();
+    const readerTimeout = setTimeout(() => ctrl.abort(), 15000);
+    try {
+      const resp = await fetch(`/api/reader?url=${encodeURIComponent(url)}`, { signal: ctrl.signal });
+      clearTimeout(readerTimeout);
+      if (resp.ok) {
+        const data: ReaderData = await resp.json();
+        setReaderData(data);
+        setLoading(false);
+      } else {
+        console.warn('[WebView] Reader mode failed, trying archive');
+        tryArchiveMode();
+      }
+    } catch (err) {
+      clearTimeout(readerTimeout);
+      console.warn('[WebView] Reader mode error:', err);
+      tryArchiveMode();
     }
   };
 
-  // Reset on URL change + proactively probe the proxy. The iframe's `onError`
-  // never fires when the proxy returns a JSON error body with HTTP 4xx/5xx
-  // (the iframe sees a "successful" response and renders the JSON as text).
-  // To give a clean UX we GET /api/proxy ourselves: response is cached for
-  // 5 min server-side so the subsequent iframe load reuses it for free.
+  const tryArchiveMode = () => {
+    setModeAndRef('archive');
+    setLoading(true);
+    setReaderData(null);
+    // Set a timeout — if iframe doesn't load in 15s, show final error
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => {
+      if (modeRef.current === 'archive') {
+        console.warn('[WebView] Archive timeout, showing final error');
+        setModeAndRef('error');
+        setFinalError(true);
+        setLoading(false);
+      }
+    }, 15000);
+  };
+
+  // Main cascade entry: probe proxy, then fall through reader → archive → error
   useEffect(() => {
     if (!webpage) return;
+
     setLoading(true);
-    setError(false);
-    setProxyError(null);
-    setMode('proxy');
-    setRetryCount(0);
+    setFinalError(false);
+    setReaderData(null);
+    setModeAndRef('proxy');
+
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
 
     const ctrl = new AbortController();
+
+    // Probe the proxy first. We do a HEAD-like GET so the response is cached.
     const proxyUrl = `/api/proxy?url=${encodeURIComponent(webpage.url)}`;
     fetch(proxyUrl, { signal: ctrl.signal })
       .then(async (res) => {
         if (!res.ok) {
-          let msg = `HTTP ${res.status}`;
-          try {
-            const body = await res.json();
-            if (body?.details) msg = body.details;
-            else if (body?.error) msg = body.error;
-          } catch { /* ignore */ }
-          console.warn(`[WebView] Proxy probe failed: ${msg}`);
-          setProxyError({ status: res.status, message: msg });
-          setLoading(false);
+          console.warn(`[WebView] Proxy probe failed HTTP ${res.status}, trying reader`);
+          tryReaderMode(webpage.url);
         }
+        // If OK, the iframe will handle the rest via onLoad
       })
       .catch((err) => {
         if (err.name === 'AbortError') return;
         console.warn('[WebView] Proxy probe network error:', err);
-        setProxyError({ status: 0, message: String(err.message || err) });
-        setLoading(false);
+        tryReaderMode(webpage.url);
       });
 
+    // Proxy iframe timeout fallback
     timeoutRef.current = setTimeout(() => {
-      if (loading) {
-        console.log('[WebView] Loading timeout, trying fallback mode');
-        setMode('fallback');
-        setRetryCount(1);
+      if (modeRef.current === 'proxy') {
+        console.warn('[WebView] Proxy iframe timeout, trying reader');
+        tryReaderMode(webpage.url);
       }
     }, 15000);
 
@@ -84,21 +161,32 @@ export function WebView({ webpage }: WebViewProps) {
       ctrl.abort();
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
-  }, [webpage?.url]);
+  }, [webpage?.url, retryKey]);
 
   const handleIframeLoad = () => {
-    setLoading(false);
-    setError(false);
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
+    if (modeRef.current === 'proxy' || modeRef.current === 'archive') {
+      setLoading(false);
+      setFinalError(false);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
     }
   };
 
   const handleIframeError = () => {
-    console.log('[WebView] Proxy failed, trying fallback mode');
-    setLoading(false);
-    setError(true);
-    setMode('fallback');
+    if (modeRef.current === 'proxy') {
+      console.warn('[WebView] Proxy iframe error, trying reader');
+      if (webpage) tryReaderMode(webpage.url);
+    } else if (modeRef.current === 'archive') {
+      console.warn('[WebView] Archive iframe error, showing final error');
+      setModeAndRef('error');
+      setFinalError(true);
+      setLoading(false);
+    }
+  };
+
+  const resetAll = () => {
+    if (!webpage) return;
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    setRetryKey(prev => prev + 1);
   };
 
   if (!webpage) {
@@ -121,46 +209,45 @@ export function WebView({ webpage }: WebViewProps) {
   }
 
   const getIframeSrc = () => {
-    switch (mode) {
-      case 'proxy':
-        return `/api/proxy?url=${encodeURIComponent(webpage.url)}`;
-      case 'fallback':
-        // Use Google Cache as fallback
-        return `https://webcache.googleusercontent.com/search?q=cache:${encodeURIComponent(webpage.url)}`;
-      default:
-        return webpage.url;
+    if (mode === 'proxy') {
+      return `/api/proxy?url=${encodeURIComponent(webpage.url)}`;
     }
+    if (mode === 'archive') {
+      return `https://web.archive.org/web/2/${webpage.url}`;
+    }
+    return '';
   };
 
-  const getSandboxAttributes = () => {
-    // Use safer sandbox attributes for proxy mode
-    return "allow-scripts allow-same-origin allow-forms allow-popups allow-modals";
-  };
+  const modeInfo = MODE_LABELS[mode];
+
+  const showIframe = (mode === 'proxy' || mode === 'archive') && !finalError;
 
   return (
     <div className="h-full flex flex-col">
+      {/* URL bar */}
       <div className="mb-2 p-2 bg-white border border-gray-200 rounded-lg shadow-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2 flex-1 min-w-0">
             <svg className="w-4 h-4 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
             </svg>
-            <span 
+            <span
               className="text-gray-700 truncate text-sm font-medium"
               data-testid="text-webview-url"
               title={webpage.url}
             >
               {webpage.url}
             </span>
-            <span className="text-xs text-gray-500 bg-gray-100 px-1 py-0.5 rounded">
-              {mode}
+            <span className={`text-xs px-1.5 py-0.5 rounded flex items-center gap-1 flex-shrink-0 ${modeInfo.color}`}>
+              {modeInfo.icon}
+              {modeInfo.label}
             </span>
           </div>
-          <div className="flex items-center space-x-1">
+          <div className="flex items-center space-x-1 ml-2">
             <Button
               size="sm"
               variant="outline"
-              onClick={resetAndRetry}
+              onClick={resetAll}
               data-testid="button-retry"
               className="bg-green-50 text-green-600 border-green-200 hover:bg-green-100 flex-shrink-0 h-8 px-2"
             >
@@ -180,9 +267,36 @@ export function WebView({ webpage }: WebViewProps) {
           </div>
         </div>
       </div>
-      
-      <div className="flex-1 relative min-h-[500px]">
-        {proxyError && (
+
+      {/* Content area */}
+      <div className="flex-1 relative min-h-[500px] overflow-hidden">
+        {/* Loading overlay */}
+        {loading && !finalError && (
+          <div className="absolute inset-0 flex items-center justify-center bg-gray-50 rounded-lg z-10">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3"></div>
+              <div className="text-gray-600 font-medium">{LOADING_MESSAGES[mode]}</div>
+              <div className="flex items-center justify-center gap-3 mt-3">
+                {(['proxy', 'reader', 'archive'] as ViewMode[]).map((m) => (
+                  <div
+                    key={m}
+                    className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full transition-all ${
+                      m === mode
+                        ? MODE_LABELS[m].color + ' font-semibold'
+                        : 'text-gray-300'
+                    }`}
+                  >
+                    {MODE_LABELS[m].icon}
+                    {m.charAt(0).toUpperCase() + m.slice(1)}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Final error state */}
+        {finalError && (
           <div className="absolute inset-0 flex items-center justify-center bg-amber-50 border border-amber-200 rounded-lg z-20 p-6">
             <div className="text-center max-w-md">
               <AlertCircle className="w-12 h-12 text-amber-500 mx-auto mb-3" />
@@ -190,8 +304,8 @@ export function WebView({ webpage }: WebViewProps) {
                 Cet article ne peut pas s'afficher ici
               </div>
               <div className="text-amber-700 text-sm mb-4">
-                Le site <strong>{(() => { try { return new URL(webpage.url).hostname; } catch { return webpage.url; } })()}</strong> refuse l'affichage intégré
-                {proxyError.status ? ` (erreur ${proxyError.status})` : ''}. Vous pouvez l'ouvrir dans un nouvel onglet pour le consulter.
+                Le site <strong>{(() => { try { return new URL(webpage.url).hostname; } catch { return webpage.url; } })()}</strong> bloque l'affichage intégré.
+                Le proxy, l'extraction et l'archive ont tous échoué.
               </div>
               <Button
                 onClick={handleExternalOpen}
@@ -205,39 +319,22 @@ export function WebView({ webpage }: WebViewProps) {
           </div>
         )}
 
-        {loading && !error && !proxyError && (
-          <div className="absolute inset-0 flex items-center justify-center bg-gray-50 rounded-lg z-10">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3"></div>
-              <div className="text-gray-500">Chargement de l'article... ({mode})</div>
-              {retryCount > 0 && (
-                <div className="text-xs text-gray-400 mt-1">Tentative {retryCount + 1}/3</div>
-              )}
-            </div>
+        {/* Reader view */}
+        {mode === 'reader' && readerData && !loading && (
+          <div className="absolute inset-0 rounded-lg overflow-hidden border border-gray-200 shadow-lg">
+            <ReaderView {...readerData} sourceUrl={webpage.url} />
           </div>
         )}
-        
-        {error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-red-50 rounded-lg z-10">
-            <div className="text-center">
-              <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-3" />
-              <div className="text-red-600 font-medium mb-2">Contenu bloqué</div>
-              <div className="text-red-500 text-sm mb-4">Le site refuse l'affichage intégré</div>
-              <Button onClick={resetAndRetry} variant="outline" size="sm">
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Essayer un autre mode
-              </Button>
-            </div>
-          </div>
-        )}
-        
-        {!proxyError && (
+
+        {/* Iframe for proxy and archive modes */}
+        {showIframe && (
           <iframe
+            key={`${mode}-${webpage.url}`}
             ref={iframeRef}
             src={getIframeSrc()}
             className="w-full h-full border border-gray-200 rounded-lg shadow-lg"
             title="Webview"
-            sandbox={getSandboxAttributes()}
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
             onLoad={handleIframeLoad}
             onError={handleIframeError}
             data-testid="iframe-webview"
