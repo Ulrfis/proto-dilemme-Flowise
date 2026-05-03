@@ -3,7 +3,7 @@
 > **Status**: 🟡 In Progress  
 > **Creator**: Ulrich Fischer  
 > **Started**: 2025-11-06  
-> **Last Updated**: 2026-05-02 (Persistance Postgres + PostHog — conversations relisibles, analytics produit)  
+> **Last Updated**: 2026-05-03 (Tests automatisés parcours identité + roadmap filtres admin / analytics PostHog)  
 
 ---
 
@@ -112,6 +112,45 @@ How Peter helps: Conversational guide who asks questions, shares surprising fact
 **Secrets ajoutés** : `ADMIN_PASSWORD`, `VITE_POSTHOG_KEY`, `VITE_POSTHOG_HOST`.
 
 **Pulse Check trigger** : oui (voir section ci-dessous).
+
+---
+
+### [2026-05-03] — Filtres + export CSV/PDF dans la console admin 🔷
+
+**Intent** : La console admin liste toutes les sessions mais ne permet ni de filtrer par date ou par élève, ni d'en extraire les données. Pour qu'Ulrich puisse analyser les conversations après une classe (comparer les niveaux, archiver les échanges), il lui faut des filtres opérationnels et un export en format exploitable — CSV pour le tableur, PDF pour l'archive pédagogique.
+
+**What is planned** :
+- Filtres par date (période), par prénom et par statut (session complète / interrompue) dans `/admin/sessions`.
+- Bouton "Exporter CSV" → fichier avec colonnes `session_id`, prénom, date, nombre de messages, pour analyse hors-ligne (Excel, Google Sheets).
+- Bouton "Exporter PDF" depuis la vue détail session → résumé de la conversation avec en-tête pédagogique, pour archivage ou partage avec les parents.
+- Aucune donnée personnelle supplémentaire collectée — uniquement ce qui est déjà en base.
+
+**Why it matters** : Une liste brute de 30 sessions sans filtre ni export est une console de développeur, pas un outil enseignant. Avec ces ajouts, Ulrich peut en deux clics sortir le compte-rendu de session d'un élève ou exporter toute une classe pour un rapport.
+
+**Files** : `client/src/pages/admin-sessions.tsx`, `client/src/pages/admin-session-detail.tsx`, `server/routes.ts`.
+
+---
+
+### [2026-05-03] — Funnel PostHog + dashboard métriques 🔹
+
+- **Funnel** `aventure_demarree → identity_captured → peter_replied` configuré dans PostHog pour mesurer le taux de complétion du parcours élève bout en bout — sans event supplémentaire, tous sont déjà trackés depuis la tâche #5.
+- **Dashboard PostHog** dédié avec métriques clés : sessions démarrées / complétées, durée moyenne par session, nombre de messages par session, taux de drop entre les étapes.
+- Permet de détecter les points de friction (élèves qui démarrent mais n'écrivent jamais à Peter) et d'itérer sur l'UX avec des données réelles plutôt que des intuitions.
+
+---
+
+### [2026-05-03] — Test automatisé parcours identité — Playwright e2e 🔷
+
+**Intent** : Le parcours identité (session anonyme → capture prénom en conversation → persistance en base) est le chemin critique de l'app. Il n'est couvert par aucun test automatisé — chaque refacto se valide à la main. Objectif : un test e2e Playwright qui rejoue le parcours complet et échoue explicitement si la persistance ou l'idempotence est cassée.
+
+**What is planned** :
+- Scénario Playwright couvrant : chargement landing → clic "Démarrer l'aventure !" → envoi d'un message court (prénom) → vérification que `PATCH /api/sessions/:id` est bien appelé → confirmation que la session est lisible via `GET /api/admin/sessions/:id` avec le prénom attendu.
+- Test unitaire sur `updateSessionFirstName()` pour valider l'idempotence : un second envoi de prénom ne déclenche pas de second `PATCH`.
+- CI-ready : mode `headless`, réutilise `DATABASE_URL` de test.
+
+**Why it matters** : Sans test automatisé, une modification du flow de capture prénom peut casser silencieusement la persistance — on ne le découvre qu'après une vraie session classe. Un test e2e qui couvre ce parcours donne la confiance de refactorer sans régression et documente le comportement attendu pour le prochain contributeur.
+
+**Files** : `tests/e2e/identity-flow.spec.ts` (nouveau), `client/src/lib/conversation-session.ts`, `server/routes.ts`.
 
 ---
 
