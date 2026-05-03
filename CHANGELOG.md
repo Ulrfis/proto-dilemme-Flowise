@@ -2,6 +2,30 @@
 
 Tous les changements notables de ce projet seront documentés dans ce fichier.
 
+## [2026-05-03] — Filtres admin, funnel PostHog, test automatisé identité
+
+### 🔍 Filtres + export CSV/PDF dans la console admin (tâche #6) — livré
+- **Filtres serveur** sur `GET /api/admin/sessions` : `q` (recherche prénom, `ILIKE %q%`), `from` / `to` (bornes ISO sur `created_at`, `gte` / `lte`). `listConversationSessions()` (`server/storage.ts`) compose les filtres avec `and(...)`, conserve la pagination (`page` / `pageSize`, max 200) et renvoie le `total` filtré pour piloter la pagination côté UI.
+- **Barre de filtres** dans `/admin/sessions` (`client/src/pages/admin-sessions.tsx`) : champ de recherche prénom (avec icône Search, déclenchement à `onBlur` + `Enter`), deux date-pickers natifs Depuis / Jusqu'à (convertis en ISO `T00:00:00` / `T23:59:59.999`), bouton « Effacer » qui reset tout. Reload automatique via `useEffect([page, search, from, to])`. Compteur de résultats adaptatif (« 12 sessions trouvées » vs « au total »).
+- **Export CSV** depuis la vue détail session (`client/src/pages/admin-session-detail.tsx`) : bouton « CSV » (icône `Download`) → fichier `conversation-{prenom}-{id8}.csv` avec colonnes `timestamp,sender,content`. BOM UTF-8 (`\uFEFF`) pour Excel, échappement RFC 4180 (guillemets doublés, encadrement si `,`/`"`/newline) **et neutralisation d'injection de formule** (préfixe `'` sur les valeurs commençant par `=`, `+`, `-`, `@`).
+- **Export PDF** : bouton « PDF » (icône `Printer`) → ouvre une nouvelle fenêtre avec un HTML stylé (en-tête pédagogique titre + prénom + date + UUID, bulles colorées élève / Peter, `@page A4`, `page-break-inside: avoid`) puis déclenche `window.print()` après 250 ms. Pas de dépendance PDF côté serveur — l'utilisateur sauvegarde via « Imprimer → PDF ». Tous les contenus sont HTML-échappés.
+- **Statut shipped restreint** : pas de filtre « statut session complète/interrompue » (notion non modélisée en base — aucun champ `completed`). L'export CSV est par-conversation (toutes les lignes de messages) et non un résumé global de la liste — plus utile pour Ulrich qui exporte conversation par conversation.
+- Aucune donnée personnelle supplémentaire collectée — uniquement ce qui est déjà en base.
+
+### 📊 Funnel PostHog + dashboard métriques (tâche #7) — prévu
+- Funnel PostHog `aventure_demarree → identity_captured → peter_replied` pour mesurer le taux de complétion du parcours élève bout en bout.
+- Dashboard PostHog dédié avec métriques clés : sessions démarrées / complétées, durée moyenne, nombre de messages par session, taux de drop.
+- Aucun event supplémentaire nécessaire — tous les events critiques sont déjà trackés depuis la tâche #5.
+- Statut : **prévu** — en attente d'exécution.
+
+### 🧪 Test automatisé parcours identité — Playwright e2e (tâche #8) — en cours
+- Suite de tests e2e Playwright couvrant le parcours complet : chargement landing → démarrage session → envoi prénom → vérification `PATCH /api/sessions/:id` → confirmation lisibilité via `GET /api/admin/sessions/:id`.
+- Test unitaire sur `updateSessionFirstName()` pour valider l'idempotence (une seule mise à jour par session).
+- CI-ready : mode `headless`, réutilise `DATABASE_URL` de test.
+- Statut : **en cours**.
+
+---
+
 ## [2026-05-03] — Suppression formulaire landing : prénom capturé en conversation
 
 ### 🎯 Changement UX

@@ -5,7 +5,25 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { User, Shuffle } from "lucide-react";
+import { Shuffle } from "lucide-react";
+
+const AVATAR_COUNT = 18;
+
+const getAvatarGrid = (gender: 'male' | 'female'): string[] => {
+  const genderPath = gender === 'male' ? 'boy' : 'girl';
+  return Array.from({ length: AVATAR_COUNT }, (_, i) =>
+    `https://avatar.iran.liara.run/public/${genderPath}/${i + 1}`
+  );
+};
+
+const parseGridUrl = (url: string): { gender: 'male' | 'female'; index: number } | null => {
+  const match = url.match(/avatar\.iran\.liara\.run\/public\/(boy|girl)\/(\d+)$/);
+  if (!match) return null;
+  return {
+    gender: match[1] === 'boy' ? 'male' : 'female',
+    index: parseInt(match[2], 10) - 1,
+  };
+};
 
 interface AvatarSelectorProps {
   currentName: string;
@@ -22,51 +40,35 @@ export function AvatarSelector({
 }: AvatarSelectorProps) {
   const [tempName, setTempName] = useState(currentName);
   const [tempGender, setTempGender] = useState<'male' | 'female'>(currentGender);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [previewAvatarUrl, setPreviewAvatarUrl] = useState(currentAvatarUrl);
   const [isOpen, setIsOpen] = useState(false);
 
-  const generateAvatarUrl = (name: string, gender: 'male' | 'female') => {
-    if (!name.trim()) return '';
-    const genderPath = gender === 'male' ? 'boy' : 'girl';
-    return `https://avatar.iran.liara.run/public/${genderPath}?username=${encodeURIComponent(name.trim())}`;
-  };
+  const avatarGrid = getAvatarGrid(tempGender);
 
-  const generateRandomName = () => {
-    const names = [
-      'Alex', 'Jordan', 'Morgan', 'Casey', 'Riley', 'Avery', 'Quinn', 'Sage', 
-      'River', 'Rowan', 'Phoenix', 'Sage', 'Sky', 'Ocean', 'Luna', 'Nova',
-      'Aria', 'Leo', 'Maya', 'Noah', 'Emma', 'Liam', 'Sophia', 'Ethan',
-      'Isabella', 'Mason', 'Mia', 'Lucas', 'Charlotte', 'Oliver'
-    ];
-    return names[Math.floor(Math.random() * names.length)];
+  const handleThumbnailClick = (url: string, index: number) => {
+    setSelectedIndex(index);
+    setPreviewAvatarUrl(url);
   };
 
   const handleRandomAvatar = () => {
-    const randomName = generateRandomName();
-    const randomGender = Math.random() > 0.5 ? 'male' : 'female';
-    setTempName(randomName);
-    setTempGender(randomGender);
-    setPreviewAvatarUrl(generateAvatarUrl(randomName, randomGender));
-  };
-
-  const handleNameChange = (name: string) => {
-    setTempName(name);
-    if (name.trim()) {
-      setPreviewAvatarUrl(generateAvatarUrl(name, tempGender));
-    }
+    const randomIndex = Math.floor(Math.random() * AVATAR_COUNT);
+    const url = avatarGrid[randomIndex];
+    setSelectedIndex(randomIndex);
+    setPreviewAvatarUrl(url);
   };
 
   const handleGenderChange = (gender: 'male' | 'female') => {
     setTempGender(gender);
-    if (tempName.trim()) {
-      setPreviewAvatarUrl(generateAvatarUrl(tempName, gender));
-    }
+    const newGrid = getAvatarGrid(gender);
+    const targetIndex = selectedIndex ?? 0;
+    setSelectedIndex(targetIndex);
+    setPreviewAvatarUrl(newGrid[targetIndex]);
   };
 
   const handleSave = () => {
     if (tempName.trim()) {
-      const finalAvatarUrl = generateAvatarUrl(tempName, tempGender);
-      onAvatarChange(tempName.trim(), tempGender, finalAvatarUrl);
+      onAvatarChange(tempName.trim(), tempGender, previewAvatarUrl);
       setIsOpen(false);
     }
   };
@@ -78,12 +80,17 @@ export function AvatarSelector({
     setIsOpen(false);
   };
 
-  // Initialize preview when dialog opens
   useEffect(() => {
     if (isOpen) {
       setTempName(currentName);
       setTempGender(currentGender);
       setPreviewAvatarUrl(currentAvatarUrl);
+      const parsed = parseGridUrl(currentAvatarUrl);
+      if (parsed && parsed.gender === currentGender) {
+        setSelectedIndex(parsed.index);
+      } else {
+        setSelectedIndex(0);
+      }
     }
   }, [isOpen, currentName, currentGender, currentAvatarUrl]);
 
@@ -110,7 +117,7 @@ export function AvatarSelector({
           <DialogTitle>Personnaliser votre avatar</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6">
+        <div className="space-y-5">
           {/* Preview */}
           <div className="flex justify-center">
             <Avatar className="w-20 h-20">
@@ -127,7 +134,7 @@ export function AvatarSelector({
             <Input
               id="name"
               value={tempName}
-              onChange={(e) => handleNameChange(e.target.value)}
+              onChange={(e) => setTempName(e.target.value)}
               placeholder="Entrez votre nom..."
               data-testid="input-avatar-name"
             />
@@ -138,7 +145,7 @@ export function AvatarSelector({
             <Label>Style d'avatar</Label>
             <RadioGroup 
               value={tempGender} 
-              onValueChange={handleGenderChange}
+              onValueChange={(v) => handleGenderChange(v as 'male' | 'female')}
               className="flex flex-row space-x-6"
             >
               <div className="flex items-center space-x-2">
@@ -150,6 +157,35 @@ export function AvatarSelector({
                 <Label htmlFor="female">Féminin</Label>
               </div>
             </RadioGroup>
+          </div>
+
+          {/* Avatar Grid */}
+          <div className="space-y-2">
+            <Label>Choisissez un avatar</Label>
+            <div className="h-48 overflow-y-auto rounded-md border border-border p-2">
+              <div className="grid grid-cols-6 gap-2">
+                {avatarGrid.map((url, index) => (
+                  <button
+                    key={url}
+                    type="button"
+                    onClick={() => handleThumbnailClick(url, index)}
+                    className={`rounded-full focus:outline-none transition-all ${
+                      selectedIndex === index
+                        ? 'ring-2 ring-offset-2 ring-primary'
+                        : 'hover:ring-2 hover:ring-offset-2 hover:ring-muted-foreground/40'
+                    }`}
+                    aria-label={`Avatar ${index + 1}`}
+                  >
+                    <Avatar className="w-10 h-10">
+                      <AvatarImage src={url} alt={`Avatar ${index + 1}`} />
+                      <AvatarFallback className="bg-gray-200 text-gray-500 text-xs">
+                        {index + 1}
+                      </AvatarFallback>
+                    </Avatar>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
           {/* Random Button */}
