@@ -691,10 +691,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ---------------------------------------------------------------------------
+  // In-memory LRU cache for reader-mode extractions
+  // Max 50 entries, 5-minute TTL.  Bypass with ?nocache=1.
+  // ---------------------------------------------------------------------------
+  const READER_CACHE_MAX = 50;
+  const READER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+  interface ReaderCacheEntry {
+    data: object;
+    expiresAt: number;
+  }
+
+  const readerCache = new Map<string, ReaderCacheEntry>();
+
+  function readerCacheGet(key: string): object | null {
+    const entry = readerCache.get(key);
+    if (!entry) return null;
+    if (Date.now() > entry.expiresAt) {
+      readerCache.delete(key);
+      return null;
+    }
+    // Refresh LRU order: delete then re-insert
+    readerCache.delete(key);
+    readerCache.set(key, entry);
+    return entry.data;
+  }
+
+  function readerCacheSet(key: string, data: object): void {
+    // Only evict when we are truly adding a new key (not updating an existing one)
+    if (!readerCache.has(key) && readerCache.size >= READER_CACHE_MAX) {
+      const oldestKey = readerCache.keys().next().value;
+      if (oldestKey !== undefined) readerCache.delete(oldestKey);
+    }
+    readerCache.set(key, { data, expiresAt: Date.now() + READER_CACHE_TTL_MS });
+  }
+
   // Reader mode endpoint: extracts clean article content using Readability
   app.get("/api/reader", async (req, res) => {
     try {
-      const { url } = req.query;
+      const { url, nocache } = req.query;
 
       if (!url || typeof url !== 'string') {
         return res.status(400).json({ error: "URL parameter is required" });
@@ -713,6 +749,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (isPrivateIP(parsedUrl.hostname)) {
         return res.status(403).json({ error: "Access to internal addresses is not allowed" });
+      }
+
+      // Check cache unless bypassed
+      const bypassCache = nocache === '1' || nocache === 'true';
+      if (!bypassCache) {
+        const cached = readerCacheGet(url);
+        if (cached) {
+          console.log(`[Reader] Cache hit: ${url}`);
+          return res.json(cached);
+        }
       }
 
       console.log(`[Reader] Fetching: ${url}`);
@@ -758,13 +804,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Replace javascript: scheme in href/src/action with a safe placeholder
         .replace(/((?:href|src|action)\s*=\s*["'])javascript:[^"']*(?=["'])/gi, '$1#');
 
-      res.json({
+      const result = {
         title: article.title,
         content,
         byline: article.byline,
         siteName: article.siteName || parsedUrl.hostname,
         excerpt: article.excerpt,
-      });
+      };
+
+      if (!bypassCache) {
+        readerCacheSet(url, result);
+      }
+
+      res.json(result);
 
     } catch (error) {
       console.error("[Reader] Error:", error);
