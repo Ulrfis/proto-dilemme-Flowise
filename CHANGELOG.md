@@ -4,12 +4,13 @@ Tous les changements notables de ce projet seront documentés dans ce fichier.
 
 ## [2026-05-03] — Filtres admin, funnel PostHog, test automatisé identité
 
-### 🔍 Filtres + export CSV/PDF dans la console admin (tâche #6) — prévu
-- Ajout de filtres par date (période), par prénom et par statut dans la liste des sessions `/admin/sessions`.
-- Bouton "Exporter CSV" → fichier avec colonnes `session_id`, prénom, date, nombre de messages, pour analyse hors-ligne.
-- Bouton "Exporter PDF" (vue détail session) → résumé de la conversation avec en-tête pédagogique, pour archivage.
+### 🔍 Filtres + export CSV/PDF dans la console admin (tâche #6) — livré
+- **Filtres serveur** sur `GET /api/admin/sessions` : `q` (recherche prénom, `ILIKE %q%`), `from` / `to` (bornes ISO sur `created_at`, `gte` / `lte`). `listConversationSessions()` (`server/storage.ts`) compose les filtres avec `and(...)`, conserve la pagination (`page` / `pageSize`, max 200) et renvoie le `total` filtré pour piloter la pagination côté UI.
+- **Barre de filtres** dans `/admin/sessions` (`client/src/pages/admin-sessions.tsx`) : champ de recherche prénom (avec icône Search, déclenchement à `onBlur` + `Enter`), deux date-pickers natifs Depuis / Jusqu'à (convertis en ISO `T00:00:00` / `T23:59:59.999`), bouton « Effacer » qui reset tout. Reload automatique via `useEffect([page, search, from, to])`. Compteur de résultats adaptatif (« 12 sessions trouvées » vs « au total »).
+- **Export CSV** depuis la vue détail session (`client/src/pages/admin-session-detail.tsx`) : bouton « CSV » (icône `Download`) → fichier `conversation-{prenom}-{id8}.csv` avec colonnes `timestamp,sender,content`. BOM UTF-8 (`\uFEFF`) pour Excel, échappement RFC 4180 (guillemets doublés, encadrement si `,`/`"`/newline) **et neutralisation d'injection de formule** (préfixe `'` sur les valeurs commençant par `=`, `+`, `-`, `@`).
+- **Export PDF** : bouton « PDF » (icône `Printer`) → ouvre une nouvelle fenêtre avec un HTML stylé (en-tête pédagogique titre + prénom + date + UUID, bulles colorées élève / Peter, `@page A4`, `page-break-inside: avoid`) puis déclenche `window.print()` après 250 ms. Pas de dépendance PDF côté serveur — l'utilisateur sauvegarde via « Imprimer → PDF ». Tous les contenus sont HTML-échappés.
+- **Statut shipped restreint** : pas de filtre « statut session complète/interrompue » (notion non modélisée en base — aucun champ `completed`). L'export CSV est par-conversation (toutes les lignes de messages) et non un résumé global de la liste — plus utile pour Ulrich qui exporte conversation par conversation.
 - Aucune donnée personnelle supplémentaire collectée — uniquement ce qui est déjà en base.
-- Statut : **prévu** — en attente d'exécution.
 
 ### 📊 Funnel PostHog + dashboard métriques (tâche #7) — prévu
 - Funnel PostHog `aventure_demarree → identity_captured → peter_replied` pour mesurer le taux de complétion du parcours élève bout en bout.
