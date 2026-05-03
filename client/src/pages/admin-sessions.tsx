@@ -3,10 +3,10 @@ import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
+import { Loader2, RefreshCw, ChevronLeft, ChevronRight, Search, X } from "lucide-react";
 
 const TOKEN_KEY = "dilemme.adminToken";
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 100;
 
 interface SessionRow {
   id: string;
@@ -40,15 +40,28 @@ export default function AdminSessionsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Filtres
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+
+  const buildUrl = (p: number) => {
+    const params = new URLSearchParams();
+    params.set("page", String(p));
+    params.set("pageSize", String(PAGE_SIZE));
+    if (search.trim()) params.set("q", search.trim());
+    if (from) params.set("from", new Date(from + "T00:00:00").toISOString());
+    if (to) params.set("to", new Date(to + "T23:59:59.999").toISOString());
+    return `/api/admin/sessions?${params.toString()}`;
+  };
+
   const load = async (t = token, p = page) => {
     if (!t) return;
     setLoading(true);
     setError(null);
     try {
-      const res = await authFetch(
-        `/api/admin/sessions?page=${p}&pageSize=${PAGE_SIZE}`,
-        t,
-      );
+      const res = await authFetch(buildUrl(p), t);
       if (res.status === 401) {
         setError("Mot de passe invalide.");
         setData(null);
@@ -69,7 +82,20 @@ export default function AdminSessionsPage() {
   useEffect(() => {
     if (token) void load(token, page);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
+  }, [page, search, from, to]);
+
+  const applySearch = () => {
+    setSearch(searchInput);
+    setPage(1);
+  };
+
+  const clearFilters = () => {
+    setSearchInput("");
+    setSearch("");
+    setFrom("");
+    setTo("");
+    setPage(1);
+  };
 
   if (!token) {
     return (
@@ -109,6 +135,7 @@ export default function AdminSessionsPage() {
   }
 
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
+  const hasFilters = !!(search || from || to);
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -118,7 +145,8 @@ export default function AdminSessionsPage() {
             <h1 className="text-2xl font-semibold">Conversations enregistrées</h1>
             {data && (
               <p className="text-sm text-gray-500 mt-1" data-testid="text-total-sessions">
-                {data.total} session{data.total > 1 ? "s" : ""} au total
+                {data.total} session{data.total > 1 ? "s" : ""}
+                {hasFilters ? " trouvée" + (data.total > 1 ? "s" : "") : " au total"}
               </p>
             )}
           </div>
@@ -151,6 +179,57 @@ export default function AdminSessionsPage() {
           </div>
         </div>
 
+        {/* Barre de filtres */}
+        <div className="bg-white rounded-xl shadow p-4 mb-4 grid gap-3 md:grid-cols-[1fr_auto_auto_auto] md:items-end">
+          <div className="space-y-1">
+            <Label htmlFor="search-input" className="text-xs">Rechercher (prénom)</Label>
+            <form
+              onSubmit={(e) => { e.preventDefault(); applySearch(); }}
+              className="relative"
+            >
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Input
+                id="search-input"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onBlur={applySearch}
+                placeholder="ex. Marie"
+                className="pl-8"
+                data-testid="input-search"
+              />
+            </form>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="from-input" className="text-xs">Depuis</Label>
+            <Input
+              id="from-input"
+              type="date"
+              value={from}
+              onChange={(e) => { setFrom(e.target.value); setPage(1); }}
+              data-testid="input-from"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="to-input" className="text-xs">Jusqu'à</Label>
+            <Input
+              id="to-input"
+              type="date"
+              value={to}
+              onChange={(e) => { setTo(e.target.value); setPage(1); }}
+              data-testid="input-to"
+            />
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={clearFilters}
+            disabled={!hasFilters && !searchInput}
+            data-testid="button-clear-filters"
+          >
+            <X className="w-4 h-4 mr-1" /> Effacer
+          </Button>
+        </div>
+
         {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
 
         <div className="bg-white rounded-xl shadow overflow-hidden">
@@ -175,7 +254,9 @@ export default function AdminSessionsPage() {
               {data && data.items.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-4 py-6 text-center text-gray-500">
-                    Aucune conversation enregistrée pour le moment.
+                    {hasFilters
+                      ? "Aucune conversation ne correspond aux filtres."
+                      : "Aucune conversation enregistrée pour le moment."}
                   </td>
                 </tr>
               )}
