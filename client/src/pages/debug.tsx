@@ -1,26 +1,127 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { RefreshCw, Activity, AlertTriangle } from "lucide-react";
+import {
+  RefreshCw,
+  Activity,
+  AlertTriangle,
+  Clock,
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  Zap,
+  History,
+} from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { LatencyBar } from "../components/debug/LatencyBar";
 import { ServiceStatusCard } from "../components/debug/ServiceStatusCard";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as ReTooltip,
+  ResponsiveContainer,
+  Legend,
+} from "recharts";
 import type {
   DebugHealthResponse,
   DebugTracesResponse,
   FlowiseTraceDTO,
+  TTSTraceDTO,
   LatencyPhase,
 } from "../../../shared/debug-types";
 
 const TARGET_END_TO_END_MS = 8000;
+const PAGE_SIZE = 50;
+
+// ─── Date range types ────────────────────────────────────────────────────────
+type QuickRange = "1h" | "today" | "7d" | "custom";
+
+interface DateRange {
+  from: number;
+  to: number;
+}
+
+function quickRangeToMs(range: QuickRange): DateRange {
+  const now = Date.now();
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  switch (range) {
+    case "1h":
+      return { from: now - 3_600_000, to: now };
+    case "today":
+      return { from: startOfDay.getTime(), to: now };
+    case "7d":
+      return { from: now - 7 * 86_400_000, to: now };
+    default:
+      return { from: now - 86_400_000, to: now };
+  }
+}
+
+// ─── API response types ──────────────────────────────────────────────────────
+interface FlowisePage {
+  items: FlowiseTraceDTO[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+interface TtsPage {
+  items: TTSTraceDTO[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+interface FlowiseBucket {
+  bucket: string;
+  medianTotalMs: number;
+  medianTtftMs: number;
+  count: number;
+  errorCount: number;
+}
+
+interface TtsBucket {
+  bucket: string;
+  count: number;
+  errorCount: number;
+  errorRate: number;
+}
+
+interface StatsResponse {
+  granularity: string;
+  flowise: FlowiseBucket[];
+  tts: TtsBucket[];
+}
+
+async function fetchJson<T>(url: string, token?: string): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(url, { headers });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`HTTP ${res.status}: ${body.slice(0, 200)}`);
+  }
+  return res.json() as Promise<T>;
+}
 
 function formatRelative(ts: number): string {
   const diff = Date.now() - ts;
   if (diff < 60_000) return `il y a ${Math.floor(diff / 1000)}s`;
   if (diff < 3_600_000) return `il y a ${Math.floor(diff / 60_000)} min`;
   return new Date(ts).toLocaleTimeString("fr-FR");
+}
+
+function formatBucket(bucket: string, granularity: string): string {
+  const d = new Date(bucket);
+  if (granularity === "day") {
+    return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+  }
+  return d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
 }
 
 function flowiseToPhases(t: FlowiseTraceDTO): LatencyPhase[] {
@@ -64,17 +165,247 @@ function flowiseToPhases(t: FlowiseTraceDTO): LatencyPhase[] {
   ];
 }
 
+function FlowiseTraceRow({
+  trace,
+  scaleMs,
+}: {
+  trace: FlowiseTraceDTO;
+  scaleMs: number;
+}) {
+  return (
+    <div
+      className="border-b border-slate-800 last:border-0 pb-3 last:pb-0"
+      data-testid={`trace-flowise-${trace.id}`}
+    >
+      <div className="flex items-baseline justify-between gap-3 mb-1.5 text-xs">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          {trace.status !== "ok" && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-rose-900/60 text-rose-300 text-[10px] uppercase tracking-wide">
+              {trace.status}
+            </span>
+          )}
+          <span className="font-mono text-slate-500">{trace.chatId.slice(0, 12)}</span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="text-slate-300 truncate cursor-help">
+                {trace.question || "(vide)"}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-md text-xs">
+              {trace.question}
+            </TooltipContent>
+          </Tooltip>
+        </div>
+        <div className="text-slate-500 font-mono text-[11px] flex-shrink-0">
+          {formatRelative(trace.startedAt)}
+        </div>
+      </div>
+      <LatencyBar
+        phases={flowiseToPhases(trace)}
+        scaleMs={scaleMs}
+        targetMs={TARGET_END_TO_END_MS}
+        totalMs={trace.totalMs}
+      />
+      {(trace.nodes > 0 || trace.tools > 0 || trace.unknownEvents > 0 || trace.errorMessage) && (
+        <div className="mt-1.5 text-[11px] text-slate-500 flex flex-wrap gap-x-3">
+          {trace.nodes > 0 && <span>nodes: {trace.nodes}</span>}
+          {trace.tools > 0 && <span>tools: {trace.tools}</span>}
+          {trace.tokens > 0 && <span>tokens: {trace.tokens}</span>}
+          {trace.unknownEvents > 0 && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="text-amber-500 cursor-help">
+                  ⚠ unknown events: {trace.unknownEvents}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-xs text-xs">
+                Le proxy a reçu des events SSE inconnus de Flowise. Ajouter leurs noms dans
+                server/flowise-progress-labels.ts pour produire un label dynamique côté UI.
+              </TooltipContent>
+            </Tooltip>
+          )}
+          {trace.errorMessage && (
+            <span className="text-rose-400 truncate" title={trace.errorMessage}>
+              {trace.errorMessage}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TtsTraceRow({ t }: { t: TTSTraceDTO }) {
+  const isSlow = !t.cacheHit && t.durationMs > 2000;
+  return (
+    <div
+      className="grid grid-cols-[80px_minmax(0,1fr)_60px_80px] gap-3 items-center text-xs py-1.5 px-2 rounded hover:bg-slate-800/50"
+      data-testid={`trace-tts-${t.id}`}
+    >
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            className={`font-mono inline-flex items-center justify-center px-2 py-0.5 rounded text-[10px] uppercase cursor-help ${
+              t.status === "error"
+                ? "bg-rose-900/60 text-rose-300"
+                : t.cacheHit
+                  ? "bg-emerald-900/50 text-emerald-300"
+                  : "bg-amber-900/40 text-amber-300"
+            }`}
+          >
+            {t.status === "error" ? "ERROR" : t.cacheHit ? "HIT" : "MISS"}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-xs text-xs">
+          {t.cacheHit
+            ? "Servi depuis le cache mémoire — pas d'appel au provider."
+            : t.status === "error"
+              ? `Erreur du provider ${t.provider}. ${t.errorMessage || ""}`
+              : `Synthétisé par ${t.provider}. Sera servi en cache aux prochaines occurrences du même texte.`}
+        </TooltipContent>
+      </Tooltip>
+      <span className="text-slate-300 truncate" title={t.textPreview}>
+        {t.textPreview}
+      </span>
+      <span className="text-right font-mono text-slate-500">{t.chars} ch.</span>
+      <span
+        className={`text-right font-mono ${
+          isSlow ? "text-amber-400" : t.cacheHit ? "text-emerald-400" : "text-slate-300"
+        }`}
+      >
+        {t.durationMs} ms
+      </span>
+    </div>
+  );
+}
+
+function Paginator({
+  page,
+  total,
+  pageSize,
+  onPage,
+}: {
+  page: number;
+  total: number;
+  pageSize: number;
+  onPage: (p: number) => void;
+}) {
+  const totalPages = Math.ceil(total / pageSize);
+  if (totalPages <= 1) return null;
+  return (
+    <div className="flex items-center justify-between mt-3 text-xs text-slate-400">
+      <span>
+        {Math.min(page * pageSize + 1, total)}–{Math.min((page + 1) * pageSize, total)} sur {total}
+      </span>
+      <div className="flex gap-1 items-center">
+        <button
+          disabled={page === 0}
+          onClick={() => onPage(page - 1)}
+          className="p-1 rounded disabled:opacity-30 hover:bg-slate-800"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+        <span className="px-2 py-1 font-mono">
+          {page + 1}/{totalPages}
+        </span>
+        <button
+          disabled={page >= totalPages - 1}
+          onClick={() => onPage(page + 1)}
+          className="p-1 rounded disabled:opacity-30 hover:bg-slate-800"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function DebugPage() {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [now, setNow] = useState(Date.now());
+  const [quickRange, setQuickRange] = useState<QuickRange>("today");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const [flowisePage, setFlowisePage] = useState(0);
+  const [ttsPage, setTtsPage] = useState(0);
+  const [adminToken, setAdminToken] = useState(() => sessionStorage.getItem("debug_admin_token") ?? "");
+  const [tokenInput, setTokenInput] = useState("");
 
+  const handleTokenSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const t = tokenInput.trim();
+    setAdminToken(t);
+    sessionStorage.setItem("debug_admin_token", t);
+    setTokenInput("");
+  };
+
+  const range = useMemo<DateRange>(() => {
+    if (quickRange === "custom" && customFrom && customTo) {
+      const f = new Date(customFrom).getTime();
+      const t = new Date(customTo).getTime();
+      if (!isNaN(f) && !isNaN(t) && f < t) return { from: f, to: t };
+    }
+    return quickRangeToMs(quickRange);
+  }, [quickRange, customFrom, customTo]);
+
+  const granularity = useMemo(() => {
+    const span = range.to - range.from;
+    return span > 2 * 86_400_000 ? "day" : "hour";
+  }, [range]);
+
+  // Reset pages when range changes
+  useEffect(() => {
+    setFlowisePage(0);
+    setTtsPage(0);
+  }, [range]);
+
+  // ── Real-time in-memory buffer (3s cadence, always live) ─────────────────
   const health = useQuery<DebugHealthResponse>({
     queryKey: ["/api/debug/health"],
     refetchInterval: autoRefresh ? 5000 : false,
   });
+
   const traces = useQuery<DebugTracesResponse>({
     queryKey: ["/api/debug/traces"],
     refetchInterval: autoRefresh ? 3000 : false,
+  });
+
+  // ── Historical DB-backed queries (15s cadence, date-filtered, admin-only) ─
+  const histFlowise = useQuery<FlowisePage>({
+    queryKey: ["/api/debug/traces/flowise", range.from, range.to, flowisePage, adminToken],
+    queryFn: () =>
+      fetchJson<FlowisePage>(
+        `/api/debug/traces/flowise?from=${range.from}&to=${range.to}&limit=${PAGE_SIZE}&offset=${
+          flowisePage * PAGE_SIZE
+        }`,
+        adminToken || undefined,
+      ),
+    enabled: !!adminToken,
+    refetchInterval: autoRefresh && !!adminToken ? 15_000 : false,
+  });
+
+  const histTts = useQuery<TtsPage>({
+    queryKey: ["/api/debug/traces/tts", range.from, range.to, ttsPage, adminToken],
+    queryFn: () =>
+      fetchJson<TtsPage>(
+        `/api/debug/traces/tts?from=${range.from}&to=${range.to}&limit=${PAGE_SIZE}&offset=${
+          ttsPage * PAGE_SIZE
+        }`,
+        adminToken || undefined,
+      ),
+    enabled: !!adminToken,
+    refetchInterval: autoRefresh && !!adminToken ? 15_000 : false,
+  });
+
+  const stats = useQuery<StatsResponse>({
+    queryKey: ["/api/debug/traces/stats", range.from, range.to, granularity, adminToken],
+    queryFn: () =>
+      fetchJson<StatsResponse>(
+        `/api/debug/traces/stats?from=${range.from}&to=${range.to}&granularity=${granularity}`,
+        adminToken || undefined,
+      ),
+    enabled: !!adminToken,
+    refetchInterval: autoRefresh && !!adminToken ? 15_000 : false,
   });
 
   // Tick every 10s to refresh "il y a Xs" labels
@@ -83,19 +414,27 @@ export default function DebugPage() {
     return () => clearInterval(id);
   }, []);
 
-  const flowiseScale = useMemo(() => {
-    const max = Math.max(
-      TARGET_END_TO_END_MS,
-      ...(traces.data?.flowise.map((t) => t.totalMs) || [0]),
-    );
-    return max * 1.05;
-  }, [traces.data]);
+  // Live buffer data (always from in-memory)
+  const liveFlowiseItems = traces.data?.flowise ?? [];
+  const liveTtsItems = traces.data?.tts ?? [];
 
-  const flowiseAvg = useMemo(() => {
-    const items = traces.data?.flowise.filter((t) => t.status === "ok") || [];
+  const liveFlowiseScale = useMemo(() => {
+    const max = Math.max(TARGET_END_TO_END_MS, ...liveFlowiseItems.map((t) => t.totalMs));
+    return max * 1.05;
+  }, [liveFlowiseItems]);
+
+  const liveFlowiseAvg = useMemo(() => {
+    const items = liveFlowiseItems.filter((t) => t.status === "ok");
     if (items.length === 0) return null;
     return items.reduce((acc, t) => acc + t.totalMs, 0) / items.length;
-  }, [traces.data]);
+  }, [liveFlowiseItems]);
+
+  // Historical data
+  const histFlowiseScale = useMemo(() => {
+    const items = histFlowise.data?.items ?? [];
+    const max = Math.max(TARGET_END_TO_END_MS, ...items.map((t) => t.totalMs));
+    return max * 1.05;
+  }, [histFlowise.data]);
 
   const ttsHitRate = useMemo(() => {
     const c = health.data?.cache;
@@ -107,10 +446,39 @@ export default function DebugPage() {
 
   const criticalServices = (health.data?.services || []).filter((s) => s.level === "red");
 
+  const chartFlowiseData = useMemo(
+    () =>
+      (stats.data?.flowise ?? []).map((b) => ({
+        time: formatBucket(b.bucket, granularity),
+        "Latence totale (ms)": Math.round(b.medianTotalMs),
+        "TTFT (ms)": Math.round(b.medianTtftMs),
+      })),
+    [stats.data, granularity],
+  );
+
+  const chartTtsData = useMemo(
+    () =>
+      (stats.data?.tts ?? []).map((b) => ({
+        time: formatBucket(b.bucket, granularity),
+        "Taux d'erreur (%)": Math.round(b.errorRate * 100),
+      })),
+    [stats.data, granularity],
+  );
+
   const refreshAll = () => {
     health.refetch();
     traces.refetch();
+    histFlowise.refetch();
+    histTts.refetch();
+    stats.refetch();
   };
+
+  const QUICK_RANGES: { label: string; value: QuickRange }[] = [
+    { label: "1h", value: "1h" },
+    { label: "Aujourd'hui", value: "today" },
+    { label: "7 jours", value: "7d" },
+    { label: "Personnalisé", value: "custom" },
+  ];
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -146,7 +514,11 @@ export default function DebugPage() {
               data-testid="button-refresh"
               className="bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-100"
             >
-              <RefreshCw className={`w-4 h-4 mr-1.5 ${health.isFetching || traces.isFetching ? "animate-spin" : ""}`} />
+              <RefreshCw
+                className={`w-4 h-4 mr-1.5 ${
+                  health.isFetching || traces.isFetching ? "animate-spin" : ""
+                }`}
+              />
               Rafraîchir
             </Button>
           </div>
@@ -168,7 +540,11 @@ export default function DebugPage() {
                 {criticalServices.map((s, i) => (
                   <li key={i}>
                     <span className="font-medium">{s.name}</span> — {s.message}
-                    {s.suggestion && <span className="block text-rose-200/70 text-xs ml-4 mt-0.5">→ {s.suggestion}</span>}
+                    {s.suggestion && (
+                      <span className="block text-rose-200/70 text-xs ml-4 mt-0.5">
+                        → {s.suggestion}
+                      </span>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -213,7 +589,9 @@ export default function DebugPage() {
                 </div>
                 <div className="text-slate-400">Dernier ping</div>
                 <div className="font-mono">
-                  {health.data.warmer.lastPingMs != null ? `${health.data.warmer.lastPingMs} ms` : "—"}
+                  {health.data.warmer.lastPingMs != null
+                    ? `${health.data.warmer.lastPingMs} ms`
+                    : "—"}
                   {health.data.warmer.lastPingOk === false && (
                     <span className="text-rose-400 ml-1">✗</span>
                   )}
@@ -230,9 +608,7 @@ export default function DebugPage() {
             </div>
 
             <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-4">
-              <div className="text-xs uppercase tracking-wide text-slate-500 mb-2">
-                Cache TTS
-              </div>
+              <div className="text-xs uppercase tracking-wide text-slate-500 mb-2">Cache TTS</div>
               <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
                 <div className="text-slate-400">Entrées</div>
                 <div className="font-mono">
@@ -245,7 +621,11 @@ export default function DebugPage() {
                   <span className="text-amber-400">{health.data.cache.misses}</span>
                 </div>
                 <div className="text-slate-400">Taux de hit</div>
-                <div className={`font-mono ${ttsHitRate != null && ttsHitRate < 30 ? "text-amber-400" : "text-emerald-400"}`}>
+                <div
+                  className={`font-mono ${
+                    ttsHitRate != null && ttsHitRate < 30 ? "text-amber-400" : "text-emerald-400"
+                  }`}
+                >
                   {ttsHitRate != null ? `${ttsHitRate.toFixed(0)} %` : "—"}
                 </div>
                 <div className="text-slate-400">Uptime serveur</div>
@@ -257,173 +637,385 @@ export default function DebugPage() {
           </section>
         )}
 
-        {/* Flowise traces */}
+        {/* ══ LIVE SECTION ═══════════════════════════════════════════════════ */}
+        <div className="flex items-center gap-2">
+          <Zap className="w-4 h-4 text-emerald-400" />
+          <h2 className="text-base font-semibold text-emerald-400">Temps réel</h2>
+          <span className="text-xs text-slate-500 ml-1">— buffer mémoire, refresh 3s</span>
+        </div>
+
+        {/* Live Flowise traces */}
         <section>
           <div className="flex items-baseline justify-between mb-3">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
-              Latence Flowise — sessions récentes
-            </h2>
-            {flowiseAvg != null && (
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+              Latence Flowise — sessions récentes ({liveFlowiseItems.length})
+            </h3>
+            {liveFlowiseAvg != null && (
               <div className="text-xs text-slate-400">
-                Moyenne sur {traces.data?.flowise.length} requête(s) :{" "}
-                <span className={`font-mono ${flowiseAvg > TARGET_END_TO_END_MS ? "text-rose-400" : "text-emerald-400"}`}>
-                  {(flowiseAvg / 1000).toFixed(2)} s
-                </span>
-                {" "}(cible {TARGET_END_TO_END_MS / 1000} s)
+                Moyenne :{" "}
+                <span
+                  className={`font-mono ${
+                    liveFlowiseAvg > TARGET_END_TO_END_MS ? "text-rose-400" : "text-emerald-400"
+                  }`}
+                >
+                  {(liveFlowiseAvg / 1000).toFixed(2)} s
+                </span>{" "}
+                (cible {TARGET_END_TO_END_MS / 1000} s)
               </div>
             )}
           </div>
-
           <div className="rounded-lg border border-slate-700 bg-slate-900/40 p-4">
-            {!traces.data || traces.data.flowise.length === 0 ? (
+            {traces.isLoading && !traces.data ? (
+              <div className="text-sm text-slate-500 py-4 text-center">Chargement…</div>
+            ) : liveFlowiseItems.length === 0 ? (
               <div className="text-sm text-slate-500 py-4 text-center">
-                Aucune requête Flowise enregistrée. Envoie un message à Peter pour commencer à mesurer.
+                Aucune requête Flowise depuis le dernier redémarrage. Envoie un message à Peter pour
+                commencer à mesurer.
               </div>
             ) : (
               <div className="space-y-3">
-                {traces.data.flowise.map((trace) => (
-                  <div
-                    key={trace.id}
-                    className="border-b border-slate-800 last:border-0 pb-3 last:pb-0"
-                    data-testid={`trace-flowise-${trace.id}`}
-                  >
-                    <div className="flex items-baseline justify-between gap-3 mb-1.5 text-xs">
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        {trace.status !== "ok" && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-rose-900/60 text-rose-300 text-[10px] uppercase tracking-wide">
-                            {trace.status}
-                          </span>
-                        )}
-                        <span className="font-mono text-slate-500">{trace.chatId.slice(0, 12)}</span>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="text-slate-300 truncate cursor-help">
-                              {trace.question || "(vide)"}
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-md text-xs">
-                            {trace.question}
-                          </TooltipContent>
-                        </Tooltip>
-                      </div>
-                      <div className="text-slate-500 font-mono text-[11px] flex-shrink-0">
-                        {formatRelative(trace.startedAt)}
-                      </div>
-                    </div>
-                    <LatencyBar
-                      phases={flowiseToPhases(trace)}
-                      scaleMs={flowiseScale}
-                      targetMs={TARGET_END_TO_END_MS}
-                      totalMs={trace.totalMs}
-                    />
-                    {(trace.nodes > 0 || trace.tools > 0 || trace.unknownEvents > 0 || trace.errorMessage) && (
-                      <div className="mt-1.5 text-[11px] text-slate-500 flex flex-wrap gap-x-3">
-                        {trace.nodes > 0 && <span>nodes: {trace.nodes}</span>}
-                        {trace.tools > 0 && <span>tools: {trace.tools}</span>}
-                        {trace.tokens > 0 && <span>tokens: {trace.tokens}</span>}
-                        {trace.unknownEvents > 0 && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="text-amber-500 cursor-help">
-                                ⚠ unknown events: {trace.unknownEvents}
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="max-w-xs text-xs">
-                              Le proxy a reçu des events SSE inconnus de Flowise.
-                              Ajouter leurs noms dans server/flowise-progress-labels.ts
-                              pour produire un label dynamique côté UI.
-                            </TooltipContent>
-                          </Tooltip>
-                        )}
-                        {trace.errorMessage && (
-                          <span className="text-rose-400 truncate" title={trace.errorMessage}>
-                            {trace.errorMessage}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                {liveFlowiseItems.map((trace) => (
+                  <FlowiseTraceRow key={trace.id} trace={trace} scaleMs={liveFlowiseScale} />
                 ))}
               </div>
             )}
           </div>
         </section>
 
-        {/* TTS traces */}
+        {/* Live TTS traces */}
         <section>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3">
-            Appels TTS récents
-          </h2>
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3">
+            Appels TTS récents ({liveTtsItems.length})
+          </h3>
           <div className="rounded-lg border border-slate-700 bg-slate-900/40 p-4">
-            {!traces.data || traces.data.tts.length === 0 ? (
+            {traces.isLoading && !traces.data ? (
+              <div className="text-sm text-slate-500 py-4 text-center">Chargement…</div>
+            ) : liveTtsItems.length === 0 ? (
               <div className="text-sm text-slate-500 py-4 text-center">
-                Aucun appel TTS récent.
+                Aucun appel TTS depuis le dernier redémarrage.
               </div>
             ) : (
-              <div className="space-y-1.5 max-h-96 overflow-y-auto pr-1">
-                {traces.data.tts.slice(0, 30).map((t) => {
-                  const isSlow = !t.cacheHit && t.durationMs > 2000;
-                  return (
-                    <div
-                      key={t.id}
-                      className="grid grid-cols-[80px_minmax(0,1fr)_60px_80px] gap-3 items-center text-xs py-1.5 px-2 rounded hover:bg-slate-800/50"
-                      data-testid={`trace-tts-${t.id}`}
-                    >
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span
-                            className={`font-mono inline-flex items-center justify-center px-2 py-0.5 rounded text-[10px] uppercase cursor-help ${
-                              t.status === "error"
-                                ? "bg-rose-900/60 text-rose-300"
-                                : t.cacheHit
-                                  ? "bg-emerald-900/50 text-emerald-300"
-                                  : "bg-amber-900/40 text-amber-300"
-                            }`}
-                          >
-                            {t.status === "error" ? "ERROR" : t.cacheHit ? "HIT" : "MISS"}
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-xs text-xs">
-                          {t.cacheHit
-                            ? "Servi depuis le cache mémoire — pas d'appel au provider."
-                            : t.status === "error"
-                              ? `Erreur du provider ${t.provider}. ${t.errorMessage || ""}`
-                              : `Synthétisé par ${t.provider}. Sera servi en cache aux prochaines occurrences du même texte.`}
-                        </TooltipContent>
-                      </Tooltip>
-
-                      <span className="text-slate-300 truncate" title={t.textPreview}>
-                        {t.textPreview}
-                      </span>
-
-                      <span className="text-right font-mono text-slate-500">
-                        {t.chars} ch.
-                      </span>
-
-                      <span
-                        className={`text-right font-mono ${
-                          isSlow ? "text-amber-400" : t.cacheHit ? "text-emerald-400" : "text-slate-300"
-                        }`}
-                      >
-                        {t.durationMs} ms
-                      </span>
-                    </div>
-                  );
-                })}
+              <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                {liveTtsItems.map((t) => (
+                  <TtsTraceRow key={t.id} t={t} />
+                ))}
               </div>
             )}
           </div>
         </section>
 
+        {/* ══ HISTORY SECTION ════════════════════════════════════════════════ */}
+        <div className="flex items-center gap-2 pt-2 flex-wrap">
+          <History className="w-4 h-4 text-violet-400" />
+          <h2 className="text-base font-semibold text-violet-400">Historique</h2>
+          <span className="text-xs text-slate-500 ml-1">— base Postgres, refresh 15s</span>
+          <div className="ml-auto flex items-center gap-2">
+            {adminToken ? (
+              <>
+                <span className="text-xs text-emerald-400 font-mono">🔓 Connecté</span>
+                <button
+                  onClick={() => { setAdminToken(""); sessionStorage.removeItem("debug_admin_token"); }}
+                  className="text-xs text-slate-500 hover:text-slate-300 underline"
+                >
+                  Déconnecter
+                </button>
+              </>
+            ) : (
+              <form onSubmit={handleTokenSubmit} className="flex items-center gap-2">
+                <input
+                  type="password"
+                  placeholder="Mot de passe admin…"
+                  value={tokenInput}
+                  onChange={(e) => setTokenInput(e.target.value)}
+                  className="text-xs bg-slate-800 border border-slate-700 rounded px-2 py-1 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-violet-500 w-40"
+                />
+                <button
+                  type="submit"
+                  className="text-xs bg-violet-700 hover:bg-violet-600 text-white rounded px-2 py-1"
+                >
+                  Accéder
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+
+        {!adminToken && (
+          <div className="rounded-lg border border-slate-700/50 bg-slate-900/30 p-8 text-center text-sm text-slate-500">
+            Saisir le mot de passe admin ci-dessus pour accéder aux données historiques persistées.
+          </div>
+        )}
+
+        {adminToken && (() => {
+          const isAuthError = [histFlowise.error, histTts.error, stats.error].some(
+            (e) => e && String(e.message).includes("401"),
+          );
+          if (isAuthError) return (
+            <div className="rounded-lg border border-rose-800/50 bg-rose-950/30 p-6 text-center">
+              <p className="text-sm text-rose-400 mb-3">Mot de passe incorrect — accès refusé.</p>
+              <button
+                onClick={() => { setAdminToken(""); sessionStorage.removeItem("debug_admin_token"); }}
+                className="text-xs bg-rose-700 hover:bg-rose-600 text-white rounded px-3 py-1"
+              >
+                Réessayer
+              </button>
+            </div>
+          );
+          return null;
+        })()}
+
+        {adminToken && <>
+
+        {/* Date range selector */}
+        <section className="rounded-lg border border-slate-700/50 bg-slate-900/30 p-4">
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <Calendar className="w-4 h-4 text-slate-400" />
+            <span className="text-xs uppercase tracking-wide text-slate-400 font-semibold">
+              Plage
+            </span>
+            <div className="flex gap-1">
+              {QUICK_RANGES.map((r) => (
+                <button
+                  key={r.value}
+                  onClick={() => setQuickRange(r.value)}
+                  className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                    quickRange === r.value
+                      ? "bg-violet-600 text-white"
+                      : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                  }`}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {quickRange === "custom" && (
+            <div className="flex flex-wrap items-center gap-3 mt-2">
+              <div className="flex items-center gap-2">
+                <Clock className="w-3.5 h-3.5 text-slate-500" />
+                <label className="text-xs text-slate-400">Du</label>
+                <input
+                  type="datetime-local"
+                  value={customFrom}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                  className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-violet-600"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-slate-400">Au</label>
+                <input
+                  type="datetime-local"
+                  value={customTo}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                  className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-violet-600"
+                />
+              </div>
+            </div>
+          )}
+          <p className="text-[11px] text-slate-600 mt-1.5">
+            {new Date(range.from).toLocaleString("fr-FR")} →{" "}
+            {new Date(range.to).toLocaleString("fr-FR")} · granularité : {granularity}
+          </p>
+        </section>
+
+        {/* Charts */}
+        <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-4">
+            <div className="text-xs uppercase tracking-wide text-slate-500 mb-3">
+              Latence Flowise — médiane dans le temps
+            </div>
+            {stats.isLoading ? (
+              <div className="h-48 flex items-center justify-center text-slate-600 text-sm">
+                Chargement…
+              </div>
+            ) : stats.isError ? (
+              <div className="h-48 flex items-center justify-center text-rose-400 text-sm">
+                Erreur lors du chargement des statistiques.
+              </div>
+            ) : chartFlowiseData.length === 0 ? (
+              <div className="h-48 flex items-center justify-center text-slate-600 text-sm">
+                Aucune donnée sur cette plage.
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart
+                  data={chartFlowiseData}
+                  margin={{ top: 5, right: 10, bottom: 5, left: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                  <XAxis dataKey="time" tick={{ fill: "#94a3b8", fontSize: 10 }} />
+                  <YAxis tick={{ fill: "#94a3b8", fontSize: 10 }} unit="ms" width={55} />
+                  <ReTooltip
+                    contentStyle={{
+                      backgroundColor: "#1e293b",
+                      border: "1px solid #334155",
+                      fontSize: 12,
+                    }}
+                    labelStyle={{ color: "#e2e8f0" }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 11, color: "#94a3b8" }} />
+                  <Line
+                    type="monotone"
+                    dataKey="Latence totale (ms)"
+                    stroke="#10b981"
+                    dot={false}
+                    strokeWidth={2}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="TTFT (ms)"
+                    stroke="#8b5cf6"
+                    dot={false}
+                    strokeWidth={2}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-4">
+            <div className="text-xs uppercase tracking-wide text-slate-500 mb-3">
+              Taux d'erreur TTS — évolution dans le temps
+            </div>
+            {stats.isLoading ? (
+              <div className="h-48 flex items-center justify-center text-slate-600 text-sm">
+                Chargement…
+              </div>
+            ) : stats.isError ? (
+              <div className="h-48 flex items-center justify-center text-rose-400 text-sm">
+                Erreur lors du chargement des statistiques.
+              </div>
+            ) : chartTtsData.length === 0 ? (
+              <div className="h-48 flex items-center justify-center text-slate-600 text-sm">
+                Aucune donnée sur cette plage.
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart
+                  data={chartTtsData}
+                  margin={{ top: 5, right: 10, bottom: 5, left: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                  <XAxis dataKey="time" tick={{ fill: "#94a3b8", fontSize: 10 }} />
+                  <YAxis
+                    tick={{ fill: "#94a3b8", fontSize: 10 }}
+                    unit="%"
+                    width={40}
+                    domain={[0, 100]}
+                  />
+                  <ReTooltip
+                    contentStyle={{
+                      backgroundColor: "#1e293b",
+                      border: "1px solid #334155",
+                      fontSize: 12,
+                    }}
+                    labelStyle={{ color: "#e2e8f0" }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 11, color: "#94a3b8" }} />
+                  <Line
+                    type="monotone"
+                    dataKey="Taux d'erreur (%)"
+                    stroke="#f43f5e"
+                    dot={false}
+                    strokeWidth={2}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </section>
+
+        {/* Historical Flowise table */}
+        <section>
+          <div className="flex items-baseline justify-between mb-3">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+              Latence Flowise — historique filtré
+              {histFlowise.data && (
+                <span className="ml-2 text-slate-600 font-normal normal-case">
+                  ({histFlowise.data.total} traces)
+                </span>
+              )}
+            </h3>
+          </div>
+          <div className="rounded-lg border border-slate-700 bg-slate-900/40 p-4">
+            {histFlowise.isLoading ? (
+              <div className="text-sm text-slate-500 py-4 text-center">Chargement…</div>
+            ) : histFlowise.isError ? (
+              <div className="text-sm text-rose-400 py-4 text-center">
+                Erreur lors du chargement des traces.
+              </div>
+            ) : (histFlowise.data?.items ?? []).length === 0 ? (
+              <div className="text-sm text-slate-500 py-4 text-center">
+                Aucune requête Flowise sur cette plage.
+              </div>
+            ) : (
+              <>
+                <div className="space-y-3">
+                  {(histFlowise.data?.items ?? []).map((trace) => (
+                    <FlowiseTraceRow key={trace.id} trace={trace} scaleMs={histFlowiseScale} />
+                  ))}
+                </div>
+                <Paginator
+                  page={flowisePage}
+                  total={histFlowise.data?.total ?? 0}
+                  pageSize={PAGE_SIZE}
+                  onPage={setFlowisePage}
+                />
+              </>
+            )}
+          </div>
+        </section>
+
+        {/* Historical TTS table */}
+        <section>
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3">
+            Appels TTS — historique filtré
+            {histTts.data && (
+              <span className="ml-2 text-slate-600 font-normal normal-case">
+                ({histTts.data.total} traces)
+              </span>
+            )}
+          </h3>
+          <div className="rounded-lg border border-slate-700 bg-slate-900/40 p-4">
+            {histTts.isLoading ? (
+              <div className="text-sm text-slate-500 py-4 text-center">Chargement…</div>
+            ) : histTts.isError ? (
+              <div className="text-sm text-rose-400 py-4 text-center">
+                Erreur lors du chargement des traces.
+              </div>
+            ) : (histTts.data?.items ?? []).length === 0 ? (
+              <div className="text-sm text-slate-500 py-4 text-center">
+                Aucun appel TTS sur cette plage.
+              </div>
+            ) : (
+              <>
+                <div className="space-y-1.5">
+                  {(histTts.data?.items ?? []).map((t) => (
+                    <TtsTraceRow key={t.id} t={t} />
+                  ))}
+                </div>
+                <Paginator
+                  page={ttsPage}
+                  total={histTts.data?.total ?? 0}
+                  pageSize={PAGE_SIZE}
+                  onPage={setTtsPage}
+                />
+              </>
+            )}
+          </div>
+        </section>
+
+        </>}
+
         <footer className="text-center text-xs text-slate-600 pt-4 pb-8">
           Console debug — accessible via <code className="text-slate-400">/debug</code> ou{" "}
-          <code className="text-slate-400">?debug</code>. Données en mémoire uniquement, perdues au redémarrage.
+          <code className="text-slate-400">?debug</code>. Traces persistées en base Postgres.
           {health.data && (
             <span className="block mt-1">
-              Dernière mise à jour : {new Date(health.data.generatedAt).toLocaleTimeString("fr-FR")}
+              Dernière mise à jour :{" "}
+              {new Date(health.data.generatedAt).toLocaleTimeString("fr-FR")}
             </span>
           )}
-          {/* now is referenced to keep the timer subscription alive */}
           <span className="hidden">{now}</span>
         </footer>
       </main>

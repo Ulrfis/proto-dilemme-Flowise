@@ -4,7 +4,11 @@ import {
   analyticsEventSchema,
   insertConversationSessionSchema,
   insertConversationMessageSchema,
+  flowiseTraces,
+  ttsTraces,
 } from "@shared/schema";
+import { db } from "./db";
+import { and, gte, lte, desc, sql } from "drizzle-orm";
 import { storage } from "./storage";
 import multer from "multer";
 import fs from "fs/promises";
@@ -920,6 +924,174 @@ export async function registerRoutes(app: Express): Promise<Server> {
       flowise: snap.flowise,
       tts: snap.tts,
     });
+  });
+
+  // GET /api/debug/traces/flowise?from=&to=&limit=&offset=
+  app.get("/api/debug/traces/flowise", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    try {
+      const fromMs = parseInt(String(req.query.from ?? ""), 10);
+      const toMs = parseInt(String(req.query.to ?? ""), 10);
+      const limit = Math.min(1000, Math.max(1, parseInt(String(req.query.limit ?? "500"), 10) || 500));
+      const offset = Math.max(0, parseInt(String(req.query.offset ?? "0"), 10) || 0);
+      const filters = [];
+      if (!isNaN(fromMs)) filters.push(gte(flowiseTraces.startedAt, new Date(fromMs)));
+      if (!isNaN(toMs)) filters.push(lte(flowiseTraces.startedAt, new Date(toMs)));
+      const where = filters.length > 0 ? and(...filters) : undefined;
+      const [rows, [{ total }]] = await Promise.all([
+        db
+          .select()
+          .from(flowiseTraces)
+          .where(where)
+          .orderBy(desc(flowiseTraces.startedAt))
+          .limit(limit)
+          .offset(offset),
+        db
+          .select({ total: sql<number>`COUNT(*)::int` })
+          .from(flowiseTraces)
+          .where(where),
+      ]);
+      const items = rows.map((r) => ({
+        id: r.id,
+        chatId: r.chatId,
+        question: r.question,
+        startedAt: r.startedAt.getTime(),
+        finishedAt: r.finishedAt.getTime(),
+        connectMs: r.connectMs,
+        ttftMs: r.ttftMs,
+        totalMs: r.totalMs,
+        tokens: r.tokens,
+        chars: r.chars,
+        nodes: r.nodes,
+        tools: r.tools,
+        unknownEvents: r.unknownEvents,
+        status: r.status,
+        errorMessage: r.errorMessage ?? undefined,
+      }));
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ items, total, limit, offset });
+    } catch (err) {
+      console.error("[debug:traces/flowise] error:", err);
+      res.status(500).json({ error: "query failed" });
+    }
+  });
+
+  // GET /api/debug/traces/tts?from=&to=&limit=&offset=
+  app.get("/api/debug/traces/tts", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    try {
+      const fromMs = parseInt(String(req.query.from ?? ""), 10);
+      const toMs = parseInt(String(req.query.to ?? ""), 10);
+      const limit = Math.min(1000, Math.max(1, parseInt(String(req.query.limit ?? "500"), 10) || 500));
+      const offset = Math.max(0, parseInt(String(req.query.offset ?? "0"), 10) || 0);
+      const filters = [];
+      if (!isNaN(fromMs)) filters.push(gte(ttsTraces.startedAt, new Date(fromMs)));
+      if (!isNaN(toMs)) filters.push(lte(ttsTraces.startedAt, new Date(toMs)));
+      const where = filters.length > 0 ? and(...filters) : undefined;
+      const [rows, [{ total }]] = await Promise.all([
+        db
+          .select()
+          .from(ttsTraces)
+          .where(where)
+          .orderBy(desc(ttsTraces.startedAt))
+          .limit(limit)
+          .offset(offset),
+        db
+          .select({ total: sql<number>`COUNT(*)::int` })
+          .from(ttsTraces)
+          .where(where),
+      ]);
+      const items = rows.map((r) => ({
+        id: r.id,
+        textPreview: r.textPreview,
+        chars: r.chars,
+        startedAt: r.startedAt.getTime(),
+        durationMs: r.durationMs,
+        cacheHit: r.cacheHit,
+        provider: r.provider,
+        status: r.status,
+        errorMessage: r.errorMessage ?? undefined,
+      }));
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ items, total, limit, offset });
+    } catch (err) {
+      console.error("[debug:traces/tts] error:", err);
+      res.status(500).json({ error: "query failed" });
+    }
+  });
+
+  // GET /api/debug/traces/stats?from=&to=&granularity=hour|day
+  app.get("/api/debug/traces/stats", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    interface FlowiseStatRow {
+      bucket: Date;
+      median_total_ms: string | number | null;
+      median_ttft_ms: string | number | null;
+      count: number;
+      error_count: number;
+    }
+    interface TtsStatRow {
+      bucket: Date;
+      count: number;
+      error_count: number;
+    }
+    try {
+      const fromMs = parseInt(String(req.query.from ?? ""), 10);
+      const toMs = parseInt(String(req.query.to ?? ""), 10);
+      const granularity = req.query.granularity === "day" ? "day" : "hour";
+
+      const fromDate = !isNaN(fromMs) ? new Date(fromMs) : new Date(Date.now() - 86_400_000);
+      const toDate = !isNaN(toMs) ? new Date(toMs) : new Date();
+
+      const [flowiseResult, ttsResult] = await Promise.all([
+        db.execute(sql`
+          SELECT
+            date_trunc(${granularity}, started_at) AS bucket,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY total_ms) AS median_total_ms,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY ttft_ms) AS median_ttft_ms,
+            COUNT(*)::int AS count,
+            COUNT(*) FILTER (WHERE status = 'error')::int AS error_count
+          FROM flowise_traces
+          WHERE started_at >= ${fromDate} AND started_at <= ${toDate}
+          GROUP BY 1
+          ORDER BY 1
+        `),
+        db.execute(sql`
+          SELECT
+            date_trunc(${granularity}, started_at) AS bucket,
+            COUNT(*)::int AS count,
+            COUNT(*) FILTER (WHERE status = 'error')::int AS error_count
+          FROM tts_traces
+          WHERE started_at >= ${fromDate} AND started_at <= ${toDate}
+          GROUP BY 1
+          ORDER BY 1
+        `),
+      ]);
+
+      const flowiseRows = flowiseResult.rows as unknown as FlowiseStatRow[];
+      const ttsRows = ttsResult.rows as unknown as TtsStatRow[];
+
+      res.setHeader("Cache-Control", "no-store");
+      res.json({
+        granularity,
+        flowise: flowiseRows.map((r) => ({
+          bucket: r.bucket,
+          medianTotalMs: Number(r.median_total_ms ?? 0),
+          medianTtftMs: Number(r.median_ttft_ms ?? 0),
+          count: Number(r.count),
+          errorCount: Number(r.error_count),
+        })),
+        tts: ttsRows.map((r) => ({
+          bucket: r.bucket,
+          count: Number(r.count),
+          errorCount: Number(r.error_count),
+          errorRate: Number(r.count) > 0 ? Number(r.error_count) / Number(r.count) : 0,
+        })),
+      });
+    } catch (err) {
+      console.error("[debug:traces/stats] error:", err);
+      res.status(500).json({ error: "stats query failed" });
+    }
   });
 
   // Flowise proxy endpoint for secure API calls
