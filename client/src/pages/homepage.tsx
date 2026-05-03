@@ -9,7 +9,6 @@ import { useFlowise } from "../hooks/use-flowise";
 import { useMediaPanel } from "../hooks/use-media-panel";
 import { analytics } from "../lib/analytics";
 import { INTRO_VIDEO_URL } from "../../../shared/welcome-message";
-import { IdentityForm } from "../components/onboarding/IdentityForm";
 import { createConversationSession } from "../lib/conversation-session";
 import { phIdentify } from "../lib/posthog";
 
@@ -148,26 +147,14 @@ export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, []);
 
-  const handleStartAdventure = async (identity: { firstName: string; lastName: string }) => {
-    // Crée la session côté serveur AVANT d'ouvrir le chat. Si la création
-    // échoue (DB indisponible), on continue quand même : la conversation
-    // ne sera juste pas persistée — l'expérience utilisateur prime.
-    const sessionId = await createConversationSession(identity);
+  const handleStartAdventure = async () => {
+    // Crée une session anonyme. Le prénom sera capturé plus tard par Peter
+    // et envoyé via PATCH /api/sessions/:id. UX non-bloquante : si la
+    // création échoue, on continue quand même.
+    const sessionId = await createConversationSession();
     if (sessionId) {
-      phIdentify(sessionId, {
-        first_name: identity.firstName,
-        last_name: identity.lastName,
-      });
-      analytics.trackIdentityCaptured({
-        sessionId,
-        firstName: identity.firstName,
-        lastName: identity.lastName,
-      });
-      analytics.trackSessionStarted({
-        sessionId,
-        firstName: identity.firstName,
-        lastName: identity.lastName,
-      });
+      phIdentify(sessionId);
+      analytics.trackSessionStarted({ sessionId });
     } else {
       console.warn("[homepage] session non persistée (création échouée)");
     }
@@ -241,7 +228,14 @@ export default function Homepage({ onInfoDataUpdate }: HomepageProps) {
             </div>
 
             <div className="mb-8">
-              <IdentityForm onSubmit={handleStartAdventure} />
+              <Button
+                size="lg"
+                onClick={handleStartAdventure}
+                data-testid="button-start-chat"
+                className="bg-accent hover:bg-accent/80 text-accent-foreground font-semibold py-4 px-8 rounded-xl transition-all transform hover:scale-105 text-lg"
+              >
+                Démarrer l'aventure !
+              </Button>
               <p className="text-sm text-gray-500 mt-4">
                 Session d'apprentissage : 20-30 minutes
               </p>

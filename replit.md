@@ -15,7 +15,7 @@ The application features a split-screen interface with a chat panel (1/3 width) 
 **Frontend:**
 - Built with React and TypeScript, utilizing Wouter for routing and shadcn/ui components for a consistent design.
 - Tailwind CSS is used for styling.
-- Features a welcome screen and an identity form for capturing user names before starting a chat session.
+- Features a welcome screen with a simple "Démarrer l'aventure" button — no form. The student's first name is captured automatically during the conversation with Peter.
 - Handles Flowise chatbot streaming responses, including a three-layer JSON protection mechanism to prevent raw JSON from reaching the UI.
 - Implements French-aware sentence splitting and a sequential queue for TTS streaming, allowing for prefetching of sentences.
 - Markdown titles are detected and styled, and links are made clickable, routing to either video playback or the in-app webview.
