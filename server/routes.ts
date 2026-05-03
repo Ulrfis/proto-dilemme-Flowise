@@ -32,7 +32,7 @@ import { OpenAISTTProvider } from "./providers/stt/openai";
 import { DeepgramSTTProvider } from "./providers/stt/deepgram";
 import { flowiseFetch } from "./flowise-fetch";
 import { labelForFlowiseEvent, type ProgressLabel } from "./flowise-progress-labels";
-import { debugTraces, newTraceId } from "./debug-traces";
+import { debugTraces, newTraceId, startRetentionScheduler, getRetentionInfo } from "./debug-traces";
 import { buildHealthResponse } from "./debug-health";
 
 // Allowed domains for the content proxy (prevents SSRF to internal networks)
@@ -1022,11 +1022,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Start the trace retention scheduler (purge on boot + daily)
+  startRetentionScheduler();
+
   // ────────────────────────────────────────────────────────────────────
   // Debug endpoints — surface internal state for the /debug panel.
   // No auth: read-only, no secrets exposed, only aggregated metrics.
   // ────────────────────────────────────────────────────────────────────
   const serverStartedAt = Date.now();
+
+  // GET /api/debug/retention — row counts + last purge info (no auth required)
+  app.get("/api/debug/retention", async (_req, res) => {
+    try {
+      const [flowiseCount, ttsCount] = await Promise.all([
+        db.select({ count: sql<number>`COUNT(*)::int` }).from(flowiseTraces),
+        db.select({ count: sql<number>`COUNT(*)::int` }).from(ttsTraces),
+      ]);
+      const info = getRetentionInfo();
+      res.setHeader("Cache-Control", "no-store");
+      res.json({
+        retentionDays: info.retentionDays,
+        flowiseCount: Number(flowiseCount[0]?.count ?? 0),
+        ttsCount: Number(ttsCount[0]?.count ?? 0),
+        lastPurge: info.lastPurge
+          ? {
+              ranAt: info.lastPurge.ranAt,
+              flowiseDeleted: info.lastPurge.flowiseDeleted,
+              ttsDeleted: info.lastPurge.ttsDeleted,
+            }
+          : null,
+      });
+    } catch (err) {
+      console.error("[debug:retention] error:", err);
+      res.status(500).json({ error: "retention query failed" });
+    }
+  });
 
   app.get("/api/debug/health", async (_req, res) => {
     try {

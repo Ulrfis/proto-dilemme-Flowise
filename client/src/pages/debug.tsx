@@ -10,6 +10,7 @@ import {
   ChevronRight,
   Zap,
   History,
+  Trash2,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
@@ -96,6 +97,17 @@ interface StatsResponse {
   granularity: string;
   flowise: FlowiseBucket[];
   tts: TtsBucket[];
+}
+
+interface RetentionResponse {
+  retentionDays: number;
+  flowiseCount: number;
+  ttsCount: number;
+  lastPurge: {
+    ranAt: number;
+    flowiseDeleted: number;
+    ttsDeleted: number;
+  } | null;
 }
 
 async function fetchJson<T>(url: string, token?: string): Promise<T> {
@@ -359,6 +371,12 @@ export default function DebugPage() {
     setTtsPage(0);
   }, [range]);
 
+  // ── Retention / row counts (60s cadence, public endpoint) ───────────────
+  const retention = useQuery<RetentionResponse>({
+    queryKey: ["/api/debug/retention"],
+    refetchInterval: autoRefresh ? 60_000 : false,
+  });
+
   // ── Real-time in-memory buffer (3s cadence, always live) ─────────────────
   const health = useQuery<DebugHealthResponse>({
     queryKey: ["/api/debug/health"],
@@ -468,6 +486,7 @@ export default function DebugPage() {
   const refreshAll = () => {
     health.refetch();
     traces.refetch();
+    retention.refetch();
     histFlowise.refetch();
     histTts.refetch();
     stats.refetch();
@@ -636,6 +655,43 @@ export default function DebugPage() {
             </div>
           </section>
         )}
+
+        {/* Retention / DB row counts */}
+        <section className="rounded-lg border border-slate-700 bg-slate-900/60 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Trash2 className="w-4 h-4 text-slate-400" />
+            <span className="text-xs uppercase tracking-wide text-slate-400 font-semibold">
+              Rétention des traces DB
+            </span>
+          </div>
+          {retention.isLoading && !retention.data ? (
+            <div className="text-sm text-slate-500">Chargement…</div>
+          ) : retention.isError ? (
+            <div className="text-sm text-rose-400">Erreur lors du chargement.</div>
+          ) : retention.data ? (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-2 text-sm">
+              <div className="text-slate-400">Fenêtre</div>
+              <div className="font-mono">{retention.data.retentionDays} jours</div>
+              <div className="text-slate-400">Flowise (total DB)</div>
+              <div className="font-mono">{retention.data.flowiseCount.toLocaleString()} lignes</div>
+              <div className="text-slate-400">TTS (total DB)</div>
+              <div className="font-mono">{retention.data.ttsCount.toLocaleString()} lignes</div>
+              <div className="text-slate-400">Dernier purge</div>
+              <div className="font-mono text-xs">
+                {retention.data.lastPurge ? (
+                  <>
+                    {new Date(retention.data.lastPurge.ranAt).toLocaleString("fr-FR")}
+                    <span className="text-slate-500 ml-2">
+                      (−{retention.data.lastPurge.flowiseDeleted} fw, −{retention.data.lastPurge.ttsDeleted} tts)
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-slate-500">En cours…</span>
+                )}
+              </div>
+            </div>
+          ) : null}
+        </section>
 
         {/* ══ LIVE SECTION ═══════════════════════════════════════════════════ */}
         <div className="flex items-center gap-2">
