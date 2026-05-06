@@ -3,7 +3,7 @@
 > **Status**: 🟡 In Progress  
 > **Creator**: Ulrich Fischer  
 > **Started**: 2025-11-06  
-> **Last Updated**: 2026-05-03 (TTS liens fix ; avatars grille/upload ; debug persistant + filtres ; cascade articles ; carte d'erreur ; README GitHub)
+> **Last Updated**: 2026-05-06 (historique debug public ; sessions cliquables ; correction console debug)
 
 ---
 
