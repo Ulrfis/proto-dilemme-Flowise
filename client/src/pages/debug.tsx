@@ -229,6 +229,20 @@ interface RetentionResponse {
   } | null;
 }
 
+interface SessionItem {
+  id: string;
+  firstName: string | null;
+  createdAt: string;
+  messageCount: number;
+}
+
+interface SessionsPage {
+  items: SessionItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 async function fetchJson<T>(url: string, token?: string): Promise<T> {
   const headers: Record<string, string> = {};
   if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -467,6 +481,9 @@ export default function DebugPage() {
   );
   const [flowisePage, setFlowisePage] = useState(0);
   const [ttsPage, setTtsPage] = useState(0);
+  const [sessionsPage, setSessionsPage] = useState(1);
+  const [sessionsSearch, setSessionsSearch] = useState("");
+  const [sessionsSearchInput, setSessionsSearchInput] = useState("");
   const [adminToken, setAdminToken] = useState(() => sessionStorage.getItem("debug_admin_token") ?? "");
   const [tokenInput, setTokenInput] = useState("");
   const [flowiseStatus, setFlowiseStatus] = useState<FlowiseStatus>(() => {
@@ -572,6 +589,17 @@ export default function DebugPage() {
     refetchInterval: autoRefresh && !!adminToken ? 15_000 : false,
   });
 
+  // ── Public sessions list (no auth) ───────────────────────────────────────
+  const sessions = useQuery<SessionsPage>({
+    queryKey: ["/api/debug/sessions", sessionsPage, sessionsSearch],
+    queryFn: () => {
+      const params = new URLSearchParams({ page: String(sessionsPage), pageSize: "50" });
+      if (sessionsSearch.trim()) params.set("q", sessionsSearch.trim());
+      return fetchJson<SessionsPage>(`/api/debug/sessions?${params}`);
+    },
+    refetchInterval: autoRefresh ? 30_000 : false,
+  });
+
   // Tick every 10s to refresh "il y a Xs" labels
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 10_000);
@@ -648,6 +676,7 @@ export default function DebugPage() {
     histFlowise.refetch();
     histTts.refetch();
     stats.refetch();
+    sessions.refetch();
   };
 
   const QUICK_RANGES: { label: string; value: QuickRange }[] = [
@@ -1304,6 +1333,110 @@ export default function DebugPage() {
         </section>
 
         </>}
+
+        {/* ── Historique des sessions ── */}
+        <section>
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3 flex items-center gap-2">
+            <History className="w-4 h-4" />
+            Historique des sessions
+            {sessions.data && (
+              <span className="font-normal normal-case text-slate-600">
+                ({sessions.data.total} session{sessions.data.total !== 1 ? "s" : ""})
+              </span>
+            )}
+          </h3>
+
+          {/* Barre de recherche */}
+          <form
+            className="mb-3 flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              setSessionsSearch(sessionsSearchInput);
+              setSessionsPage(1);
+            }}
+          >
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+              <input
+                type="text"
+                placeholder="Rechercher par prénom…"
+                value={sessionsSearchInput}
+                onChange={(e) => setSessionsSearchInput(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 text-sm rounded-md bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-slate-500"
+              />
+            </div>
+            <button
+              type="submit"
+              className="px-3 py-1.5 text-xs rounded-md bg-slate-700 hover:bg-slate-600 text-slate-100 border border-slate-600"
+            >
+              Filtrer
+            </button>
+            {sessionsSearch && (
+              <button
+                type="button"
+                onClick={() => { setSessionsSearch(""); setSessionsSearchInput(""); setSessionsPage(1); }}
+                className="px-3 py-1.5 text-xs rounded-md bg-slate-800 hover:bg-slate-700 text-slate-400 border border-slate-700"
+              >
+                Effacer
+              </button>
+            )}
+          </form>
+
+          <div className="rounded-lg border border-slate-700 bg-slate-900/40 overflow-hidden">
+            {sessions.isLoading ? (
+              <div className="text-sm text-slate-500 py-6 text-center">Chargement…</div>
+            ) : sessions.isError ? (
+              <div className="text-sm text-rose-400 py-6 text-center">Erreur de chargement des sessions.</div>
+            ) : (sessions.data?.items ?? []).length === 0 ? (
+              <div className="text-sm text-slate-500 py-6 text-center">Aucune session trouvée.</div>
+            ) : (
+              <>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-700 bg-slate-800/60">
+                      <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wide">Prénom</th>
+                      <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wide">Messages</th>
+                      <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wide">Date</th>
+                      <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wide font-mono">ID session</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800">
+                    {(sessions.data?.items ?? []).map((s) => (
+                      <tr key={s.id} className="hover:bg-slate-800/40 transition-colors">
+                        <td className="px-4 py-2.5">
+                          {s.firstName ? (
+                            <span className="font-medium text-slate-100">{s.firstName}</span>
+                          ) : (
+                            <span className="text-slate-500 italic">Anonyme</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5 text-slate-300 font-mono">{s.messageCount}</td>
+                        <td className="px-4 py-2.5 text-slate-400 text-xs whitespace-nowrap">
+                          {new Date(s.createdAt).toLocaleString("fr-FR", {
+                            day: "2-digit",
+                            month: "2-digit",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </td>
+                        <td className="px-4 py-2.5 font-mono text-xs text-slate-500">{s.id.slice(0, 16)}…</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="px-4 py-3 border-t border-slate-700">
+                  <Paginator
+                    page={(sessions.data?.page ?? 1) - 1}
+                    total={sessions.data?.total ?? 0}
+                    pageSize={sessions.data?.pageSize ?? 50}
+                    onPage={(p) => setSessionsPage(p + 1)}
+                  />
+                </div>
+              </>
+            )}
+          </div>
+        </section>
 
         <footer className="text-center text-xs text-slate-600 pt-4 pb-8">
           Console debug — accessible via <code className="text-slate-400">/debug</code> ou{" "}
