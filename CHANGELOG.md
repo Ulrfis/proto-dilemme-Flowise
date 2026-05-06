@@ -2,6 +2,17 @@
 
 Tous les changements notables de ce projet seront documentés dans ce fichier.
 
+## [2026-05-06] — Console debug : historique public + sessions cliquables
+
+### 🔍 Section Historique simplifiée
+- Retrait du champ mot de passe dans la section **Historique** de `/debug` : les traces Flowise/TTS historiques sont désormais accessibles sans saisie manuelle.
+- Les endpoints historiques `GET /api/debug/traces/flowise`, `GET /api/debug/traces/flowise/export`, `GET /api/debug/traces/tts` et `GET /api/debug/traces/stats` sont publics.
+
+### 📈 Historique des sessions cliquable
+- Ajout d’une liste publique des sessions en bas de `/debug` via `GET /api/debug/sessions`.
+- Chaque ligne de session ouvre/ferme un panneau détail avec visualisation de latence Flowise + messages associés.
+- Ajout de `GET /api/debug/sessions/:id` pour charger la session complète sans auth.
+
 ## [2026-05-03] — Avatars, debug persistant, affichage articles, TTS liens, README
 
 ### 🗣️ TTS : Peter lit l'intégralité de la réponse — liens silencieux (fix bug)
