@@ -497,6 +497,7 @@ export default function DebugPage() {
   });
   const [flowiseSearch, setFlowiseSearch] = useState("");
 
+  // `now` is included so the "to" bound advances every 10 s for non-custom ranges.
   const range = useMemo<DateRange>(() => {
     if (quickRange === "custom" && customFrom && customTo) {
       const f = new Date(customFrom).getTime();
@@ -504,7 +505,8 @@ export default function DebugPage() {
       if (!isNaN(f) && !isNaN(t) && f < t) return { from: f, to: t };
     }
     return quickRangeToMs(quickRange);
-  }, [quickRange, customFrom, customTo]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quickRange, customFrom, customTo, now]);
 
   const granularity = useMemo(() => {
     const span = range.to - range.from;
@@ -539,6 +541,9 @@ export default function DebugPage() {
   });
 
   // ── Historical DB-backed queries (15s cadence, date-filtered) ───────────
+  // retry=2 + retryDelay=2000 handles transient Neon serverless reconnects.
+  // placeholderData keeps the last successful data visible during retries
+  // so the UI never flashes "Erreur…" for temporary connection drops.
   const histFlowise = useQuery<FlowisePage>({
     queryKey: ["/api/debug/traces/flowise", range.from, range.to, flowisePage, flowiseStatus, flowiseSort],
     queryFn: () => {
@@ -553,6 +558,9 @@ export default function DebugPage() {
       return fetchJson<FlowisePage>(`/api/debug/traces/flowise?${params}`);
     },
     refetchInterval: autoRefresh ? 15_000 : false,
+    retry: 2,
+    retryDelay: 2000,
+    placeholderData: (prev) => prev,
   });
 
   const histTts = useQuery<TtsPage>({
@@ -564,6 +572,9 @@ export default function DebugPage() {
         }`,
       ),
     refetchInterval: autoRefresh ? 15_000 : false,
+    retry: 2,
+    retryDelay: 2000,
+    placeholderData: (prev) => prev,
   });
 
   const stats = useQuery<StatsResponse>({
@@ -573,6 +584,9 @@ export default function DebugPage() {
         `/api/debug/traces/stats?from=${range.from}&to=${range.to}&granularity=${granularity}`,
       ),
     refetchInterval: autoRefresh ? 15_000 : false,
+    retry: 2,
+    retryDelay: 2000,
+    placeholderData: (prev) => prev,
   });
 
   // ── Session detail (on click) ─────────────────────────────────────────────
@@ -603,6 +617,9 @@ export default function DebugPage() {
       return fetchJson<SessionsPage>(`/api/debug/sessions?${params}`);
     },
     refetchInterval: autoRefresh ? 30_000 : false,
+    retry: 2,
+    retryDelay: 2000,
+    placeholderData: (prev) => prev,
   });
 
   // Tick every 10s to refresh "il y a Xs" labels
@@ -1019,11 +1036,11 @@ export default function DebugPage() {
             <div className="text-xs uppercase tracking-wide text-slate-500 mb-3">
               Latence Flowise — médiane dans le temps
             </div>
-            {stats.isLoading ? (
+            {stats.isLoading && !stats.data ? (
               <div className="h-48 flex items-center justify-center text-slate-600 text-sm">
                 Chargement…
               </div>
-            ) : stats.isError ? (
+            ) : stats.isError && !stats.data ? (
               <div className="h-48 flex items-center justify-center text-rose-400 text-sm">
                 Erreur lors du chargement des statistiques.
               </div>
@@ -1072,11 +1089,11 @@ export default function DebugPage() {
             <div className="text-xs uppercase tracking-wide text-slate-500 mb-3">
               Taux d'erreur TTS — évolution dans le temps
             </div>
-            {stats.isLoading ? (
+            {stats.isLoading && !stats.data ? (
               <div className="h-48 flex items-center justify-center text-slate-600 text-sm">
                 Chargement…
               </div>
-            ) : stats.isError ? (
+            ) : stats.isError && !stats.data ? (
               <div className="h-48 flex items-center justify-center text-rose-400 text-sm">
                 Erreur lors du chargement des statistiques.
               </div>
@@ -1208,9 +1225,9 @@ export default function DebugPage() {
           </div>
 
           <div className="rounded-lg border border-slate-700 bg-slate-900/40 p-4">
-            {histFlowise.isLoading ? (
+            {histFlowise.isLoading && !histFlowise.data ? (
               <div className="text-sm text-slate-500 py-4 text-center">Chargement…</div>
-            ) : histFlowise.isError ? (
+            ) : histFlowise.isError && !histFlowise.data ? (
               <div className="text-sm text-rose-400 py-4 text-center">
                 Erreur lors du chargement des traces.
               </div>
@@ -1252,9 +1269,9 @@ export default function DebugPage() {
             )}
           </h3>
           <div className="rounded-lg border border-slate-700 bg-slate-900/40 p-4">
-            {histTts.isLoading ? (
+            {histTts.isLoading && !histTts.data ? (
               <div className="text-sm text-slate-500 py-4 text-center">Chargement…</div>
-            ) : histTts.isError ? (
+            ) : histTts.isError && !histTts.data ? (
               <div className="text-sm text-rose-400 py-4 text-center">
                 Erreur lors du chargement des traces.
               </div>
@@ -1331,9 +1348,9 @@ export default function DebugPage() {
           </form>
 
           <div className="rounded-lg border border-slate-700 bg-slate-900/40 overflow-hidden">
-            {sessions.isLoading ? (
+            {sessions.isLoading && !sessions.data ? (
               <div className="text-sm text-slate-500 py-6 text-center">Chargement…</div>
-            ) : sessions.isError ? (
+            ) : sessions.isError && !sessions.data ? (
               <div className="text-sm text-rose-400 py-6 text-center">Erreur de chargement des sessions.</div>
             ) : (sessions.data?.items ?? []).length === 0 ? (
               <div className="text-sm text-slate-500 py-6 text-center">Aucune session trouvée.</div>

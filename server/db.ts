@@ -12,5 +12,14 @@ if (!process.env.DATABASE_URL) {
 // neon serverless utilise des WebSockets pour les connexions long-lived (pool).
 neonConfig.webSocketConstructor = ws;
 
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+// idleTimeoutMillis: évacue les connexions inactives avant que Neon (serverless)
+// ne les coupe de son côté (~30 s), évitant les erreurs transitoires sur les
+// requêtes de la console debug qui tournent toutes les 15–30 s.
+export const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: 5,
+  idleTimeoutMillis: 20_000,
+  connectionTimeoutMillis: 5_000,
+});
+
 export const db = drizzle({ client: pool, schema });
