@@ -11,6 +11,10 @@ interface LatencyBarProps {
   totalMs?: number;
 }
 
+function formatSeconds(ms: number) {
+  return `${(ms / 1000).toFixed(1).replace(".", ",")} s`;
+}
+
 export function LatencyBar({ phases, scaleMs, targetMs, totalMs }: LatencyBarProps) {
   const sum = phases.reduce((acc, p) => acc + Math.max(0, p.ms), 0);
   const total = totalMs ?? sum;
@@ -39,7 +43,7 @@ export function LatencyBar({ phases, scaleMs, targetMs, totalMs }: LatencyBarPro
                 </div>
               </TooltipTrigger>
               <TooltipContent side="top" className="max-w-xs text-xs">
-                <div className="font-semibold">{p.label} — {Math.round(p.ms)} ms</div>
+                <div className="font-semibold">{p.label} — {formatSeconds(p.ms)}</div>
                 <div className="opacity-80 mt-1">{p.tooltip}</div>
                 {p.warningSuggestion && (
                   <div className="mt-2 text-amber-300">
@@ -59,11 +63,11 @@ export function LatencyBar({ phases, scaleMs, targetMs, totalMs }: LatencyBarPro
                 style={{ left: `${targetPct}%` }}
                 data-testid="bar-target-marker"
               >
-                <span className="sr-only">Cible {targetMs} ms</span>
+                <span className="sr-only">Cible {targetMs ? formatSeconds(targetMs) : ""}</span>
               </div>
             </TooltipTrigger>
             <TooltipContent side="top" className="text-xs">
-              Cible : {targetMs} ms
+              Cible : {targetMs ? formatSeconds(targetMs) : ""}
             </TooltipContent>
           </Tooltip>
         )}
@@ -74,12 +78,12 @@ export function LatencyBar({ phases, scaleMs, targetMs, totalMs }: LatencyBarPro
           {phases.filter((p) => p.ms > 0).map((p, idx) => (
             <span key={idx} className="inline-flex items-center gap-1">
               <span className={`inline-block w-2 h-2 rounded-sm ${p.color}`} />
-              {p.label} <span className="text-slate-500">{Math.round(p.ms)}ms</span>
+              {p.label} <span className="text-slate-500">{formatSeconds(p.ms)}</span>
             </span>
           ))}
         </div>
         <div className={`font-mono ${overTarget ? "text-rose-400" : "text-slate-300"}`}>
-          {(total / 1000).toFixed(2)} s
+          {formatSeconds(total)}
         </div>
       </div>
     </div>
