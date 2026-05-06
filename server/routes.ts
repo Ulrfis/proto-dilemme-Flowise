@@ -601,6 +601,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // GET /api/debug/sessions — liste publique des sessions (pas d'auth requise)
+  app.get("/api/debug/sessions", async (req, res) => {
+    try {
+      const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10) || 1);
+      const pageSize = Math.min(100, Math.max(1, parseInt(String(req.query.pageSize ?? "50"), 10) || 50));
+      const q = typeof req.query.q === "string" ? req.query.q.slice(0, 80) : undefined;
+      const result = await storage.listConversationSessions({ page, pageSize, q });
+      res.json(result);
+    } catch (err) {
+      console.error("[debug/sessions] list error", err);
+      res.status(500).json({ error: "list failed" });
+    }
+  });
+
   // Analytics endpoint for anonymous event tracking
   app.post("/api/analytics", async (req, res) => {
     try {
