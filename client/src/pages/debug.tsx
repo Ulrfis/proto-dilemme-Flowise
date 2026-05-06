@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   RefreshCw,
@@ -484,8 +484,7 @@ export default function DebugPage() {
   const [sessionsPage, setSessionsPage] = useState(1);
   const [sessionsSearch, setSessionsSearch] = useState("");
   const [sessionsSearchInput, setSessionsSearchInput] = useState("");
-  const [adminToken, setAdminToken] = useState(() => sessionStorage.getItem("debug_admin_token") ?? "");
-  const [tokenInput, setTokenInput] = useState("");
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [flowiseStatus, setFlowiseStatus] = useState<FlowiseStatus>(() => {
     const VALID: FlowiseStatus[] = ["all", "ok", "error", "aborted"];
     const stored = localStorage.getItem("debug_flowiseStatus") as FlowiseStatus | null;
@@ -497,14 +496,6 @@ export default function DebugPage() {
     return stored && VALID.includes(stored) ? stored : "date_desc";
   });
   const [flowiseSearch, setFlowiseSearch] = useState("");
-
-  const handleTokenSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const t = tokenInput.trim();
-    setAdminToken(t);
-    sessionStorage.setItem("debug_admin_token", t);
-    setTokenInput("");
-  };
 
   const range = useMemo<DateRange>(() => {
     if (quickRange === "custom" && customFrom && customTo) {
@@ -547,9 +538,9 @@ export default function DebugPage() {
     refetchInterval: autoRefresh ? 3000 : false,
   });
 
-  // ── Historical DB-backed queries (15s cadence, date-filtered, admin-only) ─
+  // ── Historical DB-backed queries (15s cadence, date-filtered) ───────────
   const histFlowise = useQuery<FlowisePage>({
-    queryKey: ["/api/debug/traces/flowise", range.from, range.to, flowisePage, adminToken, flowiseStatus, flowiseSort],
+    queryKey: ["/api/debug/traces/flowise", range.from, range.to, flowisePage, flowiseStatus, flowiseSort],
     queryFn: () => {
       const params = new URLSearchParams({
         from: String(range.from),
@@ -559,34 +550,48 @@ export default function DebugPage() {
         sort: flowiseSort,
       });
       if (flowiseStatus !== "all") params.set("status", flowiseStatus);
-      return fetchJson<FlowisePage>(`/api/debug/traces/flowise?${params}`, adminToken || undefined);
+      return fetchJson<FlowisePage>(`/api/debug/traces/flowise?${params}`);
     },
-    enabled: !!adminToken,
-    refetchInterval: autoRefresh && !!adminToken ? 15_000 : false,
+    refetchInterval: autoRefresh ? 15_000 : false,
   });
 
   const histTts = useQuery<TtsPage>({
-    queryKey: ["/api/debug/traces/tts", range.from, range.to, ttsPage, adminToken],
+    queryKey: ["/api/debug/traces/tts", range.from, range.to, ttsPage],
     queryFn: () =>
       fetchJson<TtsPage>(
         `/api/debug/traces/tts?from=${range.from}&to=${range.to}&limit=${PAGE_SIZE}&offset=${
           ttsPage * PAGE_SIZE
         }`,
-        adminToken || undefined,
       ),
-    enabled: !!adminToken,
-    refetchInterval: autoRefresh && !!adminToken ? 15_000 : false,
+    refetchInterval: autoRefresh ? 15_000 : false,
   });
 
   const stats = useQuery<StatsResponse>({
-    queryKey: ["/api/debug/traces/stats", range.from, range.to, granularity, adminToken],
+    queryKey: ["/api/debug/traces/stats", range.from, range.to, granularity],
     queryFn: () =>
       fetchJson<StatsResponse>(
         `/api/debug/traces/stats?from=${range.from}&to=${range.to}&granularity=${granularity}`,
-        adminToken || undefined,
       ),
-    enabled: !!adminToken,
-    refetchInterval: autoRefresh && !!adminToken ? 15_000 : false,
+    refetchInterval: autoRefresh ? 15_000 : false,
+  });
+
+  // ── Session detail (on click) ─────────────────────────────────────────────
+  interface SessionDetailMessage {
+    id: number;
+    sessionId: string;
+    sender: string;
+    content: string;
+    createdAt: string;
+  }
+  interface SessionDetail {
+    session: SessionItem;
+    messages: SessionDetailMessage[];
+    traces: FlowiseTraceDTO[];
+  }
+  const sessionDetail = useQuery<SessionDetail>({
+    queryKey: ["/api/debug/sessions", selectedSessionId],
+    queryFn: () => fetchJson<SessionDetail>(`/api/debug/sessions/${selectedSessionId}`),
+    enabled: !!selectedSessionId,
   });
 
   // ── Public sessions list (no auth) ───────────────────────────────────────
@@ -952,62 +957,9 @@ export default function DebugPage() {
           <History className="w-4 h-4 text-violet-400" />
           <h2 className="text-base font-semibold text-violet-400">Historique</h2>
           <span className="text-xs text-slate-500 ml-1">— base Postgres, refresh 15s</span>
-          <div className="ml-auto flex items-center gap-2">
-            {adminToken ? (
-              <>
-                <span className="text-xs text-emerald-400 font-mono">🔓 Connecté</span>
-                <button
-                  onClick={() => { setAdminToken(""); sessionStorage.removeItem("debug_admin_token"); }}
-                  className="text-xs text-slate-500 hover:text-slate-300 underline"
-                >
-                  Déconnecter
-                </button>
-              </>
-            ) : (
-              <form onSubmit={handleTokenSubmit} className="flex items-center gap-2">
-                <input
-                  type="password"
-                  placeholder="Mot de passe admin…"
-                  value={tokenInput}
-                  onChange={(e) => setTokenInput(e.target.value)}
-                  className="text-xs bg-slate-800 border border-slate-700 rounded px-2 py-1 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-violet-500 w-40"
-                />
-                <button
-                  type="submit"
-                  className="text-xs bg-violet-700 hover:bg-violet-600 text-white rounded px-2 py-1"
-                >
-                  Accéder
-                </button>
-              </form>
-            )}
-          </div>
         </div>
 
-        {!adminToken && (
-          <div className="rounded-lg border border-slate-700/50 bg-slate-900/30 p-8 text-center text-sm text-slate-500">
-            Saisir le mot de passe admin ci-dessus pour accéder aux données historiques persistées.
-          </div>
-        )}
-
-        {adminToken && (() => {
-          const isAuthError = [histFlowise.error, histTts.error, stats.error].some(
-            (e) => e && String(e.message).includes("401"),
-          );
-          if (isAuthError) return (
-            <div className="rounded-lg border border-rose-800/50 bg-rose-950/30 p-6 text-center">
-              <p className="text-sm text-rose-400 mb-3">Mot de passe incorrect — accès refusé.</p>
-              <button
-                onClick={() => { setAdminToken(""); sessionStorage.removeItem("debug_admin_token"); }}
-                className="text-xs bg-rose-700 hover:bg-rose-600 text-white rounded px-3 py-1"
-              >
-                Réessayer
-              </button>
-            </div>
-          );
-          return null;
-        })()}
-
-        {adminToken && <>
+        <>
 
         {/* Date range selector */}
         <section className="rounded-lg border border-slate-700/50 bg-slate-900/30 p-4">
@@ -1179,7 +1131,6 @@ export default function DebugPage() {
                 </span>
               )}
             </h3>
-            {adminToken && (
               <Button
                 variant="outline"
                 size="sm"
@@ -1192,10 +1143,7 @@ export default function DebugPage() {
                   });
                   if (flowiseStatus !== "all") params.set("status", flowiseStatus);
                   const url = `/api/debug/traces/flowise/export?${params}`;
-                  const a = document.createElement("a");
-                  a.href = url;
-                  const headers = new Headers({ Authorization: `Bearer ${adminToken}` });
-                  fetch(url, { headers })
+                  fetch(url)
                     .then((res) => {
                       if (!res.ok) throw new Error(`HTTP ${res.status}`);
                       const disposition = res.headers.get("Content-Disposition") ?? "";
@@ -1205,6 +1153,7 @@ export default function DebugPage() {
                     })
                     .then(({ blob, filename }) => {
                       const objectUrl = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
                       a.href = objectUrl;
                       a.download = filename;
                       document.body.appendChild(a);
@@ -1218,7 +1167,6 @@ export default function DebugPage() {
                 <Download className="w-3.5 h-3.5 mr-1.5" />
                 Export CSV
               </Button>
-            )}
           </div>
 
           {/* Filter bar */}
@@ -1332,7 +1280,7 @@ export default function DebugPage() {
           </div>
         </section>
 
-        </>}
+        </>
 
         {/* ── Historique des sessions ── */}
         <section>
@@ -1401,28 +1349,97 @@ export default function DebugPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800">
-                    {(sessions.data?.items ?? []).map((s) => (
-                      <tr key={s.id} className="hover:bg-slate-800/40 transition-colors">
-                        <td className="px-4 py-2.5">
-                          {s.firstName ? (
-                            <span className="font-medium text-slate-100">{s.firstName}</span>
-                          ) : (
-                            <span className="text-slate-500 italic">Anonyme</span>
+                    {(sessions.data?.items ?? []).map((s) => {
+                      const isOpen = selectedSessionId === s.id;
+                      return (
+                        <Fragment key={s.id}>
+                          <tr
+                            onClick={() => setSelectedSessionId(isOpen ? null : s.id)}
+                            className="hover:bg-slate-800/50 transition-colors cursor-pointer select-none"
+                          >
+                            <td className="px-4 py-2.5">
+                              <div className="flex items-center gap-2">
+                                <ChevronDown className={`w-3.5 h-3.5 text-slate-500 flex-shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                                {s.firstName ? (
+                                  <span className="font-medium text-slate-100">{s.firstName}</span>
+                                ) : (
+                                  <span className="text-slate-500 italic">Anonyme</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-4 py-2.5 text-slate-300 font-mono">{s.messageCount}</td>
+                            <td className="px-4 py-2.5 text-slate-400 text-xs whitespace-nowrap">
+                              {new Date(s.createdAt).toLocaleString("fr-FR", {
+                                day: "2-digit",
+                                month: "2-digit",
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </td>
+                            <td className="px-4 py-2.5 font-mono text-xs text-slate-500">{s.id.slice(0, 16)}…</td>
+                          </tr>
+                          {isOpen && (
+                            <tr>
+                              <td colSpan={4} className="bg-slate-900/60 px-4 py-4 border-t border-slate-700/50">
+                                {sessionDetail.isLoading ? (
+                                  <div className="text-sm text-slate-500 py-2 text-center">Chargement…</div>
+                                ) : sessionDetail.isError ? (
+                                  <div className="text-sm text-rose-400 py-2 text-center">Erreur de chargement.</div>
+                                ) : sessionDetail.data ? (
+                                  <div className="space-y-4">
+                                    {/* Traces Flowise */}
+                                    {sessionDetail.data.traces.length > 0 && (
+                                      <div>
+                                        <div className="text-xs uppercase tracking-wide text-violet-400 font-semibold mb-2">
+                                          Latence Flowise — {sessionDetail.data.traces.length} tour{sessionDetail.data.traces.length > 1 ? "s" : ""}
+                                        </div>
+                                        <div className="space-y-2">
+                                          {(() => {
+                                            const scaleMs = Math.max(TARGET_END_TO_END_MS, ...sessionDetail.data!.traces.map((t) => t.totalMs)) * 1.05;
+                                            return sessionDetail.data!.traces.map((trace) => (
+                                              <FlowiseTraceRow key={trace.id} trace={trace} scaleMs={scaleMs} />
+                                            ));
+                                          })()}
+                                        </div>
+                                      </div>
+                                    )}
+                                    {/* Messages */}
+                                    {sessionDetail.data.messages.length > 0 && (
+                                      <div>
+                                        <div className="text-xs uppercase tracking-wide text-slate-500 font-semibold mb-2">
+                                          Messages ({sessionDetail.data.messages.length})
+                                        </div>
+                                        <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+                                          {sessionDetail.data.messages.map((m) => (
+                                            <div
+                                              key={m.id}
+                                              className={`flex gap-2 text-xs rounded px-2.5 py-1.5 ${
+                                                m.sender === "user"
+                                                  ? "bg-slate-800 text-slate-200"
+                                                  : "bg-slate-800/50 text-slate-300"
+                                              }`}
+                                            >
+                                              <span className={`font-mono font-semibold flex-shrink-0 ${m.sender === "user" ? "text-sky-400" : "text-emerald-400"}`}>
+                                                {m.sender === "user" ? "élève" : "peter"}
+                                              </span>
+                                              <span className="leading-relaxed">{m.content.slice(0, 300)}{m.content.length > 300 ? "…" : ""}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                    {sessionDetail.data.traces.length === 0 && sessionDetail.data.messages.length === 0 && (
+                                      <div className="text-sm text-slate-500 text-center py-2">Aucune donnée pour cette session.</div>
+                                    )}
+                                  </div>
+                                ) : null}
+                              </td>
+                            </tr>
                           )}
-                        </td>
-                        <td className="px-4 py-2.5 text-slate-300 font-mono">{s.messageCount}</td>
-                        <td className="px-4 py-2.5 text-slate-400 text-xs whitespace-nowrap">
-                          {new Date(s.createdAt).toLocaleString("fr-FR", {
-                            day: "2-digit",
-                            month: "2-digit",
-                            year: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </td>
-                        <td className="px-4 py-2.5 font-mono text-xs text-slate-500">{s.id.slice(0, 16)}…</td>
-                      </tr>
-                    ))}
+                        </Fragment>
+                      );
+                    })}
                   </tbody>
                 </table>
                 <div className="px-4 py-3 border-t border-slate-700">

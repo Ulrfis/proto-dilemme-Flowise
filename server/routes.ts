@@ -601,6 +601,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // GET /api/debug/sessions/:id — détail public d'une session (messages + traces Flowise)
+  app.get("/api/debug/sessions/:id", async (req, res) => {
+    try {
+      const session = await storage.getConversationSession(req.params.id);
+      if (!session) return res.status(404).json({ error: "session introuvable" });
+      const messages = await storage.listSessionMessages(session.id);
+      // Récupérer les traces Flowise liées à ce chatId
+      const traces = await db
+        .select({
+          id: flowiseTraces.id,
+          chatId: flowiseTraces.chatId,
+          question: flowiseTraces.question,
+          startedAt: flowiseTraces.startedAt,
+          finishedAt: flowiseTraces.finishedAt,
+          connectMs: flowiseTraces.connectMs,
+          ttftMs: flowiseTraces.ttftMs,
+          totalMs: flowiseTraces.totalMs,
+          tokens: flowiseTraces.tokens,
+          chars: flowiseTraces.chars,
+          nodes: flowiseTraces.nodes,
+          tools: flowiseTraces.tools,
+          unknownEvents: flowiseTraces.unknownEvents,
+          status: flowiseTraces.status,
+          errorMessage: flowiseTraces.errorMessage,
+        })
+        .from(flowiseTraces)
+        .where(eq(flowiseTraces.chatId, session.id))
+        .orderBy(asc(flowiseTraces.startedAt));
+      const traceDTOs = traces.map((r) => ({
+        id: r.id,
+        chatId: r.chatId,
+        firstName: session.firstName ?? undefined,
+        question: r.question,
+        startedAt: r.startedAt.getTime(),
+        finishedAt: r.finishedAt.getTime(),
+        connectMs: r.connectMs,
+        ttftMs: r.ttftMs,
+        totalMs: r.totalMs,
+        tokens: r.tokens,
+        chars: r.chars,
+        nodes: r.nodes,
+        tools: r.tools,
+        unknownEvents: r.unknownEvents,
+        status: r.status,
+        errorMessage: r.errorMessage ?? undefined,
+      }));
+      res.json({ session, messages, traces: traceDTOs });
+    } catch (err) {
+      console.error("[debug/sessions/:id] error", err);
+      res.status(500).json({ error: "detail failed" });
+    }
+  });
+
   // GET /api/debug/sessions — liste publique des sessions (pas d'auth requise)
   app.get("/api/debug/sessions", async (req, res) => {
     try {
@@ -1228,7 +1281,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // GET /api/debug/traces/flowise?from=&to=&limit=&offset=&status=&sort=
   app.get("/api/debug/traces/flowise", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
     try {
       const fromMs = parseInt(String(req.query.from ?? ""), 10);
       const toMs = parseInt(String(req.query.to ?? ""), 10);
@@ -1317,7 +1369,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // GET /api/debug/traces/flowise/export?from=&to=&status=&sort=
   // Returns up to 10 000 rows as a CSV download (no pagination).
   app.get("/api/debug/traces/flowise/export", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
     try {
       const fromMs = parseInt(String(req.query.from ?? ""), 10);
       const toMs = parseInt(String(req.query.to ?? ""), 10);
@@ -1407,7 +1458,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // GET /api/debug/traces/tts?from=&to=&limit=&offset=
   app.get("/api/debug/traces/tts", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
     try {
       const fromMs = parseInt(String(req.query.from ?? ""), 10);
       const toMs = parseInt(String(req.query.to ?? ""), 10);
@@ -1451,7 +1501,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // GET /api/debug/traces/stats?from=&to=&granularity=hour|day
   app.get("/api/debug/traces/stats", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
     interface FlowiseStatRow {
       bucket: Date;
       median_total_ms: string | number | null;
