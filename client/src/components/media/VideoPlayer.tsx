@@ -428,7 +428,7 @@ export function VideoPlayer({ video, onVideoEnded, onVideoPaused, onVideoPlay }:
           <div className="text-center text-gray-500 max-w-md p-6">
             <div className="w-16 h-16 mx-auto mb-4 text-gray-400">
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" className="w-full h-full">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
             <p className="text-sm font-medium text-gray-600 mb-2">Format vidéo non supporté</p>
