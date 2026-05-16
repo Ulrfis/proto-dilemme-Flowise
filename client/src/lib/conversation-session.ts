@@ -10,6 +10,29 @@
 
 let activeSessionId: string | null = null;
 let firstNameUpdated = false;
+const IDENTITY_STORAGE_KEY = "dilemme_plastique_identity";
+
+export function getStoredIdentity(): { firstName: string; lastName: string } | null {
+  if (typeof window === "undefined") return null;
+  const raw = window.localStorage.getItem(IDENTITY_STORAGE_KEY);
+  if (!raw) return null;
+  const parsed = JSON.parse(raw) as { firstName?: unknown; lastName?: unknown };
+  const firstName = typeof parsed.firstName === "string" ? parsed.firstName : "";
+  const lastName = typeof parsed.lastName === "string" ? parsed.lastName : "";
+  if (!firstName && !lastName) return null;
+  return { firstName, lastName };
+}
+
+export function storeIdentity(identity: { firstName: string; lastName: string }): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(
+    IDENTITY_STORAGE_KEY,
+    JSON.stringify({
+      firstName: identity.firstName.trim().slice(0, 80),
+      lastName: identity.lastName.trim().slice(0, 80),
+    }),
+  );
+}
 
 export async function createConversationSession(): Promise<string | null> {
   // Invalide la session précédente avant toute tentative de création.

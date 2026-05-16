@@ -87,15 +87,15 @@ function groupTracesBySession(traces: FlowiseTraceDTO[]): SessionGroupData[] {
     }
   }
   const groups: SessionGroupData[] = [];
-  for (const [chatId, ts] of map.entries()) {
+  for (const [chatId, ts] of Array.from(map.entries())) {
     groups.push({
       chatId,
-      firstName: ts.find((t) => t.firstName)?.firstName,
+      firstName: ts.find((t: FlowiseTraceDTO) => t.firstName)?.firstName,
       traces: ts,
       turnCount: ts.length,
-      medianLatencyMs: median(ts.map((t) => t.totalMs)),
-      hasError: ts.some((t) => t.status === "error"),
-      lastTraceAt: Math.max(...ts.map((t) => t.startedAt)),
+      medianLatencyMs: median(ts.map((t: FlowiseTraceDTO) => t.totalMs)),
+      hasError: ts.some((t: FlowiseTraceDTO) => t.status === "error"),
+      lastTraceAt: Math.max(...ts.map((t: FlowiseTraceDTO) => t.startedAt)),
     });
   }
   return groups;

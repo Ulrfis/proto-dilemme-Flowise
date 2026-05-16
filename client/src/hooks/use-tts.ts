@@ -77,6 +77,14 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSResult {
       const sessionId = analytics.getSessionId();
 
       try {
+        const fetchStartedAt = Date.now();
+        analytics.trackTTSQueueEvent("tts_fetch_started", {
+          requestId,
+          sentenceIndex: 0,
+          queueDepth: 1,
+          charCount: trimmed.length,
+          mode: "single",
+        });
         const requestVoiceId = voiceIdRef.current;
         const body: { text: string; voiceId?: string; sessionId: string } = {
           text: trimmed,
@@ -108,6 +116,18 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSResult {
 
         const blob = await response.blob();
         if (controller.signal.aborted) return;
+        const readyAt = Date.now();
+        analytics.trackTTSQueueEvent("tts_audio_ready", {
+          requestId,
+          sentenceIndex: 0,
+          queueDepth: 1,
+          charCount: trimmed.length,
+          mode: "single",
+          latencyMs: readyAt - fetchStartedAt,
+          audioBytes: blob.size,
+          provider: response.headers.get("X-TTS-Provider") || "server",
+          cacheHit: response.headers.get("X-TTS-Cache") === "hit",
+        });
 
         const objectUrl = URL.createObjectURL(blob);
         objectUrlRef.current = objectUrl;
@@ -116,10 +136,25 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSResult {
         audioRef.current = audio;
 
         audio.onplay = () => {
+          analytics.trackTTSQueueEvent("tts_playback_started", {
+            requestId,
+            sentenceIndex: 0,
+            queueDepth: 1,
+            charCount: trimmed.length,
+            mode: "single",
+            readyToPlaybackMs: Date.now() - readyAt,
+          });
           setIsLoading(false);
           setIsPlaying(true);
         };
         audio.onended = () => {
+          analytics.trackTTSQueueEvent("tts_playback_completed", {
+            requestId,
+            sentenceIndex: 0,
+            charCount: trimmed.length,
+            mode: "single",
+            totalMs: Date.now() - fetchStartedAt,
+          });
           setIsPlaying(false);
           setIsLoading(false);
           setCurrentId(null);

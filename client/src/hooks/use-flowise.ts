@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { ChatMessage } from "../types/chat";
-import { FlowiseClient, extractMediaFromText, type FlowiseProgressLabel } from "../lib/flowise";
+import { FlowiseClient, createFlowiseRequestId, extractMediaFromText, type FlowiseProgressLabel } from "../lib/flowise";
 import { analytics } from "../lib/analytics";
 import { recordMessage, updateSessionFirstName } from "../lib/conversation-session";
 import { PETER_WELCOME_MESSAGE, PETER_INTRO_MESSAGE } from "../../../shared/welcome-message";
@@ -35,6 +35,7 @@ export function useFlowise(
   const currentMessageIdRef = useRef<string>('');
   // AbortController ref - cancels in-flight SSE stream on new message or unmount
   const abortControllersRef = useRef<AbortController | null>(null);
+  const activeRequestIdRef = useRef<string | null>(null);
   // Latest onSentenceComplete callback (kept in ref so the FlowiseClient call
   // doesn't capture a stale closure when the consumer re-renders).
   const onSentenceRef = useRef<UseFlowiseOptions["onSentenceComplete"]>(options.onSentenceComplete);
@@ -58,9 +59,19 @@ export function useFlowise(
     // Cancel any previous in-flight stream
     if (abortControllersRef.current) {
       abortControllersRef.current.abort();
+      if (activeRequestIdRef.current) {
+        setTimeout(() => {
+          analytics.trackChatResponseAborted({
+            requestId: activeRequestIdRef.current || undefined,
+            reason: "new_message",
+          });
+        }, 0);
+      }
     }
     const abortController = new AbortController();
     abortControllersRef.current = abortController;
+    const requestId = createFlowiseRequestId();
+    activeRequestIdRef.current = requestId;
 
     const userMessage: ChatMessage = {
       id: `user_${Date.now()}`,
@@ -73,6 +84,7 @@ export function useFlowise(
     setIsLoading(true);
     setCurrentStepLabel("Peter prépare sa réponse…");
     setTimeout(() => analytics.trackMessageSent(content.length), 0);
+    setTimeout(() => analytics.trackChatWaitingShown({ requestId }), 0);
     void recordMessage("user", userMessage.content);
 
     if (content.trim().length <= 40) {
@@ -94,7 +106,7 @@ export function useFlowise(
     const aiRequestStart = Date.now();
     let firstTokenTime: number | undefined;
     let aiTracked = false;
-    setTimeout(() => analytics.trackAIRequest({ provider: "flowise" }), 0);
+    setTimeout(() => analytics.trackAIRequest({ provider: "flowise", requestId }), 0);
 
     try {
       console.log('[use-flowise] Starting streaming...');
@@ -179,6 +191,14 @@ export function useFlowise(
 
           const totalMs = Date.now() - aiRequestStart;
           const ttftMs = firstTokenTime ?? metadata?.firstTokenTime;
+          const serverTotalMs = typeof metadata?.totalTime === "number" ? metadata.totalTime : undefined;
+          const connectMs = typeof metadata?.connectMs === "number" ? metadata.connectMs : undefined;
+          const tokenCount = typeof metadata?.tokenCount === "number" ? metadata.tokenCount : undefined;
+          const nodes = typeof metadata?.nodes === "number" ? metadata.nodes : undefined;
+          const tools = typeof metadata?.tools === "number" ? metadata.tools : undefined;
+          const unknownEvents = typeof metadata?.unknownEvents === "number" ? metadata.unknownEvents : undefined;
+          const traceId = typeof metadata?.traceId === "string" ? metadata.traceId : undefined;
+          const flowiseChatId = typeof metadata?.chatId === "string" ? metadata.chatId : client.getSessionId();
 
           // AI response tracking (replaces old peter_replied timing)
           aiTracked = true;
@@ -186,10 +206,21 @@ export function useFlowise(
             analytics.trackAIResponse({
               ttftMs,
               totalMs,
+              connectMs,
+              streamMs: serverTotalMs && ttftMs ? Math.max(0, serverTotalMs - ttftMs) : undefined,
+              tokenCount,
+              charCount: cleanText.length,
+              nodes,
+              tools,
+              unknownEvents,
+              requestId,
+              flowiseTraceId: traceId,
+              flowiseChatId,
               provider: "flowise",
               success: true,
             });
           }, 0);
+          if (activeRequestIdRef.current === requestId) activeRequestIdRef.current = null;
 
           if (cleanText && cleanText.trim()) {
             void recordMessage("peter", cleanText);
@@ -238,6 +269,8 @@ export function useFlowise(
             analytics.trackAIResponse({
               ttftMs: firstTokenTime,
               totalMs,
+              requestId,
+              flowiseChatId: client.getSessionId(),
               provider: "flowise",
               success: false,
               errorType: error.name,
@@ -258,10 +291,19 @@ export function useFlowise(
 
           setIsLoading(false);
           setCurrentStepLabel(null);
+          if (activeRequestIdRef.current === requestId) activeRequestIdRef.current = null;
         },
         abortController.signal,
         (label: FlowiseProgressLabel) => {
           setCurrentStepLabel(label.label);
+          setTimeout(() => {
+            analytics.trackFlowiseProgress({
+              step: label.step,
+              label: label.label,
+              requestId,
+              elapsedMs: Date.now() - aiRequestStart,
+            });
+          }, 0);
         },
         (sentence: string) => {
           if (onSentenceRef.current) {
@@ -269,6 +311,7 @@ export function useFlowise(
             catch (err) { console.warn('[use-flowise] onSentenceComplete threw', err); }
           }
         },
+        requestId,
       );
 
     } catch (error) {
@@ -287,6 +330,8 @@ export function useFlowise(
           analytics.trackAIResponse({
             ttftMs: firstTokenTime,
             totalMs,
+            requestId,
+            flowiseChatId: client.getSessionId(),
             provider: "flowise",
             success: false,
             errorType: errName,
@@ -308,6 +353,7 @@ export function useFlowise(
 
       setIsLoading(false);
       setCurrentStepLabel(null);
+      if (activeRequestIdRef.current === requestId) activeRequestIdRef.current = null;
     }
   }, [client, onInfoDataUpdate]);
 

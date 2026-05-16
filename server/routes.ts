@@ -978,8 +978,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/flowise/prediction/:chatflowId/stream", async (req, res) => {
     const perfStart = Date.now();
     const { chatflowId } = req.params;
-    const { question, chatId } = req.body;
+    const { question, chatId, requestId } = req.body;
     const sessionTag = (chatId || `anon_${Date.now()}`).slice(0, 24);
+    const traceId = newTraceId("fw");
 
     // SSE headers (no-transform critical to bypass compression middleware)
     res.setHeader('Content-Type', 'text/event-stream');
@@ -1009,6 +1010,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const requestBody = {
       question,
       chatId: chatId || `session_${Date.now()}`,
+      requestId,
       streaming: true,
       returnSourceDocuments: false,
     };
@@ -1038,6 +1040,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[Flowise] end chatId=${sessionTag} status=fetch_failed error="${msg}"`);
+      phServerCapture(requestBody.chatId, "flowise_stream_completed", {
+        requestId,
+        traceId,
+        chatId: requestBody.chatId,
+        connectMs,
+        ttftMs: 0,
+        totalMs: Date.now() - perfStart,
+        tokenCount: 0,
+        charCount: 0,
+        nodes: 0,
+        tools: 0,
+        unknownEvents: 0,
+        success: false,
+        errorType: "fetch_failed",
+      });
       res.write(`data: ${JSON.stringify({ error: 'Flowise unreachable', details: msg })}\n\n`);
       return res.end();
     }
@@ -1045,6 +1062,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!response.ok) {
       const errorText = await response.text().catch(() => '');
       console.error(`[Flowise] end chatId=${sessionTag} status=${response.status} body="${errorText.slice(0, 120)}"`);
+      phServerCapture(requestBody.chatId, "flowise_stream_completed", {
+        requestId,
+        traceId,
+        chatId: requestBody.chatId,
+        connectMs,
+        ttftMs: 0,
+        totalMs: Date.now() - perfStart,
+        tokenCount: 0,
+        charCount: 0,
+        nodes: 0,
+        tools: 0,
+        unknownEvents: 0,
+        success: false,
+        errorType: `HTTP_${response.status}`,
+      });
       res.write(`data: ${JSON.stringify({ error: `Flowise API error: ${response.status}` })}\n\n`);
       return res.end();
     }
@@ -1052,6 +1084,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const reader = response.body?.getReader();
     if (!reader) {
       console.error(`[Flowise] end chatId=${sessionTag} status=no_body`);
+      phServerCapture(requestBody.chatId, "flowise_stream_completed", {
+        requestId,
+        traceId,
+        chatId: requestBody.chatId,
+        connectMs,
+        ttftMs: 0,
+        totalMs: Date.now() - perfStart,
+        tokenCount: 0,
+        charCount: 0,
+        nodes: 0,
+        tools: 0,
+        unknownEvents: 0,
+        success: false,
+        errorType: "no_body",
+      });
       res.write(`data: ${JSON.stringify({ error: 'No response body from Flowise' })}\n\n`);
       return res.end();
     }
@@ -1160,9 +1207,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         event: 'end',
         metadata: {
           ...metadata,
+          chatId: requestBody.chatId,
+          requestId,
+          traceId,
           totalTime: totalMs,
           firstTokenTime: firstTokenMs,
+          connectMs,
           tokenCount,
+          nodes: nodesExecuted,
+          tools: toolsCalled,
+          unknownEvents,
           fullText: finalText,
         },
       })}\n\n`);
@@ -1176,7 +1230,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
 
       debugTraces.recordFlowise({
-        id: newTraceId("fw"),
+        id: traceId,
         chatId: sessionTag,
         question: (question || "").slice(0, 120),
         startedAt: perfStart,
@@ -1192,18 +1246,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: errorReason ? "error" : "ok",
         errorMessage: errorReason || undefined,
       });
+      phServerCapture(requestBody.chatId, "flowise_stream_completed", {
+        requestId,
+        traceId,
+        chatId: requestBody.chatId,
+        connectMs,
+        ttftMs: firstTokenMs,
+        totalMs,
+        streamMs: firstTokenMs ? Math.max(0, totalMs - firstTokenMs) : undefined,
+        tokenCount,
+        charCount: finalText.length,
+        nodes: nodesExecuted,
+        tools: toolsCalled,
+        unknownEvents,
+        success: !errorReason,
+        errorType: errorReason ? "FlowiseStreamError" : undefined,
+      });
     } catch (streamError) {
       const msg = streamError instanceof Error ? streamError.message : String(streamError);
       console.error(`[Flowise] end chatId=${sessionTag} status=stream_error error="${msg}"`);
+      const totalMs = Date.now() - perfStart;
       debugTraces.recordFlowise({
-        id: newTraceId("fw"),
+        id: traceId,
         chatId: sessionTag,
         question: (question || "").slice(0, 120),
         startedAt: perfStart,
         finishedAt: Date.now(),
         connectMs,
         ttftMs: firstTokenMs,
-        totalMs: Date.now() - perfStart,
+        totalMs,
         tokens: tokenCount,
         chars: fullText.length,
         nodes: nodesExecuted,
@@ -1211,6 +1282,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         unknownEvents,
         status: msg.includes("aborted") ? "aborted" : "error",
         errorMessage: msg,
+      });
+      phServerCapture(requestBody.chatId, "flowise_stream_completed", {
+        requestId,
+        traceId,
+        chatId: requestBody.chatId,
+        connectMs,
+        ttftMs: firstTokenMs,
+        totalMs,
+        streamMs: firstTokenMs ? Math.max(0, totalMs - firstTokenMs) : undefined,
+        tokenCount,
+        charCount: fullText.length,
+        nodes: nodesExecuted,
+        tools: toolsCalled,
+        unknownEvents,
+        success: false,
+        errorType: msg.includes("aborted") ? "aborted" : "stream_error",
       });
       res.write(`data: ${JSON.stringify({ error: 'Stream interrupted', details: msg })}\n\n`);
     } finally {

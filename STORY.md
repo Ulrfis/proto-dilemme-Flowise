@@ -3,7 +3,7 @@
 > **Status**: 🟡 In Progress  
 > **Creator**: Ulrich Fischer  
 > **Started**: 2025-11-06  
-> **Last Updated**: 2026-05-06 (historique debug public ; sessions cliquables ; correction console debug)
+> **Last Updated**: 2026-05-16 (PostHog monitoring approfondi : replay, web vitals, corrélation Flowise/TTS)
 
 ---
 
@@ -91,6 +91,28 @@ How Peter helps: Conversational guide who asks questions, shares surprising fact
 ## Feature Chronicle
 
 *Each feature gets an entry. Major features (🔷) get full treatment. Minor features (🔹) get brief notes.*
+
+### [2026-05-16] — Monitoring PostHog approfondi latence + usage + UX 🔷
+
+**Intent** : disposer dans PostHog d'une lecture exploitable des lenteurs et blocages réels en classe, sans casser Replit ni exposer les contenus sensibles des élèves. Objectif : corréler ce que l'élève voit (attente, replay, web vitals) avec ce que le serveur mesure (Flowise, TTS, traces `/debug`).
+
+**What shipped** :
+- **PostHog client enrichi** : autocapture, session replay, console replay et Web Vitals activables via `VITE_POSTHOG_KEY`, toujours désactivés silencieusement sans clé. `capture_pageview` reste manuel pour préserver les funnels existants.
+- **Redaction réseau replay** : `maskCapturedNetworkRequestFn` retire les bodies et headers sensibles pour `/api/flowise`, `/api/tts`, `/api/transcribe`, `/api/sessions`, `/api/analytics`. On garde timing/status/URL pour diagnostiquer les lenteurs sans capturer les textes ou l'audio.
+- **Corrélation Flowise complète** : chaque message reçoit un `requestId` client, propagé au proxy SSE. L'event final SSE renvoie `traceId`, `chatId`, `connectMs`, `firstTokenTime`, `totalTime`, `tokenCount`, `nodes`, `tools`, `unknownEvents`.
+- **Event serveur `flowise_stream_completed`** : capture PostHog côté serveur avec connect/TTFT/stream/total, tokens, caractères, nœuds, outils, statut et type d'erreur. Best-effort : aucune capture PostHog ne bloque le flux SSE.
+- **Friction UX côté chat** : nouveaux events `chat_waiting_state_shown`, `chat_progress_step_changed`, `chat_response_aborted`, et enrichissement de `ai_response_received` avec `requestId`, `flowiseTraceId`, `flowiseChatId`.
+- **File TTS instrumentée** : events `tts_sentence_queued`, `tts_fetch_started`, `tts_audio_ready`, `tts_playback_started`, `tts_playback_completed`, `tts_queue_cleared` avec profondeur de queue, index phrase, latence, cache hit et provider.
+- **Réglages documentés** : README mis à jour avec variables PostHog/Replit, réglages Session Replay/Network/Web Vitals, et propriétés de corrélation.
+- **Tests ciblés** : `tests/posthog-instrumentation.test.ts` couvre la redaction réseau, la normalisation host et le format `requestId`.
+
+**Why it matters** : une session lente ne se résume plus à "Peter rame". On peut voir si la lenteur vient du connect Flowise, du pré-TTFT, du stream, du rendu client, de la queue TTS, du provider vocal ou d'une friction d'interface, puis ouvrir le replay PostHog correspondant.
+
+**Files** : `client/src/lib/posthog.ts`, `client/src/lib/analytics.ts`, `client/src/lib/flowise.ts`, `client/src/hooks/use-flowise.ts`, `client/src/hooks/use-tts-queue.ts`, `client/src/hooks/use-tts.ts`, `server/routes.ts`, `README.md`, `tests/posthog-instrumentation.test.ts`.
+
+**Secrets/Replit** : aucun secret obligatoire supplémentaire. Recommandés : `VITE_POSTHOG_KEY`, `VITE_POSTHOG_HOST=https://eu.i.posthog.com`, `POSTHOG_SERVER_KEY`. Sans ces variables, l'app continue sans monitoring PostHog.
+
+---
 
 ### [2026-05-02] — Persistance Postgres + PostHog : conversations relisibles + analytics produit 🔷
 
@@ -875,4 +897,3 @@ STORY.md MAINTENANCE PROTOCOL:
    - Maintain markdown structure for readability
    - Keep prose concise but specific—avoid fluff
 ```
-

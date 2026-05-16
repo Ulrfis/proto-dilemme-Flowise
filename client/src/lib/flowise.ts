@@ -6,6 +6,10 @@ export interface FlowiseProgressLabel {
   label: string;
 }
 
+export function createFlowiseRequestId() {
+  return `fwreq_${Date.now()}_${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`;
+}
+
 export class FlowiseClient {
   private chatflowId: string;
   private sessionId: string;
@@ -24,6 +28,7 @@ export class FlowiseClient {
     signal?: AbortSignal,
     onProgress?: (label: FlowiseProgressLabel) => void,
     onSentence?: (sentence: string) => void,
+    requestId: string = createFlowiseRequestId(),
   ): Promise<void> {
     let fullText = '';
     let accumulatedMetadata: any = {};
@@ -54,6 +59,7 @@ export class FlowiseClient {
         body: JSON.stringify({
           question: message,
           chatId: this.sessionId,
+          requestId,
         }),
         signal,
       });

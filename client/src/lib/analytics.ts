@@ -1,5 +1,5 @@
 import { AnalyticsEvent } from "@shared/schema";
-import { phCapture } from "./posthog";
+import { phCapture, phGetSessionId } from "./posthog";
 
 class Analytics {
   private sessionId: string;
@@ -18,6 +18,7 @@ class Analytics {
 
     const enriched = {
       sessionId: this.sessionId,
+      posthogSessionId: phGetSessionId(),
       stepMs,
       sessionMs,
       ...(data || {}),
@@ -105,13 +106,23 @@ class Analytics {
 
   // ────────────────────────────────────────────────────────────────────
   // AI / Flowise
-  trackAIRequest(props: { provider: string; sessionId?: string }) {
+  trackAIRequest(props: { provider: string; sessionId?: string; requestId?: string }) {
     this.track("ai_request_sent", props);
   }
 
   trackAIResponse(props: {
     ttftMs?: number;
     totalMs?: number;
+    connectMs?: number;
+    streamMs?: number;
+    tokenCount?: number;
+    charCount?: number;
+    nodes?: number;
+    tools?: number;
+    unknownEvents?: number;
+    requestId?: string;
+    flowiseTraceId?: string;
+    flowiseChatId?: string;
     provider: string;
     success: boolean;
     errorType?: string;
@@ -139,6 +150,22 @@ class Analytics {
 
   trackVideoProgress(props: { url: string; progressPct: 25 | 50 | 75 | 100 }) {
     this.track("video_progress_pct", props);
+  }
+
+  trackFlowiseProgress(props: { step: string; label: string; requestId?: string; elapsedMs?: number }) {
+    this.track("chat_progress_step_changed", props);
+  }
+
+  trackChatWaitingShown(props: { requestId?: string }) {
+    this.track("chat_waiting_state_shown", props);
+  }
+
+  trackChatResponseAborted(props: { requestId?: string; totalMs?: number; reason: string }) {
+    this.track("chat_response_aborted", props);
+  }
+
+  trackTTSQueueEvent(event: string, props: Record<string, any>) {
+    this.track(event, props);
   }
 
   // ────────────────────────────────────────────────────────────────────

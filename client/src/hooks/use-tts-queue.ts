@@ -4,6 +4,10 @@ import { analytics } from "../lib/analytics";
 interface QueueItem {
   id: string;
   text: string;
+  index: number;
+  queuedAt: number;
+  fetchStartedAt?: number;
+  readyAt?: number;
   audioBlob?: Blob;
   audioUrl?: string;
   fetchPromise?: Promise<void>;
@@ -54,10 +58,18 @@ export function useTTSQueue(): UseTTSQueueResult {
   const fetchItem = useCallback(async (item: QueueItem, generation: number) => {
     if (generation !== generationRef.current) return;
     item.status = "fetching";
+    item.fetchStartedAt = Date.now();
     const controller = new AbortController();
     abortControllersRef.current.set(item.id, controller);
 
     const sessionId = analytics.getSessionId();
+    analytics.trackTTSQueueEvent("tts_fetch_started", {
+      requestId: item.id,
+      sentenceIndex: item.index,
+      queueDepth: queueRef.current.length,
+      charCount: item.text.length,
+      waitBeforeFetchMs: item.fetchStartedAt - item.queuedAt,
+    });
 
     try {
       const response = await fetch("/api/tts", {
@@ -75,9 +87,21 @@ export function useTTSQueue(): UseTTSQueueResult {
       }
       const blob = await response.blob();
       if (generation !== generationRef.current) return;
+      item.readyAt = Date.now();
       item.audioBlob = blob;
       item.audioUrl = URL.createObjectURL(blob);
       item.status = "ready";
+      analytics.trackTTSQueueEvent("tts_audio_ready", {
+        requestId: item.id,
+        sentenceIndex: item.index,
+        queueDepth: queueRef.current.length,
+        charCount: item.text.length,
+        latencyMs: item.readyAt - (item.fetchStartedAt || item.queuedAt),
+        queuedToReadyMs: item.readyAt - item.queuedAt,
+        audioBytes: blob.size,
+        provider: response.headers.get("X-TTS-Provider") || "server",
+        cacheHit: response.headers.get("X-TTS-Cache") === "hit",
+      });
     } catch (err) {
       if (generation !== generationRef.current) return;
       if (err instanceof DOMException && err.name === "AbortError") {
@@ -127,6 +151,14 @@ export function useTTSQueue(): UseTTSQueueResult {
     const audio = new Audio(item.audioUrl);
     audioRef.current = audio;
     item.status = "playing";
+    analytics.trackTTSQueueEvent("tts_playback_started", {
+      requestId: item.id,
+      sentenceIndex: item.index,
+      queueDepth: queue.length,
+      charCount: item.text.length,
+      queuedToPlaybackMs: Date.now() - item.queuedAt,
+      readyToPlaybackMs: item.readyAt ? Date.now() - item.readyAt : undefined,
+    });
 
     audio.onended = () => {
       if (generation !== generationRef.current) return;
@@ -136,6 +168,12 @@ export function useTTSQueue(): UseTTSQueueResult {
         item.audioUrl = undefined;
       }
       audioRef.current = null;
+      analytics.trackTTSQueueEvent("tts_playback_completed", {
+        requestId: item.id,
+        sentenceIndex: item.index,
+        charCount: item.text.length,
+        totalMs: Date.now() - item.queuedAt,
+      });
       void playNext(generation);
     };
     audio.onerror = () => {
@@ -166,8 +204,20 @@ export function useTTSQueue(): UseTTSQueueResult {
     setError(null);
     const generation = generationRef.current;
     const id = `tts_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-    const item: QueueItem = { id, text: trimmed, status: "pending" };
+    const item: QueueItem = {
+      id,
+      text: trimmed,
+      index: queueRef.current.length,
+      queuedAt: Date.now(),
+      status: "pending",
+    };
     queueRef.current.push(item);
+    analytics.trackTTSQueueEvent("tts_sentence_queued", {
+      requestId: id,
+      sentenceIndex: item.index,
+      queueDepth: queueRef.current.length,
+      charCount: trimmed.length,
+    });
 
     const isIdle = playingIndexRef.current === -1;
     if (isIdle) {
@@ -183,6 +233,7 @@ export function useTTSQueue(): UseTTSQueueResult {
   }, [fetchItem, playNext]);
 
   const stop = useCallback(() => {
+    const clearedItems = queueRef.current.length;
     generationRef.current += 1;
     cleanupAudio();
     Array.from(abortControllersRef.current.values()).forEach((ctrl) => {
@@ -198,6 +249,9 @@ export function useTTSQueue(): UseTTSQueueResult {
     queueRef.current = [];
     playingIndexRef.current = -1;
     setIsActive(false);
+    if (clearedItems > 0) {
+      analytics.trackTTSQueueEvent("tts_queue_cleared", { clearedItems });
+    }
   }, [cleanupAudio]);
 
   useEffect(() => {

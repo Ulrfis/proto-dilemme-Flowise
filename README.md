@@ -187,7 +187,8 @@ Copy `.env.example` (or create `.env`) at the project root.
 | Variable | Description |
 |---|---|
 | `VITE_POSTHOG_KEY` | PostHog project API key |
-| `VITE_POSTHOG_HOST` | PostHog host (e.g. `https://eu.posthog.com`) |
+| `VITE_POSTHOG_HOST` | PostHog ingestion host (default `https://eu.i.posthog.com`) |
+| `POSTHOG_SERVER_KEY` | Optional server-side PostHog key for Flowise/TTS events |
 
 ### Other
 
@@ -289,10 +290,21 @@ PostHog is used for product analytics. Key events tracked:
 | `identity_captured` | First name extracted from conversation |
 | `message_sent` | Student sends a message |
 | `peter_replied` | Peter's full response received (+ latency metrics) |
+| `flowise_stream_completed` | Server-side Flowise stream finished (+ connect/TTFT/total/tokens/nodes/tools) |
+| `ai_response_received` | Browser-observed AI response finished (+ request/trace correlation IDs) |
+| `chat_progress_step_changed` | Flowise progress label changed while Peter is preparing the answer |
+| `tts_audio_ready` | TTS sentence audio fetched, with provider/cache/latency |
+| `tts_playback_started` | TTS playback begins after queue/fetch wait |
 | `video_opened` | Video link clicked |
 | `link_opened` | Article link clicked |
 | `mute_toggled` | TTS muted/unmuted |
 | `session_complete` | Session ended |
+
+Recommended PostHog project settings:
+- Enable Session Replay and Network recording.
+- Keep request/response bodies disabled or redacted; the app also strips bodies for `/api/flowise`, `/api/tts`, `/api/transcribe`, `/api/sessions`, and `/api/analytics`.
+- Enable Web Vitals and monitor LCP, INP, CLS, and FCP at p75/p90.
+- Use `requestId`, `flowiseTraceId`, `flowiseChatId`, and `posthogSessionId` to correlate PostHog events with `/debug` traces.
 
 The PostHog dashboard and funnel can be re-created idempotently:
 
