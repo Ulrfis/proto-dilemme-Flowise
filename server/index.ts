@@ -10,6 +10,10 @@ import { PETER_WELCOME_MESSAGE, PETER_INTRO_MESSAGE } from "../shared/welcome-me
 
 const app = express();
 
+// Trust Replit's reverse proxy so req.ip reflects the real client IP
+// (needed for per-user rate limiting instead of per-proxy rate limiting)
+app.set('trust proxy', 1);
+
 // Compression middleware - add early for maximum benefit
 app.use(compression({
   level: 6, // Balance between speed and compression ratio
@@ -30,7 +34,7 @@ app.use(helmet({
       scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https:", "https://api.rectify.so", "*.rectify.so"], // Needed for Vite dev and Rectify widget
       styleSrc: ["'self'", "'unsafe-inline'", "https:", "https://api.rectify.so", "*.rectify.so"],
       imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'", "https:", "https://api.rectify.so", "*.rectify.so"], // Allow HTTPS connections and Rectify API
+      connectSrc: ["'self'", "https:", "wss:", "https://api.rectify.so", "wss://api.rectify.so", "*.rectify.so", "wss://*.rectify.so"], // Allow HTTPS/WSS connections and Rectify API
       frameSrc: ["'self'", "https:", "https://www.youtube.com", "https://www.youtube-nocookie.com", "https://play.gumlet.io", "https://api.rectify.so", "*.rectify.so"],
       mediaSrc: ["'self'", "blob:", "data:", "https:", "https://www.youtube.com", "https://play.gumlet.io"],
       fontSrc: ["'self'", "https:", "data:"],
