@@ -47,7 +47,7 @@ app.use(helmet({
 // Rate limiting for API endpoints
 const apiLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
-  max: 30, // Limit each IP to 30 requests per windowMs
+  max: 120, // 120 requests per minute per IP (raised from 30 — TTS is chatty)
   message: {
     error: "Trop de requêtes depuis cette adresse IP, veuillez réessayer dans une minute."
   },
@@ -56,10 +56,23 @@ const apiLimiter = rateLimit({
   skip: (req) => process.env.NODE_ENV === 'development', // Skip in dev
 });
 
-// More restrictive rate limiting for Flowise endpoint
+// TTS-specific limiter: each Peter message fires one request per sentence (+ prefetch),
+// so a normal conversation generates 30-50 TTS calls per minute per user.
+const ttsLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 200, // 200 TTS requests per minute per IP
+  message: {
+    error: "Trop de requêtes TTS, veuillez réessayer dans une minute."
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => process.env.NODE_ENV === 'development',
+});
+
+// More restrictive rate limiting for Flowise endpoint (actual LLM calls)
 const flowiseLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
-  max: 10, // Limit to 10 chat messages per minute per IP
+  max: 15, // 15 chat messages per minute per IP
   message: {
     error: "Limite de messages atteinte. Attendez une minute avant de continuer la conversation."
   },
@@ -68,6 +81,7 @@ const flowiseLimiter = rateLimit({
   skip: (req) => process.env.NODE_ENV === 'development',
 });
 
+app.use('/api/tts', ttsLimiter);
 app.use('/api', apiLimiter);
 app.use('/api/flowise', flowiseLimiter);
 
